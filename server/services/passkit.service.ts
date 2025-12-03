@@ -3,7 +3,7 @@ import { config, isPassKitConfigured } from "../config";
 import { generatePassKitToken } from "../utils/passkitJWT";
 import type { PassKitPass, PassKitUpdate } from "@shared/schema";
 
-const PASSKIT_BASE_URL = 'https://api.pub1.passkit.io';
+const PASSKIT_BASE_URL = 'https://api.pub2.passkit.io';
 
 interface PassKitCreateResponse {
   success: boolean;
