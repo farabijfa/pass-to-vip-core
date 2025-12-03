@@ -39,6 +39,21 @@ export async function registerRoutes(
 
   app.use(requestIdMiddleware);
 
+  app.get("/api", (_req, res) => {
+    res.status(200).json({
+      status: "UP",
+      service: "Phygital Loyalty Orchestrator",
+      version: config.server.apiVersion,
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        health: "/api/health",
+        loyalty: "/api/loyalty",
+        wallet: "/api/wallet",
+        mail: "/api/mail",
+      },
+    });
+  });
+
   app.use("/api", apiRoutes);
 
   app.use("/api/*", notFoundHandler);

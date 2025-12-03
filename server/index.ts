@@ -92,7 +92,16 @@ app.use((req, res, next) => {
       reusePort: true,
     },
     () => {
-      log(`serving on port ${port}`);
+      console.log(`\n========================================`);
+      console.log(`  Phygital Loyalty Orchestrator`);
+      console.log(`========================================`);
+      console.log(`  Status:  Running`);
+      console.log(`  Port:    ${port}`);
+      console.log(`  Mode:    ${process.env.NODE_ENV || "development"}`);
+      console.log(`----------------------------------------`);
+      console.log(`  API Root:     http://localhost:${port}/api`);
+      console.log(`  Health Check: http://localhost:${port}/api/health`);
+      console.log(`========================================\n`);
     },
   );
 })();
