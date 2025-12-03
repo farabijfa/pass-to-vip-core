@@ -1,0 +1,173 @@
+"I need to complete the backend logic. Please generate the following three files to connect Supabase and expose the API endpoints.
+
+        config/supabase.js: Initialize the Supabase client using environment variables.
+
+        services/passkitService.js: Create a placeholder service for PassKit synchronization (we will implement the actual API calls later, just set up the structure now).
+
+        services/logicService.js: Implement the main orchestrator. It must:
+
+            Accept inputs (external_id, action, amount).
+
+            Determine which Supabase RPC to call (process_membership_transaction or process_one_time_use) based on the action type.
+
+            Execute the RPC via Supabase.
+
+            Call the PassKit service to sync.
+
+        routes/api.js: Create the Express router with a POST endpoint /pos/action that validates input and calls the logicService."
+
+The Code Implementation
+
+Here is the robust code for those files. You can let the AI generate it, or paste this directly to ensure it matches your Architecture Document exactly.
+1. config/supabase.js
+
+This connects your App to your Database.
+JavaScript
+
+/* config/supabase.js */
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // MUST use Service Role key for backend logic
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase URL or Service Key in .env file');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false // We don't need session persistence for a backend service
+  }
+});
+
+module.exports = supabase;
+
+2. services/passkitService.js (Placeholder)
+
+We need this file to exist so logicService doesn't crash, even though we haven't added the PassKit API keys yet.
+JavaScript
+
+/* services/passkitService.js */
+// This service handles synchronization with Apple/Google Wallet
+// Implementation will be added in the next phase.
+
+exports.syncPass = async (rpcResult) => {
+  console.log(`[PassKit Mock] Syncing pass: ${rpcResult.passkit_internal_id}`);
+  console.log(`[PassKit Mock] Notification sent: "${rpcResult.notification_message}"`);
+  
+  // Return a success mock for now
+  return { success: true, synced: true };
+};
+
+3. services/logicService.js (The Brain)
+
+This maps the Softr Button actions to the specific Database Stored Procedures .
+
+JavaScript
+
+/* services/logicService.js */
+const supabase = require('../config/supabase');
+const passkitService = require('./passkitService');
+
+/**
+ * Handles the Point of Sale (POS) Action
+ * @param {string} externalId - The QR code content or PIN
+ * @param {string} actionType - The action (MEMBER_EARN, COUPON_REDEEM, etc.)
+ * @param {number} amount - Points to add/remove (optional)
+ */
+exports.handlePosAction = async (externalId, actionType, amount) => {
+  let rpcName;
+  let rpcParams = { 
+    p_external_id: externalId, 
+    p_action: actionType 
+  };
+
+  console.log(`\n🤖 Processing Action: ${actionType} for ID: ${externalId}`);
+
+  // 1. Intelligent Routing: Decide which RPC to call based on the Action
+  // [cite: 193-198]
+  if (['MEMBER_EARN', 'MEMBER_REDEEM', 'MEMBER_ADJUST'].includes(actionType)) {
+    rpcName = 'process_membership_transaction';
+    // Ensure amount is an integer, default to 0 if missing
+    rpcParams.p_amount = parseInt(amount) || 0; 
+  } 
+  else if (['COUPON_REDEEM', 'TICKET_CHECKIN', 'INSTALL', 'UNINSTALL'].includes(actionType)) {
+    rpcName = 'process_one_time_use';
+  } 
+  else {
+    throw new Error(`Unknown Action Type: ${actionType}`);
+  }
+
+  // 2. Atomic Execution: Call Supabase RPC
+  // [cite: 203]
+  const { data: rpcResult, error } = await supabase.rpc(rpcName, rpcParams);
+
+  if (error) {
+    console.error('❌ Supabase RPC Error:', error.message);
+    throw new Error(error.message); // Pass database error to frontend
+  }
+
+  console.log('✅ Database Transaction Success:', rpcResult.notification_message);
+
+  // 3. Synchronization: Update PassKit (Fire and Forget or Await)
+  // [cite: 209]
+  try {
+    await passkitService.syncPass(rpcResult);
+  } catch (syncError) {
+    // We log sync errors but DO NOT fail the transaction because the database ledger is already updated.
+    console.error('⚠️ PassKit Sync Warning:', syncError.message);
+  }
+
+  return {
+    success: true,
+    message: rpcResult.notification_message,
+    data: rpcResult
+  };
+};
+
+4. routes/api.js (The Interface)
+
+This is the endpoint Softr will hit.
+JavaScript
+
+/* routes/api.js */
+const express = require('express');
+const router = express.Router();
+const logicService = require('../services/logicService');
+
+// POST /api/pos/action
+// Receives data from Softr Button
+router.post('/pos/action', async (req, res, next) => {
+  try {
+    const { external_id, action, amount } = req.body;
+
+    // Basic Input Validation
+    if (!external_id || !action) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required fields: external_id and action are required.' 
+      });
+    }
+
+    // Call the Business Logic
+    const result = await logicService.handlePosAction(external_id, action, amount);
+
+    // Return Success to Softr
+    res.json(result);
+
+  } catch (error) {
+    // Pass errors to the global error handler in app.js
+    next(error); 
+  }
+});
+
+module.exports = router;
+
+Next Step (Testing)
+
+Once you have created these files, Click the "Run" button in Replit.
+
+If everything is correct, you should see:
+
+    🚀 Server is running on port 5000
