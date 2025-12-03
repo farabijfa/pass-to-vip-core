@@ -1,0 +1,106 @@
+This is the final validation step. Since your project is live at `https://passtovip.replit.app`, we will run a **Live Integration Test**.
+
+We will test two things simultaneously:
+
+1.  **Replit ↔ Supabase:** Verifying the "Brain" can talk to the "Memory" over the public internet.
+2.  **Replit ↔ PassKit:** Verifying your API Credentials allow you to authenticate with Apple/Google Wallet servers.
+
+
+```
+
+###  Create the Live Test Script
+
+We will create a script in Replit that hits your **Public Live URL** (not localhost). This mimics exactly what Softr will do.
+
+**Create a new file in Replit:** `scripts/test-live-integration.js`
+**Paste this code:**
+
+```javascript
+const axios = require('axios');
+
+// Your LIVE Project URL
+const LIVE_URL = 'https://passtovip.replit.app/api/pos/action';
+
+async function runLiveTest() {
+  console.log('🚀 Starting Live Integration Test...');
+  console.log(`🎯 Target: ${LIVE_URL}`);
+
+  try {
+    const payload = {
+      external_id: 'TEST-QR-001', // The QR code we seeded in Supabase
+      action: 'MEMBER_EARN',      // We are adding points
+      amount: 50
+    };
+
+    console.log('📤 Sending Payload:', payload);
+
+    const response = await axios.post(LIVE_URL, payload);
+
+    console.log('\n✅ SUCCESS! Server responded:');
+    console.log(JSON.stringify(response.data, null, 2));
+
+  } catch (error) {
+    console.error('\n❌ Test Failed!');
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Data:', error.response.data);
+    } else {
+      console.error('Error:', error.message);
+    }
+  }
+}
+
+runLiveTest();
+```
+
+###  Run the Test & Interpret Logs
+
+In the Replit Shell/Console, run:
+
+```bash
+node scripts/test-live-integration.js
+```
+
+###  Critical: How to Read the Results
+
+Watch the **Replit Server Console** (where `npm start` is running) while the test runs. You will see one of two outcomes.
+
+#### **Outcome A: The "404" Success (Most Likely)**
+
+If you see this in the Replit Server logs:
+
+> `🔄 Syncing with PassKit (MEMBERSHIP)...`
+> `❌ PassKit API Error: 404 Not Found (Resource does not exist)`
+
+**This is a SUCCESS.** 🟢
+
+  * **Why?** It means your **API Keys are Valid**. You successfully authenticated with PassKit, and their server checked its database. It returned "404" simply because the ID `pk_pass_123` (our dummy data) doesn't exist in your real PassKit project.
+  * **Action:** Your integration works. You just need to scan a *real* pass now.
+
+#### **Outcome B: The "401" Failure**
+
+If you see:
+
+> `❌ PassKit API Error: 401 Unauthorized`
+
+**This is a FAILURE.** 🔴
+
+  * **Why?** Your API Key or Secret in Replit Secrets is incorrect.
+  * **Action:** Re-copy the keys from the PassKit Dashboard.
+
+-----
+
+### Optional: Test with a REAL Pass (To see it update on your phone)
+
+If you have installed a real pass on your phone from your project `https://pub2.pskt.io/c/nj42dt`:
+
+1.  **Get the ID:** Look at the bottom of the pass (or in the PassKit dashboard) for the **Pass ID**.
+2.  **Update Supabase:** Replace the dummy ID with your Real ID.
+    ```sql
+    UPDATE passes_master 
+    SET passkit_internal_id = 'YOUR_REAL_PASS_ID_HERE' 
+    WHERE external_id = 'TEST-QR-001';
+    ```
+3.  **Run the script again.** You will see the points update on your phone screen immediately\!
+
+**Run the test now and let me know if you got the "404 Success" or if you managed to test with a Real Pass\!**
