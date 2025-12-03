@@ -43,8 +43,18 @@ export class CampaignController {
         );
       }
 
-      const { program_id, front_template_id, back_template_id, size, base_claim_url } =
-        req.body;
+      const { 
+        program_id, 
+        template_id,
+        front_template_id, 
+        back_template_id, 
+        resource_type,
+        size, 
+        base_claim_url,
+        description 
+      } = req.body;
+
+      const resourceType = resource_type === "letter" ? "letter" : "postcard";
 
       if (!program_id) {
         return res.status(400).json(
@@ -60,37 +70,93 @@ export class CampaignController {
         );
       }
 
-      if (!front_template_id) {
+      if (resourceType === "letter") {
+        const letterTemplateId = template_id || front_template_id;
+        if (!letterTemplateId) {
+          return res.status(400).json(
+            createResponse(
+              false,
+              undefined,
+              {
+                code: "MISSING_TEMPLATE_ID",
+                message: "Template ID is required for letters",
+              },
+              requestId
+            )
+          );
+        }
+
+        console.log(`📂 CSV upload received: ${req.file.originalname}`);
+        console.log(`   Resource Type: Letter`);
+        console.log(`   Program ID: ${program_id}`);
+        console.log(`   Template: ${letterTemplateId}`);
+
+        const result = await campaignService.processBatchUpload({
+          filePath: req.file.path,
+          programId: program_id,
+          templateId: letterTemplateId,
+          resourceType: "letter",
+          baseClaimUrl: base_claim_url,
+          description,
+        });
+
+        const processingTime = Date.now() - startTime;
+        const statusCode = result.failed === result.total ? 400 : 201;
+
+        return res.status(statusCode).json({
+          success: result.success > 0,
+          data: {
+            summary: {
+              total: result.total,
+              success: result.success,
+              failed: result.failed,
+              resourceType: "letter",
+            },
+            results: result.results,
+          },
+          metadata: {
+            requestId,
+            timestamp: new Date().toISOString(),
+            processingTime,
+          },
+        });
+      }
+
+      if (!front_template_id && !template_id) {
         return res.status(400).json(
           createResponse(
             false,
             undefined,
             {
               code: "MISSING_TEMPLATE_ID",
-              message: "Front Template ID is required",
+              message: "Front Template ID is required for postcards",
             },
             requestId
           )
         );
       }
 
+      const postcardFrontTemplate = front_template_id || template_id;
+
       console.log(`📂 CSV upload received: ${req.file.originalname}`);
+      console.log(`   Resource Type: Postcard`);
       console.log(`   Program ID: ${program_id}`);
-      console.log(`   Front Template: ${front_template_id}`);
-      console.log(`   Back Template: ${back_template_id || front_template_id}`);
+      console.log(`   Front Template: ${postcardFrontTemplate}`);
+      console.log(`   Back Template: ${back_template_id || postcardFrontTemplate}`);
       console.log(`   Size: ${size || "6x4"}`);
 
       const result = await campaignService.processBatchUpload({
         filePath: req.file.path,
         programId: program_id,
-        frontTemplateId: front_template_id,
+        templateId: postcardFrontTemplate,
+        frontTemplateId: postcardFrontTemplate,
         backTemplateId: back_template_id,
+        resourceType: "postcard",
         size: size || "6x4",
         baseClaimUrl: base_claim_url,
       });
 
       const processingTime = Date.now() - startTime;
-
       const statusCode = result.failed === result.total ? 400 : 201;
 
       return res.status(statusCode).json({
@@ -100,6 +166,7 @@ export class CampaignController {
             total: result.total,
             success: result.success,
             failed: result.failed,
+            resourceType: "postcard",
           },
           results: result.results,
         },
