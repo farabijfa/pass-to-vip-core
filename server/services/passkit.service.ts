@@ -1,6 +1,9 @@
 import axios, { AxiosInstance } from "axios";
 import { config, isPassKitConfigured } from "../config";
+import { generatePassKitToken } from "../utils/passkitJWT";
 import type { PassKitPass, PassKitUpdate } from "@shared/schema";
+
+const PASSKIT_BASE_URL = 'https://api.pub1.passkit.io';
 
 interface PassKitCreateResponse {
   success: boolean;
@@ -15,29 +18,41 @@ interface PassKitUpdateResponse {
   error?: string;
 }
 
+interface SyncPassResult {
+  passkit_internal_id?: string;
+  protocol?: string;
+  notification_message?: string;
+  new_balance?: number;
+  member_name?: string;
+  tier_level?: string;
+}
+
 class PassKitService {
-  private client: AxiosInstance | null = null;
   private initialized = false;
 
-  private getClient(): AxiosInstance {
-    if (!this.client) {
-      if (!isPassKitConfigured()) {
-        throw new Error("PassKit is not configured. Please set PASSKIT_API_KEY and PASSKIT_API_SECRET environment variables.");
-      }
-
-      this.client = axios.create({
-        baseURL: config.passKit.apiUrl,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.passKit.apiKey}`,
-          "X-API-Secret": config.passKit.apiSecret,
-        },
-        timeout: 30000,
-      });
-
-      this.initialized = true;
+  private getAuthHeaders(): { Authorization: string } | null {
+    const token = generatePassKitToken();
+    if (!token) {
+      return null;
     }
-    return this.client;
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  private getClient(): AxiosInstance {
+    const authHeaders = this.getAuthHeaders();
+    
+    if (!authHeaders) {
+      throw new Error("PassKit is not configured. Please set PASSKIT_API_KEY and PASSKIT_API_SECRET environment variables.");
+    }
+
+    return axios.create({
+      baseURL: PASSKIT_BASE_URL,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      timeout: 30000,
+    });
   }
 
   async healthCheck(): Promise<{ status: "connected" | "disconnected" | "error" }> {
@@ -48,6 +63,7 @@ class PassKitService {
     try {
       const client = this.getClient();
       await client.get("/health");
+      this.initialized = true;
       return { status: "connected" };
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
@@ -184,50 +200,58 @@ class PassKitService {
     }
   }
 
-  async syncPass(rpcResult: {
-    passkit_internal_id?: string;
-    notification_message?: string;
-    new_balance?: number;
-    member_name?: string;
-    tier_level?: string;
-  }): Promise<{ success: boolean; synced: boolean; error?: string }> {
-    if (!isPassKitConfigured()) {
-      console.log(`[PassKit Mock] Syncing pass: ${rpcResult.passkit_internal_id}`);
-      console.log(`[PassKit Mock] Notification: "${rpcResult.notification_message}"`);
-      return { success: true, synced: false };
+  async syncPass(rpcResult: SyncPassResult): Promise<{ success: boolean; synced: boolean; mode?: string; error?: string }> {
+    const { passkit_internal_id, protocol, notification_message, new_balance } = rpcResult;
+
+    const token = generatePassKitToken();
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found in .env. Using MOCK mode.');
+      console.log(`[Mock Sync] Updated ${protocol} pass ${passkit_internal_id}`);
+      return { success: true, synced: false, mode: 'MOCK' };
     }
 
+    console.log(`🔄 Syncing with PassKit (${protocol})...`);
+
     try {
-      if (rpcResult.passkit_internal_id) {
-        const updateResult = await this.updatePass({
-          serialNumber: rpcResult.passkit_internal_id,
-          updates: {
-            pointsBalance: rpcResult.new_balance,
-            tierLevel: rpcResult.tier_level,
-            memberName: rpcResult.member_name,
-          },
-        });
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
 
-        if (!updateResult.success) {
-          return { success: false, synced: false, error: updateResult.error };
-        }
+      let payload: Record<string, unknown> = {
+        changeMessage: notification_message
+      };
 
-        if (rpcResult.notification_message) {
-          await this.sendPushNotification(
-            rpcResult.passkit_internal_id,
-            rpcResult.notification_message
-          );
-        }
+      let url = '';
+
+      switch (protocol) {
+        case 'MEMBERSHIP':
+          url = `${PASSKIT_BASE_URL}/members/member/${passkit_internal_id}`;
+          payload.points = new_balance;
+          await axios.put(url, payload, authConfig);
+          break;
+
+        case 'COUPON':
+          url = `${PASSKIT_BASE_URL}/coupons/coupon/${passkit_internal_id}/redeem`;
+          await axios.put(url, payload, authConfig);
+          break;
+
+        case 'EVENT_TICKET':
+          url = `${PASSKIT_BASE_URL}/flights/boardingPass/${passkit_internal_id}/redeem`;
+          await axios.put(url, payload, authConfig);
+          break;
+
+        default:
+          console.warn('Unknown Protocol:', protocol);
+          return { success: true, synced: false, mode: 'UNKNOWN_PROTOCOL' };
       }
 
+      console.log(`✅ PassKit Sync Success: ${passkit_internal_id}`);
+      this.initialized = true;
       return { success: true, synced: true };
+
     } catch (error) {
-      console.error("PassKit sync error:", error);
-      return {
-        success: false,
-        synced: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
-      };
+      console.error('❌ PassKit API Error:', axios.isAxiosError(error) ? error.response?.data : (error instanceof Error ? error.message : error));
+      throw new Error('PassKit Sync Failed');
     }
   }
 
