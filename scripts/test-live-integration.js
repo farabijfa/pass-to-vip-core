@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 // Your LIVE Project URL
 const LIVE_URL = 'https://passtovip.replit.app/api/pos/action';
