@@ -45,8 +45,8 @@ server/
 ## API Endpoints
 
 ### POS Actions (Softr Integration)
-- `POST /api/pos/action` - Process POS action (MEMBER_EARN, MEMBER_REDEEM, COUPON_REDEEM, etc.)
-- `GET /api/pos/actions` - List available action types
+- `POST /api/pos/action` - Process POS action (all action types below)
+- `GET /api/pos/actions` - List available action types and Supabase RPC field requirements
 
 ### Loyalty Operations
 - `POST /api/loyalty/membership` - Process membership transaction (earn/redeem/adjust/expire points)
@@ -97,11 +97,50 @@ Content-Type: application/json
 - `MEMBER_REDEEM` - Deduct points from member balance
 - `MEMBER_ADJUST` - Adjust points (positive or negative)
 
+**Coupon Actions**:
+- `COUPON_ISSUE` - Issue a new coupon (creates pass in PassKit)
+- `COUPON_REDEEM` - Redeem an existing coupon
+
 **One-Time Actions**:
-- `COUPON_REDEEM` - Redeem a coupon code
-- `TICKET_CHECKIN` - Check in a ticket
+- `TICKET_CHECKIN` - Check in a ticket (placeholder)
 - `INSTALL` - Record pass installation
 - `UNINSTALL` - Record pass removal
+
+### Supabase RPC Return Field Requirements
+
+Your Supabase stored procedures must return these fields for PassKit sync to work:
+
+**For MEMBERSHIP actions** (`process_membership_transaction`):
+```json
+{
+  "passkit_internal_id": "member_external_id",
+  "passkit_program_id": "4RhsVhHek0dliVogVznjSQ",
+  "new_balance": 1100,
+  "notification_message": "You earned 100 points!",
+  "member_name": "John Doe",
+  "tier_level": "gold"
+}
+```
+
+**For COUPON_ISSUE action** (`process_one_time_use`):
+```json
+{
+  "passkit_campaign_id": "YOUR_PASSKIT_CAMPAIGN_ID",
+  "passkit_offer_id": "YOUR_PASSKIT_OFFER_ID",
+  "passkit_internal_id": "coupon_external_id",
+  "email": "customer@example.com",
+  "first_name": "John",
+  "last_name": "Doe"
+}
+```
+
+**For COUPON_REDEEM action** (`process_one_time_use`):
+```json
+{
+  "passkit_internal_id": "coupon_id_to_redeem",
+  "notification_message": "Coupon redeemed!"
+}
+```
 
 ### Response Format
 

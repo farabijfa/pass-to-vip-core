@@ -5,6 +5,7 @@ export type ActionType =
   | "MEMBER_EARN" 
   | "MEMBER_REDEEM" 
   | "MEMBER_ADJUST"
+  | "COUPON_ISSUE"
   | "COUPON_REDEEM" 
   | "TICKET_CHECKIN" 
   | "INSTALL" 
@@ -34,7 +35,8 @@ interface PosActionResult {
 }
 
 const MEMBERSHIP_ACTIONS: ActionType[] = ["MEMBER_EARN", "MEMBER_REDEEM", "MEMBER_ADJUST"];
-const ONE_TIME_ACTIONS: ActionType[] = ["COUPON_REDEEM", "TICKET_CHECKIN", "INSTALL", "UNINSTALL"];
+const COUPON_ACTIONS: ActionType[] = ["COUPON_ISSUE", "COUPON_REDEEM"];
+const ONE_TIME_ACTIONS: ActionType[] = ["COUPON_ISSUE", "COUPON_REDEEM", "TICKET_CHECKIN", "INSTALL", "UNINSTALL"];
 
 class LogicService {
   async handlePosAction(
@@ -78,7 +80,7 @@ class LogicService {
     
     if (MEMBERSHIP_ACTIONS.includes(actionType)) {
       protocol = "MEMBERSHIP";
-    } else if (actionType === "COUPON_REDEEM") {
+    } else if (COUPON_ACTIONS.includes(actionType)) {
       protocol = "COUPON";
     } else if (actionType === "TICKET_CHECKIN") {
       protocol = "EVENT_TICKET";
@@ -95,7 +97,25 @@ class LogicService {
     if (skipPassKitSync) {
       console.log(`[Logic] PassKit Sync skipped for ${protocol} action`);
       passKitSync.skipped = true;
+    } else if (actionType === "COUPON_ISSUE") {
+      // COUPON_ISSUE: Create new coupon in PassKit (requires campaignId + offerId from Supabase)
+      try {
+        console.log(`[Logic] Issuing new coupon via PassKit...`);
+        const issueResult = await passKitService.issueCoupon({
+          campaignId: rpcResult?.passkit_campaign_id,
+          offerId: rpcResult?.passkit_offer_id,
+          externalId: rpcResult?.passkit_internal_id,
+          email: rpcResult?.email,
+          firstName: rpcResult?.first_name,
+          lastName: rpcResult?.last_name,
+        });
+        passKitSync = { synced: issueResult.success, error: issueResult.error, skipped: false };
+      } catch (syncError) {
+        console.error("[Logic] PassKit Coupon Issue Warning:", syncError);
+        passKitSync.error = syncError instanceof Error ? syncError.message : "Coupon issue failed";
+      }
     } else {
+      // Standard sync for MEMBERSHIP, COUPON_REDEEM, EVENT_TICKET
       try {
         const syncResult = await passKitService.syncPass({
           passkit_internal_id: rpcResult?.passkit_internal_id,

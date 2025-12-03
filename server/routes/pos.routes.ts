@@ -140,9 +140,27 @@ router.get("/actions", (_req: Request, res: Response) => {
       true,
       {
         membershipActions: ["MEMBER_EARN", "MEMBER_REDEEM", "MEMBER_ADJUST"],
-        oneTimeActions: ["COUPON_REDEEM", "TICKET_CHECKIN", "INSTALL", "UNINSTALL"],
+        couponActions: ["COUPON_ISSUE", "COUPON_REDEEM"],
+        oneTimeActions: ["COUPON_ISSUE", "COUPON_REDEEM", "TICKET_CHECKIN", "INSTALL", "UNINSTALL"],
+        supabaseRpcFields: {
+          membership: {
+            required: ["passkit_internal_id", "passkit_program_id", "new_balance"],
+            optional: ["notification_message", "member_name", "tier_level"]
+          },
+          coupon_issue: {
+            required: ["passkit_campaign_id", "passkit_offer_id"],
+            optional: ["passkit_internal_id", "email", "first_name", "last_name"]
+          },
+          coupon_redeem: {
+            required: ["passkit_internal_id"],
+            optional: ["notification_message"]
+          },
+          event_ticket: {
+            note: "PLACEHOLDER - Requires Venue + Event setup in PassKit"
+          }
+        }
       },
-      "Available POS actions",
+      "Available POS actions and expected Supabase RPC return fields",
       undefined,
       requestId
     )
