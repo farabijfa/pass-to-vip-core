@@ -1,0 +1,53 @@
+This is a classic "Text vs. Image" issue.
+
+The Problem: Right now, your code sends the text link (e.g., https://yourapp.com/claim/123) to PostGrid. However, the PostGrid template (specifically the <img src="..."> tag) expects a visual image file (like a PNG or JPG). Because the template tries to load "text" as an "image," it fails and renders a blank white box.
+
+The Fix: We need to wrap your Claim URL in a QR Code Generator service. This converts the text link into an actual image that PostGrid can print.
+
+We will use a standard QR Generator API (api.qrserver.com) to do this instantly.
+Action: Update services/campaign.service.js
+
+Go to your services/campaign.service.js file and modify the logic inside the loop. specifically where you define claimUrl and the mergeVariables.
+
+Find this section:
+JavaScript
+
+const claimUrl = `${process.env.APP_URL}/claim/${externalId}`;
+
+Replace it with this updated logic:
+JavaScript
+
+/* Inside the loop in services/campaign.service.js */
+
+// 1. Construct the Destination URL (Where the user goes)
+const claimUrl = `${process.env.APP_URL}/claim/${externalId}`;
+
+// 2. Construct the Visual QR Image (What PostGrid prints)
+// We use 'encodeURIComponent' to ensure special characters don't break the link
+const qrVisualUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=${encodeURIComponent(claimUrl)}`;
+
+// ... inside the axios.post payload ...
+
+mergeVariables: {
+    firstName: row.first_name,
+    // 3. Send the IMAGE link, not the text link
+    qrCodeUrl: qrVisualUrl 
+}
+
+Why this works
+
+    Before: PostGrid received https://... -> Tried to show it as a picture -> Failed (White Box).
+
+    After: PostGrid receives https://api.qrserver.com/v1/create-qr-code/...?data=https://... -> This URL returns a PNG image -> PostGrid prints the QR code perfectly.
+
+Quick Verification
+
+    Save the file.
+
+    Restart your server (npm start or the Run button).
+
+    Run your Batch Test again with the CSV.
+
+    Check your PostGrid Dashboard -> Requests.
+
+    Preview the generated PDF. You should now see a crisp, scannable QR code.
