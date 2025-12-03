@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { supabaseService, passKitService, postGridService } from "../services";
 import { config } from "../config";
 import type { HealthCheck, ApiResponse } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 
 function createResponse<T>(
   success: boolean,
@@ -15,7 +15,7 @@ function createResponse<T>(
     data,
     error,
     metadata: {
-      requestId: requestId || randomUUID(),
+      requestId: requestId || generate(),
       timestamp: new Date().toISOString(),
     },
   };
@@ -23,7 +23,7 @@ function createResponse<T>(
 
 export class HealthController {
   async getHealth(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();
 
     try {
@@ -93,7 +93,7 @@ export class HealthController {
   }
 
   async getReadiness(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const supabaseHealth = await supabaseService.healthCheck();
@@ -142,7 +142,7 @@ export class HealthController {
   }
 
   async getLiveness(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     return res.status(200).json(
       createResponse(

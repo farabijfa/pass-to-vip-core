@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { passKitService } from "../services";
 import type { PassKitPass, PassKitUpdate, ApiResponse } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 
 function createResponse<T>(
   success: boolean,
@@ -14,7 +14,7 @@ function createResponse<T>(
     data,
     error,
     metadata: {
-      requestId: requestId || randomUUID(),
+      requestId: requestId || generate(),
       timestamp: new Date().toISOString(),
     },
   };
@@ -22,7 +22,7 @@ function createResponse<T>(
 
 export class PassKitController {
   async createPass(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();
 
     try {
@@ -77,7 +77,7 @@ export class PassKitController {
   }
 
   async updatePass(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();
 
     try {
@@ -136,7 +136,7 @@ export class PassKitController {
   }
 
   async getPass(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { serialNumber } = req.params;
@@ -191,7 +191,7 @@ export class PassKitController {
   }
 
   async deletePass(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { serialNumber } = req.params;
@@ -254,7 +254,7 @@ export class PassKitController {
   }
 
   async sendPushNotification(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { serialNumber } = req.params;

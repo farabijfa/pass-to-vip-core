@@ -8,7 +8,7 @@ import type {
   PassKitUpdate,
   ApiResponse 
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 
 function createResponse<T>(
   success: boolean,
@@ -21,7 +21,7 @@ function createResponse<T>(
     data,
     error,
     metadata: {
-      requestId: requestId || randomUUID(),
+      requestId: requestId || generate(),
       timestamp: new Date().toISOString(),
     },
   };
@@ -29,7 +29,7 @@ function createResponse<T>(
 
 export class LoyaltyController {
   async processMembershipTransaction(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();
 
     try {
@@ -97,7 +97,7 @@ export class LoyaltyController {
   }
 
   async processOneTimeUse(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();
 
     try {
@@ -150,7 +150,7 @@ export class LoyaltyController {
   }
 
   async getMemberBalance(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { memberId } = req.params;
@@ -214,7 +214,7 @@ export class LoyaltyController {
   }
 
   async getMemberTransactionHistory(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { memberId } = req.params;

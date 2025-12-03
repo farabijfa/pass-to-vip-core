@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 
 export const requestIdMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+  const requestId = (req.headers["x-request-id"] as string) || generate();
   
   req.headers["x-request-id"] = requestId;
   res.setHeader("X-Request-ID", requestId);

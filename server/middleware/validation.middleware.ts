@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { body, param, query, validationResult, ValidationChain } from "express-validator";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 import type { ApiResponse } from "@shared/schema";
 
 function createErrorResponse(
@@ -17,7 +17,7 @@ function createErrorResponse(
       details,
     },
     metadata: {
-      requestId: requestId || randomUUID(),
+      requestId: requestId || generate(),
       timestamp: new Date().toISOString(),
     },
   };
@@ -31,7 +31,7 @@ export const handleValidationErrors = (
   const errors = validationResult(req);
   
   if (!errors.isEmpty()) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const errorDetails = errors.array().map(err => ({
       field: (err as any).path || (err as any).param,
       message: err.msg,

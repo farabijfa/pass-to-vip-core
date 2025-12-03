@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 import type { ApiResponse } from "@shared/schema";
 
 export class AppError extends Error {
@@ -30,7 +30,7 @@ function createErrorResponse(
       details,
     },
     metadata: {
-      requestId: requestId || randomUUID(),
+      requestId: requestId || generate(),
       timestamp: new Date().toISOString(),
     },
   };
@@ -42,7 +42,7 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+  const requestId = (req.headers["x-request-id"] as string) || generate();
 
   console.error("Error:", {
     requestId,
@@ -92,7 +92,7 @@ export const errorHandler = (
 };
 
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
-  const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+  const requestId = (req.headers["x-request-id"] as string) || generate();
 
   return res.status(404).json(
     createErrorResponse(

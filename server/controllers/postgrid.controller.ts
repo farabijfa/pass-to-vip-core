@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { postGridService } from "../services";
 import type { PostGridMail, ApiResponse } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { generate } from "short-uuid";
 
 function createResponse<T>(
   success: boolean,
@@ -14,7 +14,7 @@ function createResponse<T>(
     data,
     error,
     metadata: {
-      requestId: requestId || randomUUID(),
+      requestId: requestId || generate(),
       timestamp: new Date().toISOString(),
     },
   };
@@ -22,7 +22,7 @@ function createResponse<T>(
 
 export class PostGridController {
   async sendDirectMail(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();
 
     try {
@@ -78,7 +78,7 @@ export class PostGridController {
   }
 
   async getMailStatus(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { mailId } = req.params;
@@ -142,7 +142,7 @@ export class PostGridController {
   }
 
   async cancelMail(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const { mailId } = req.params;
@@ -206,7 +206,7 @@ export class PostGridController {
   }
 
   async listTemplates(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
       const result = await postGridService.listTemplates();
