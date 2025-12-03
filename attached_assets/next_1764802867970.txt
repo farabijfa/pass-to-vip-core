@@ -1,0 +1,68 @@
+Step 1: Update the Campaign Service (The Logic)
+
+We need to refactor processBatchUpload to be "Polymorphic". It needs to check if we are sending a Letter or a Postcard and adjust the API payload accordingly.
+
+Replit AI Agent Instruction:
+
+"Refactor services/campaign.service.js to support flexible PostGrid options.
+
+Update processBatchUpload to accept a config object instead of just parameters.
+
+config should look like: { programId, templateId, resourceType, size, description }.
+
+Inside the loop, when calling PostGrid:
+
+If config.resourceType is 'postcard':
+
+POST to https://api.postgrid.com/print/v1/postcards
+
+Include size in the body (e.g., '4x6', '6x9', '6x11').
+
+If config.resourceType is 'letter':
+
+POST to https://api.postgrid.com/print/v1/letters
+
+Include addressPlacement: 'top_first_page' (standard for window envelopes).
+
+Do NOT send size (Letters don't use it).
+
+Ensure the mergeVariables (especially qrCodeUrl) are sent for both types."
+
+/* services/campaign.service.js (Updated Logic) */
+// ... imports
+
+exports.processBatchUpload = (filePath, config) => {
+// config = { programId, templateId, resourceType, size }
+
+// ... (CSV streaming setup remains the same) ...
+
+// Inside the loop:
+const endpoint = config.resourceType === 'letter'
+? 'https://api.postgrid.com/print/v1/letters'
+: 'https://api.postgrid.com/print/v1/postcards';
+
+const payload = {
+to: {
+firstName: row.first_name,
+lastName: row.last_name,
+// ... address fields
+},
+templateId: config.templateId,
+mergeVariables: {
+firstName: row.first_name,
+qrCodeUrl: claimUrl // The Magic Link
+}
+};
+
+// Add Type-Specific Options
+if (config.resourceType === 'postcard') {
+payload.size = config.size || '4x6'; // Default to standard
+} else if (config.resourceType === 'letter') {
+payload.addressPlacement = 'top_first_page';
+payload.doubleSided = true; // Usually safer default for letters
+}
+
+await axios.post(endpoint, payload, { /* auth */ });
+
+// ... (rest of logic)
+};
