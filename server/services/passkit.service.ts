@@ -404,22 +404,14 @@ class PassKitService {
     console.log(`🎟️ Issuing event ticket for production: ${ticketData.productionId}`);
 
     try {
-      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket`;
+      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${ticketData.ticketTypeId}`;
       
       const payload: Record<string, unknown> = {
-        ticketType: {
-          id: ticketData.ticketTypeId,
-        },
         ticketNumber: ticketData.ticketNumber || `TKT-${Date.now()}`,
       };
 
       if (ticketData.eventId) {
-        payload.event = { id: ticketData.eventId };
-      } else {
-        payload.event = { 
-          productionId: ticketData.productionId,
-          startDate: new Date().toISOString(),
-        };
+        payload.eventId = ticketData.eventId;
       }
 
       if (ticketData.email || ticketData.firstName || ticketData.lastName) {
