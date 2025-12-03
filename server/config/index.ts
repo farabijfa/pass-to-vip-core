@@ -52,7 +52,7 @@ export function validateConfig(): { isValid: boolean; missingVars: string[] } {
 }
 
 export function isSupabaseConfigured(): boolean {
-  return !!(config.supabase.url && config.supabase.anonKey);
+  return !!(config.supabase.url && (config.supabase.anonKey || config.supabase.serviceRoleKey));
 }
 
 export function isPassKitConfigured(): boolean {

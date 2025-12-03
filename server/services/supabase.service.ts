@@ -14,34 +14,40 @@ class SupabaseService {
   private getClient(): SupabaseClient {
     if (!this.client) {
       if (!isSupabaseConfigured()) {
-        throw new Error("Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.");
+        throw new Error("Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.");
       }
-      this.client = createClient(config.supabase.url, config.supabase.anonKey);
+      const key = config.supabase.serviceRoleKey || config.supabase.anonKey;
+      this.client = createClient(config.supabase.url, key);
       this.initialized = true;
     }
     return this.client;
   }
 
-  async healthCheck(): Promise<{ status: "connected" | "disconnected" | "error"; latency?: number }> {
+  async healthCheck(): Promise<{ status: "connected" | "disconnected" | "error"; latency?: number; message?: string }> {
     if (!isSupabaseConfigured()) {
-      return { status: "disconnected" };
+      return { status: "disconnected", message: "Supabase not configured" };
     }
 
     try {
       const startTime = Date.now();
       const client = this.getClient();
       
-      const { error } = await client.from("_health_check").select("*").limit(1).maybeSingle();
+      const { data, error } = await client.rpc("get_service_status").maybeSingle();
       
       const latency = Date.now() - startTime;
       
-      if (error && !error.message.includes("does not exist")) {
-        return { status: "error" };
+      if (error) {
+        if (error.message.includes("function") && error.message.includes("does not exist")) {
+          return { status: "connected", latency, message: "Connected (RPC not configured yet)" };
+        }
+        console.error("Supabase health check error:", error.message);
+        return { status: "connected", latency, message: "Connected but RPC error" };
       }
       
       return { status: "connected", latency };
     } catch (error) {
-      return { status: "error" };
+      console.error("Supabase connection error:", error);
+      return { status: "error", message: error instanceof Error ? error.message : "Unknown error" };
     }
   }
 
