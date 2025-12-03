@@ -1,0 +1,116 @@
+Agency or a Platform. You will have many Clients (e.g., "Joe's Pizza", "City Event Center"), and each Client will have their own Program ID inside PassKit (which controls their specific logo, colors, and Apple Wallet certificate).
+
+The good news is: Your architecture already supports this.
+
+You do not need to change your code for every new client. The system is designed to be Data-Driven.
+
+    Replit (The Brain): Does not care who the client is. It just follows instructions.
+
+    Supabase (The Config): Holds the specific "Program ID" for each client in the programs table.
+
+    Softr (The Admin): Is where you type in the new Client's details.
+
+Here is how we operationalize this Multi-Client / Multi-Tenant setup.
+1. The "Config" Table (How it works)
+
+Your programs table is the secret sauce. Think of it as your "Client Registry."
+id (UUID)	name (Client Name)	protocol	passkit_program_id
+row-1	Joe's Pizza Gold	MEMBERSHIP	program_joes_123
+row-2	City Concert VIP	EVENT_TICKET	event_city_999
+row-3	Burger Shack Promo	COUPON	camp_burger_555
+
+How the System handles this:
+
+    When Creating a Pass (Issuance): You select "Joe's Pizza" in Softr. Replit looks up row-1, grabs program_joes_123, and tells PassKit: "Make a new pass for THIS specific program." PassKit applies Joe's logo automatically.
+
+    When Scanning a Pass (POS): (What we just tested) The Staff scans a QR code. The QR code links to a Pass ID. That Pass ID links to the Program. The system automatically knows which logic to apply.
+
+2. Implementation: The "Agency Dashboard" in Softr
+
+You need a UI to onboard new clients without touching code.
+Shutterstock
+
+Explore
+Step A: Create the "Programs" Page in Softr
+
+    New Page: Name it "Client Management".
+
+    Add Block: "List with wrappers" (or Table).
+
+    Data Source: Supabase -> programs table.
+
+    Action Button (Add Record): Configure a form to add a new row to programs.
+
+        Field 1: name (e.g., "Client X Loyalty")
+
+        Field 2: passkit_program_id (Copy this from the PassKit Portal)
+
+        Field 3: protocol (Dropdown: MEMBERSHIP, COUPON, etc.)
+
+Result: Now, whenever you sign a new client, you just log into Softr, paste their PassKit ID, and Boom—your backend supports them instantly.
+3. The Missing Piece: The "Issuance" Engine
+
+We have tested the POS (Usage). Now we need the logic for Issuance (Onboarding). This is where the passkit_program_id is critical.
+
+We need to add a function to passkitService.js that says: "Create a new Member for Client X".
+
+Do this update to services/passkitService.js to enable Multi-Client Issuance:
+JavaScript
+
+/* Add this new function to exports in services/passkitService.js */
+
+/**
+ * Enrolls a new user into a specific PassKit Program
+ * @param {string} passkitProgramId - The specific Client ID (e.g., Joe's Pizza)
+ * @param {object} userData - { email, firstName, lastName }
+ */
+exports.enrollMember = async (passkitProgramId, userData) => {
+  const token = generatePassKitToken();
+  if (!token) return { id: 'MOCK-ID', externalId: 'MOCK-EXT-ID' };
+
+  try {
+    const url = `${PASSKIT_BASE_URL}/members/member`;
+    
+    // This payload tells PassKit WHICH Client Program to use
+    const payload = {
+      programId: passkitProgramId, // <--- This handles the Multi-Client Magic
+      externalId: userData.email,  // Use email as unique key for now
+      person: {
+        forename: userData.firstName,
+        surname: userData.lastName,
+        email: userData.email
+      }
+    };
+
+    const config = { headers: { Authorization: `Bearer ${token}` } };
+    
+    const response = await axios.post(url, payload, config);
+    
+    // Return the IDs needed for Supabase
+    return {
+      passkit_internal_id: response.data.id,
+      external_id: response.data.externalId
+    };
+
+  } catch (error) {
+    console.error('❌ PassKit Enrollment Failed:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+4. Next Step: Test Multi-Client Flexibility
+
+To prove this works, let's manually insert a "Second Client" into your Supabase database and verify the system stays stable.
+
+Run this in Supabase SQL:
+SQL
+
+-- Simulate a SECOND Client (e.g., an Event Client)
+INSERT INTO programs (name, protocol, passkit_program_id)
+VALUES (
+  'City Festival 2025', 
+  'EVENT_TICKET', 
+  'pk_event_real_id_here' -- You would put a real ID here later
+);
+
+Conclusion: You are setup correctly.
