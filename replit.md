@@ -60,6 +60,9 @@ server/
 - `PATCH /api/wallet/passes/:serialNumber` - Update pass
 - `DELETE /api/wallet/passes/:serialNumber` - Delete pass
 - `POST /api/wallet/passes/:serialNumber/push` - Send push notification
+- `POST /api/wallet/enroll` - **LIVE** Enroll new member (creates pass in wallet)
+- `POST /api/wallet/coupons` - **LIVE** Issue single-use coupon
+- `POST /api/wallet/tickets` - **PLACEHOLDER** Issue event ticket (requires Venue + Event setup)
 
 ### Direct Mail (PostGrid)
 - `POST /api/mail/mail` - Send direct mail piece
@@ -160,11 +163,27 @@ If `PASSKIT_API_KEY` or `PASSKIT_API_SECRET` are not set, the service falls back
 - Returns success without making API calls
 - Allows local development without PassKit credentials
 
-### Sync Protocol Routing
-The `syncPass` function routes to different PassKit endpoints based on protocol:
-- `MEMBERSHIP` → `PUT /members/member/{id}` - Updates member points balance
-- `COUPON` → `PUT /coupons/coupon/{id}/redeem` - Redeems coupon
-- `EVENT_TICKET` → `PUT /flights/boardingPass/{id}/redeem` - Checks in ticket
+### PassKit Protocol Status
+
+| Protocol | Status | Endpoint | Notes |
+|----------|--------|----------|-------|
+| MEMBERSHIP | ✅ LIVE | `PUT /members/member` | Fully working with push notifications |
+| COUPON | ✅ LIVE | `PUT /coupon/singleUse/coupon/{id}/redeem` | Ready for redemption |
+| EVENT_TICKET | ⏳ PLACEHOLDER | `POST /eventTickets/ticket` | Requires Venue + Event setup |
+
+### Protocol Hierarchy
+
+**MEMBERSHIP (Simple):**
+- `programId` + `tierId` → Ready to enroll/update members
+
+**COUPON (Simple):**
+- `campaignId` + `offerId` → Ready to issue/redeem coupons
+
+**EVENT_TICKET (Complex - TODO):**
+- Requires: `Production` → `Venue` → `Event` → `TicketType`
+- Current IDs: productionId=`68354tE85PxHKqRMTzUhdq`, ticketTypeId=`1lhTkqdRkfcYCNTxpfRmLJ`
+- Missing: `venueId` and `eventId` (create in PassKit dashboard)
+- Search code for `TODO: EVENT_TICKET` to find implementation placeholders
 
 ### Push Notifications
 The `changeMessage` field triggers lock screen push notifications on the user's device when the pass is updated.
@@ -240,15 +259,25 @@ npm run dev
 The server binds to port 5000 by default.
 
 ## Recent Changes
-- **PassKit Production Integration - LIVE** (2025-12-03)
-  - ✅ Live pass updates working with push notifications to user's phone
-  - Created `server/utils/passkitJWT.ts` for JWT token generation (HS256, 60-second tokens)
-  - Updated `passkit.service.ts` with real API calls to `https://api.pub2.passkit.io` (US region)
-  - JWT token uses `uid` claim (not `key`) for authentication
-  - Member update uses `PUT /members/member` with `externalId + programId` in body
-  - PassKit Program ID: `4RhsVhHek0dliVogVznjSQ` (hardcoded in service)
-  - Added mock mode fallback when API keys are not configured
-  - Implemented protocol-based routing (MEMBERSHIP, COUPON, EVENT_TICKET, LIFECYCLE)
+
+### 2025-12-03 - Coupon Protocol + Event Ticket Placeholder
+- ✅ Added `issueCoupon()` function for single-use coupon creation
+- ✅ Fixed Coupon redeem endpoint: `/coupon/singleUse/coupon/{id}/redeem`
+- ✅ Added `POST /api/wallet/coupons` endpoint
+- ⏳ Event Ticket code refactored as searchable placeholder (search: `TODO: EVENT_TICKET`)
+- 📝 Updated replit.md with protocol status table
+
+### 2025-12-03 - PassKit Production Integration - LIVE
+- ✅ Live pass updates working with push notifications to user's phone
+- Created `server/utils/passkitJWT.ts` for JWT token generation (HS256, 60-second tokens)
+- Updated `passkit.service.ts` with real API calls to `https://api.pub2.passkit.io` (US region)
+- JWT token uses `uid` claim (not `key`) for authentication
+- Member update uses `PUT /members/member` with `externalId + programId` in body
+- PassKit Program ID: `4RhsVhHek0dliVogVznjSQ` (hardcoded in service)
+- Added mock mode fallback when API keys are not configured
+- Implemented protocol-based routing (MEMBERSHIP, COUPON, EVENT_TICKET, LIFECYCLE)
+
+### Earlier
 - Added POS action endpoint (`/api/pos/action`) for Softr integration
 - Created Logic Service as the main orchestrator for action routing
 - Added syncPass method to PassKit service for automatic wallet sync

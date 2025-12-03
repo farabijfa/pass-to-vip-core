@@ -489,6 +489,100 @@ export class PassKitController {
       );
     }
   }
+
+  async issueCoupon(req: Request, res: Response, next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+    const startTime = Date.now();
+
+    try {
+      const { campaignId, offerId, externalId, email, firstName, lastName, sku } = req.body;
+
+      if (!campaignId) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "INVALID_REQUEST",
+              message: "campaignId is required (PassKit Campaign ID)",
+            },
+            requestId
+          )
+        );
+      }
+
+      if (!offerId) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "INVALID_REQUEST",
+              message: "offerId is required (PassKit Offer ID)",
+            },
+            requestId
+          )
+        );
+      }
+
+      console.log(`[Coupon] Issuing coupon for campaign: ${campaignId}, offer: ${offerId}`);
+
+      const result = await passKitService.issueCoupon({
+        campaignId,
+        offerId,
+        externalId,
+        email,
+        firstName,
+        lastName,
+        sku,
+      });
+
+      if (!result.success) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "COUPON_ISSUANCE_FAILED",
+              message: result.error || "Failed to issue coupon",
+            },
+            requestId
+          )
+        );
+      }
+
+      const response = createResponse(
+        true,
+        {
+          coupon_id: result.coupon_id,
+          external_id: result.external_id,
+          install_url: result.install_url,
+          campaignId,
+          offerId,
+          issuedAt: new Date().toISOString(),
+        },
+        undefined,
+        requestId
+      );
+
+      response.metadata!.processingTime = Date.now() - startTime;
+
+      return res.status(201).json(response);
+    } catch (error) {
+      console.error("Issue coupon error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: "An unexpected error occurred while issuing the coupon",
+          },
+          requestId
+        )
+      );
+    }
+  }
 }
 
 export const passKitController = new PassKitController();

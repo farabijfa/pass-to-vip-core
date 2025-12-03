@@ -44,6 +44,25 @@ interface EnrollMemberResult {
   error?: string;
 }
 
+interface IssueCouponData {
+  campaignId: string;
+  offerId: string;
+  externalId?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  sku?: string;
+}
+
+interface IssueCouponResult {
+  success: boolean;
+  coupon_id?: string;
+  external_id?: string;
+  install_url?: string;
+  error?: string;
+}
+
+// TODO: EVENT_TICKET - Requires Production → Venue → Event hierarchy setup in PassKit
 interface IssueEventTicketData {
   productionId: string;
   ticketTypeId: string;
@@ -274,15 +293,19 @@ class PassKitService {
           break;
 
         case 'COUPON':
-          url = `${PASSKIT_BASE_URL}/coupons/coupon/${passkit_internal_id}/redeem`;
+          // PassKit Single Use Coupon API: PUT /coupon/singleUse/coupon/{id}/redeem
+          url = `${PASSKIT_BASE_URL}/coupon/singleUse/coupon/${passkit_internal_id}/redeem`;
           await axios.put(url, payload, authConfig);
           break;
 
         case 'EVENT_TICKET':
-          // Event Tickets use a different API structure
-          url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${passkit_internal_id}/redeem`;
-          await axios.put(url, payload, authConfig);
-          break;
+          // TODO: EVENT_TICKET - Placeholder mode; skip PassKit sync until Venue/Event configured
+          console.log('⚠️ EVENT_TICKET sync skipped - placeholder mode. See TODO in passkit.service.ts');
+          return { success: true, synced: false, mode: 'EVENT_TICKET_PLACEHOLDER' };
+          // Uncomment below once eventId is available:
+          // url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${passkit_internal_id}/redeem`;
+          // await axios.put(url, payload, authConfig);
+          // break;
 
         default:
           console.warn('Unknown Protocol:', protocol);
@@ -388,7 +411,113 @@ class PassKitService {
     }
   }
 
+  async issueCoupon(couponData: IssueCouponData): Promise<IssueCouponResult> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode for coupon issuance.');
+      const mockExternalId = couponData.externalId || `CPN-${Date.now()}`;
+      return {
+        success: true,
+        coupon_id: `MOCK-COUPON-${Date.now()}`,
+        external_id: mockExternalId,
+        install_url: `https://mock.passkit.io/coupon/${mockExternalId}`,
+      };
+    }
+
+    console.log(`🎟️ Issuing coupon for campaign: ${couponData.campaignId}, offer: ${couponData.offerId}`);
+
+    try {
+      // PassKit Single Use Coupon API: POST /coupon/singleUse/coupon
+      const url = `${PASSKIT_BASE_URL}/coupon/singleUse/coupon`;
+      
+      const payload: Record<string, unknown> = {
+        campaignId: couponData.campaignId,
+        offerId: couponData.offerId,
+      };
+
+      if (couponData.externalId) {
+        payload.externalId = couponData.externalId;
+      }
+
+      if (couponData.sku) {
+        payload.sku = couponData.sku;
+      }
+
+      if (couponData.email || couponData.firstName || couponData.lastName) {
+        payload.person = {
+          emailAddress: couponData.email,
+          forename: couponData.firstName,
+          surname: couponData.lastName,
+        };
+      }
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.post(url, payload, authConfig);
+
+      console.log(`✅ Coupon issued successfully: ${response.data?.id}`);
+
+      return {
+        success: true,
+        coupon_id: response.data?.id,
+        external_id: response.data?.externalId || couponData.externalId,
+        install_url: response.data?.passUrl || response.data?.url,
+      };
+    } catch (error) {
+      let errorMessage = 'PassKit Coupon Issuance Failed';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit Coupon Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  // ============================================================================
+  // TODO: EVENT_TICKET PROTOCOL - PLACEHOLDER
+  // ============================================================================
+  // PassKit Event Tickets require a full hierarchy before issuance:
+  //   1. Production (have: 68354tE85PxHKqRMTzUhdq)
+  //   2. Venue (need to create in PassKit dashboard or via API)
+  //   3. Event (links Production + Venue + Date)
+  //   4. Ticket Type (have: 1lhTkqdRkfcYCNTxpfRmLJ)
+  //
+  // Once you have a Venue and Event created, update this function with:
+  //   - eventId: The PassKit Event ID
+  //   - Uncomment the API call below
+  //
+  // API Endpoint: POST /eventTickets/ticket
+  // Docs: https://docs.passkit.io/protocols/event-tickets/
+  // ============================================================================
   async issueEventTicket(ticketData: IssueEventTicketData): Promise<IssueEventTicketResult> {
+    // TODO: EVENT_TICKET - Remove placeholder mode once Venue + Event are configured
+    console.log('⚠️ Event Tickets in PLACEHOLDER mode. Requires Venue + Event setup in PassKit.');
+    console.log(`[Placeholder] Would issue ticket for production: ${ticketData.productionId}, ticketType: ${ticketData.ticketTypeId}`);
+    
+    // Return mock data until Event hierarchy is complete
+    const ticketNumber = ticketData.ticketNumber || `TKT-${Date.now()}`;
+    return {
+      success: true,
+      ticket_id: `PLACEHOLDER-${Date.now()}`,
+      ticket_number: ticketNumber,
+      install_url: `https://placeholder.passkit.io/ticket/${ticketNumber}`,
+      error: 'EVENT_TICKET protocol requires Venue + Event setup. See TODO in passkit.service.ts',
+    };
+
+    /* TODO: EVENT_TICKET - Uncomment this block once eventId is available
     const token = generatePassKitToken();
     
     if (!token) {
@@ -404,15 +533,13 @@ class PassKitService {
     console.log(`🎟️ Issuing event ticket for production: ${ticketData.productionId}`);
 
     try {
-      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${ticketData.ticketTypeId}`;
+      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket`;
       
       const payload: Record<string, unknown> = {
+        ticketType: { id: ticketData.ticketTypeId },
+        event: { id: ticketData.eventId },
         ticketNumber: ticketData.ticketNumber || `TKT-${Date.now()}`,
       };
-
-      if (ticketData.eventId) {
-        payload.eventId = ticketData.eventId;
-      }
 
       if (ticketData.email || ticketData.firstName || ticketData.lastName) {
         payload.person = {
@@ -458,88 +585,28 @@ class PassKitService {
         error: errorMessage,
       };
     }
+    */
   }
 
+  // TODO: EVENT_TICKET - Placeholder for ticket redemption
   async redeemEventTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
-    const token = generatePassKitToken();
-    
-    if (!token) {
-      console.log('⚠️ No PassKit Keys found. Using MOCK mode for ticket redemption.');
-      return { success: true };
-    }
-
-    console.log(`🎫 Redeeming event ticket: ${ticketId}`);
-
-    try {
-      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${ticketId}/redeem`;
-      
-      const authConfig = {
-        headers: { Authorization: `Bearer ${token}` },
-      };
-
-      await axios.put(url, {}, authConfig);
-
-      console.log(`✅ Event ticket redeemed successfully: ${ticketId}`);
-      return { success: true };
-    } catch (error) {
-      let errorMessage = 'PassKit Ticket Redemption Failed';
-      
-      if (axios.isAxiosError(error)) {
-        console.error('❌ PassKit Ticket Redemption Error:', {
-          status: error.response?.status,
-          data: error.response?.data,
-        });
-        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-
-      return {
-        success: false,
-        error: errorMessage,
-      };
-    }
+    console.log('⚠️ Event Ticket Redemption in PLACEHOLDER mode.');
+    console.log(`[Placeholder] Would redeem ticket: ${ticketId}`);
+    return { 
+      success: true,
+      error: 'EVENT_TICKET protocol in placeholder mode. See TODO in passkit.service.ts',
+    };
   }
 
+  // TODO: EVENT_TICKET - Placeholder for ticket validation
   async validateEventTicket(ticketId: string): Promise<{ success: boolean; valid?: boolean; error?: string }> {
-    const token = generatePassKitToken();
-    
-    if (!token) {
-      console.log('⚠️ No PassKit Keys found. Using MOCK mode for ticket validation.');
-      return { success: true, valid: true };
-    }
-
-    console.log(`🔍 Validating event ticket: ${ticketId}`);
-
-    try {
-      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${ticketId}/validate`;
-      
-      const authConfig = {
-        headers: { Authorization: `Bearer ${token}` },
-      };
-
-      const response = await axios.put(url, {}, authConfig);
-
-      console.log(`✅ Event ticket validated: ${ticketId}`);
-      return { success: true, valid: response.data?.valid ?? true };
-    } catch (error) {
-      let errorMessage = 'PassKit Ticket Validation Failed';
-      
-      if (axios.isAxiosError(error)) {
-        console.error('❌ PassKit Ticket Validation Error:', {
-          status: error.response?.status,
-          data: error.response?.data,
-        });
-        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-
-      return {
-        success: false,
-        error: errorMessage,
-      };
-    }
+    console.log('⚠️ Event Ticket Validation in PLACEHOLDER mode.');
+    console.log(`[Placeholder] Would validate ticket: ${ticketId}`);
+    return { 
+      success: true, 
+      valid: true,
+      error: 'EVENT_TICKET protocol in placeholder mode. See TODO in passkit.service.ts',
+    };
   }
 }
 

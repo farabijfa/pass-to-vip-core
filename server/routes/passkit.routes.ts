@@ -46,6 +46,12 @@ router.post(
 );
 
 router.post(
+  "/coupons",
+  asyncHandler(passKitController.issueCoupon.bind(passKitController))
+);
+
+// TODO: EVENT_TICKET - Placeholder endpoint; requires Venue + Event setup in PassKit
+router.post(
   "/tickets",
   asyncHandler(passKitController.issueEventTicket.bind(passKitController))
 );
