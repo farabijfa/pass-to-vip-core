@@ -246,6 +246,9 @@ class CampaignService {
 
                 const claimCode = claimResult.claimCode;
                 const claimUrl = `${baseClaimUrl}/${claimCode}`;
+                
+                // Generate QR code image URL (PostGrid needs an image, not a text link)
+                const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=${encodeURIComponent(claimUrl)}`;
 
                 console.log(`📮 Sending ${resourceLabel} to ${contactName}...`);
 
@@ -269,7 +272,7 @@ class CampaignService {
                       firstName: contact.firstName,
                       lastName: contact.lastName,
                       fullName: contactName,
-                      qrCodeUrl: claimUrl,
+                      qrCodeUrl: qrCodeImageUrl,
                       claimCode,
                     },
                     addressPlacement: "top_first_page",
@@ -302,7 +305,7 @@ class CampaignService {
                       firstName: contact.firstName,
                       lastName: contact.lastName,
                       fullName: contactName,
-                      qrCodeUrl: claimUrl,
+                      qrCodeUrl: qrCodeImageUrl,
                       claimCode,
                     },
                   });

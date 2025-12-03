@@ -42,3 +42,8 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+APP_URL = "https://e87d0c9c-a17e-4072-b82d-6c2df516162d-00-2atv7ax70bk4b.riker.replit.dev"
