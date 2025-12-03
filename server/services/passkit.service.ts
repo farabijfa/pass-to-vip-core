@@ -225,9 +225,9 @@ class PassKitService {
 
       switch (protocol) {
         case 'MEMBERSHIP':
-          // PassKit API uses /members/member with id in the body, not URL
+          // PassKit API uses /members/member with externalId in the body
           url = `${PASSKIT_BASE_URL}/members/member`;
-          payload.id = passkit_internal_id;
+          payload.externalId = passkit_internal_id;  // Use externalId to identify member
           payload.points = new_balance;
           await axios.put(url, payload, authConfig);
           break;

@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function updatePassKitId() {
   const externalId = 'TEST-QR-001';
-  const realPassKitId = 'ODqBuRmmXhQU8KUqfQOcwL';
+  const realPassKitId = '123456';  // PassKit external_id for this member
 
   console.log(`Updating PassKit ID for external_id: ${externalId}`);
   console.log(`New passkit_internal_id: ${realPassKitId}`);
