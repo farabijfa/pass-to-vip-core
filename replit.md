@@ -240,11 +240,15 @@ npm run dev
 The server binds to port 5000 by default.
 
 ## Recent Changes
-- **PassKit Production Integration** (2025-12-03)
-  - Created `server/utils/passkitJWT.ts` for JWT token generation
+- **PassKit Production Integration - LIVE** (2025-12-03)
+  - ✅ Live pass updates working with push notifications to user's phone
+  - Created `server/utils/passkitJWT.ts` for JWT token generation (HS256, 60-second tokens)
   - Updated `passkit.service.ts` with real API calls to `https://api.pub2.passkit.io` (US region)
+  - JWT token uses `uid` claim (not `key`) for authentication
+  - Member update uses `PUT /members/member` with `externalId + programId` in body
+  - PassKit Program ID: `4RhsVhHek0dliVogVznjSQ` (hardcoded in service)
   - Added mock mode fallback when API keys are not configured
-  - Implemented protocol-based routing (MEMBERSHIP, COUPON, EVENT_TICKET)
+  - Implemented protocol-based routing (MEMBERSHIP, COUPON, EVENT_TICKET, LIFECYCLE)
 - Added POS action endpoint (`/api/pos/action`) for Softr integration
 - Created Logic Service as the main orchestrator for action routing
 - Added syncPass method to PassKit service for automatic wallet sync
