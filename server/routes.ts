@@ -1,16 +1,31 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import cors from "cors";
+import apiRoutes from "./routes/index";
+import { 
+  errorHandler, 
+  notFoundHandler, 
+  requestIdMiddleware 
+} from "./middleware";
+import { config } from "./config";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  app.use(cors({
+    origin: config.cors.origins,
+    methods: config.cors.methods,
+    allowedHeaders: config.cors.allowedHeaders,
+  }));
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  app.use(requestIdMiddleware);
+
+  app.use("/api", apiRoutes);
+
+  app.use("/api/*", notFoundHandler);
+
+  app.use(errorHandler);
 
   return httpServer;
 }

@@ -88,9 +88,11 @@ class PassKitService {
       console.error("PassKit create pass error:", error);
       return {
         success: false,
-        error: axios.isAxiosError(error) 
-          ? error.response?.data?.message || error.message 
-          : "Unknown error occurred",
+        error: error instanceof Error 
+          ? error.message
+          : axios.isAxiosError(error) 
+            ? error.response?.data?.message || error.message 
+            : "Unknown error occurred",
       };
     }
   }
