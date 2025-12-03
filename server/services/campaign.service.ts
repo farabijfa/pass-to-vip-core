@@ -26,7 +26,7 @@ interface CampaignResult {
     contact: string;
     success: boolean;
     claimCode?: string;
-    postcardId?: string;
+    mailId?: string;
     error?: string;
   }>;
 }
@@ -34,10 +34,13 @@ interface CampaignResult {
 interface CampaignOptions {
   filePath: string;
   programId: string;
-  frontTemplateId: string;
+  templateId: string;
+  frontTemplateId?: string;
   backTemplateId?: string;
+  resourceType: "postcard" | "letter";
   size?: "6x4" | "9x6" | "11x6";
   baseClaimUrl?: string;
+  description?: string;
 }
 
 const COLUMN_MAPPINGS: Record<string, string[]> = {
@@ -137,12 +140,15 @@ class CampaignService {
     const {
       filePath,
       programId,
+      templateId,
       frontTemplateId,
       backTemplateId,
+      resourceType = "postcard",
       size = "6x4",
       baseClaimUrl = process.env.APP_URL
         ? `${process.env.APP_URL}/claim`
         : "https://phygital-loyalty-ecosystem.replit.app/claim",
+      description,
     } = options;
 
     return new Promise((resolve, reject) => {
@@ -152,7 +158,9 @@ class CampaignService {
       let failedCount = 0;
       let headers: string[] = [];
 
+      const resourceLabel = resourceType === "letter" ? "letter" : "postcard";
       console.log(`📂 Reading CSV file: ${filePath}`);
+      console.log(`📮 Resource type: ${resourceLabel}`);
 
       try {
         const rawContent = fs.readFileSync(filePath, "utf-8");
@@ -192,7 +200,7 @@ class CampaignService {
               return;
             }
 
-            console.log(`📊 Processing ${rows.length} contacts...`);
+            console.log(`📊 Processing ${rows.length} contacts as ${resourceLabel}s...`);
 
             for (const row of rows) {
               const contact = this.normalizeContact(row);
@@ -239,43 +247,83 @@ class CampaignService {
                 const claimCode = claimResult.claimCode;
                 const claimUrl = `${baseClaimUrl}/${claimCode}`;
 
-                console.log(`📮 Sending postcard to ${contactName}...`);
+                console.log(`📮 Sending ${resourceLabel} to ${contactName}...`);
 
-                const postcardResult = await postGridService.sendPostcard({
-                  frontTemplateId,
-                  backTemplateId: backTemplateId || frontTemplateId,
-                  size,
-                  recipientAddress: {
-                    firstName: contact.firstName,
-                    lastName: contact.lastName,
-                    addressLine1: contact.addressLine1,
-                    city: contact.city,
-                    state: contact.state,
-                    postalCode: contact.postalCode,
-                    country: "US",
-                  },
-                  claimCode,
-                  claimUrl,
-                  mergeVariables: {
-                    firstName: contact.firstName,
-                    lastName: contact.lastName,
-                    fullName: contactName,
-                    qrCodeUrl: claimUrl,
+                let mailResult: { success: boolean; mailId?: string; error?: string };
+
+                if (resourceType === "letter") {
+                  const letterResult = await postGridService.sendLetter({
+                    templateId: templateId || frontTemplateId || "",
+                    recipientAddress: {
+                      firstName: contact.firstName,
+                      lastName: contact.lastName,
+                      addressLine1: contact.addressLine1,
+                      city: contact.city,
+                      state: contact.state,
+                      postalCode: contact.postalCode,
+                      country: "US",
+                    },
                     claimCode,
-                  },
-                });
+                    claimUrl,
+                    mergeVariables: {
+                      firstName: contact.firstName,
+                      lastName: contact.lastName,
+                      fullName: contactName,
+                      qrCodeUrl: claimUrl,
+                      claimCode,
+                    },
+                    addressPlacement: "top_first_page",
+                    doubleSided: true,
+                    color: true,
+                    description,
+                  });
+                  mailResult = {
+                    success: letterResult.success,
+                    mailId: letterResult.letterId,
+                    error: letterResult.error,
+                  };
+                } else {
+                  const postcardResult = await postGridService.sendPostcard({
+                    frontTemplateId: frontTemplateId || templateId,
+                    backTemplateId: backTemplateId || frontTemplateId || templateId,
+                    size,
+                    recipientAddress: {
+                      firstName: contact.firstName,
+                      lastName: contact.lastName,
+                      addressLine1: contact.addressLine1,
+                      city: contact.city,
+                      state: contact.state,
+                      postalCode: contact.postalCode,
+                      country: "US",
+                    },
+                    claimCode,
+                    claimUrl,
+                    mergeVariables: {
+                      firstName: contact.firstName,
+                      lastName: contact.lastName,
+                      fullName: contactName,
+                      qrCodeUrl: claimUrl,
+                      claimCode,
+                    },
+                  });
+                  mailResult = {
+                    success: postcardResult.success,
+                    mailId: postcardResult.postcardId,
+                    error: postcardResult.error,
+                  };
+                }
 
-                if (postcardResult.success) {
+                if (mailResult.success) {
                   console.log(`✅ Success: ${contactName}`);
                   results.push({
                     contact: contactName,
                     success: true,
                     claimCode,
-                    postcardId: postcardResult.postcardId,
+                    mailId: mailResult.mailId,
                   });
                   successCount++;
                 } else {
-                  throw new Error(postcardResult.error || "PostGrid failed");
+                  throw new Error(mailResult.error || "PostGrid failed");
                 }
               } catch (error) {
                 const errorMessage =
