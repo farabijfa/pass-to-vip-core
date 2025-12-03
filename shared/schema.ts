@@ -119,7 +119,10 @@ export const postGridMailResponseSchema = z.object({
 export type PostGridMailResponse = z.infer<typeof postGridMailResponseSchema>;
 
 export const postGridPostcardSchema = z.object({
-  templateId: z.string().min(1, "Template ID is required"),
+  templateId: z.string().optional(),
+  frontTemplateId: z.string().optional(),
+  backTemplateId: z.string().optional(),
+  size: z.enum(["6x4", "9x6", "11x6"]).default("6x4"),
   recipientAddress: z.object({
     firstName: z.string(),
     lastName: z.string().optional(),
@@ -130,6 +133,17 @@ export const postGridPostcardSchema = z.object({
     postalCode: z.string(),
     country: z.string().default("US"),
   }),
+  senderAddress: z.object({
+    companyName: z.string().optional(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    addressLine1: z.string(),
+    addressLine2: z.string().optional(),
+    city: z.string(),
+    provinceOrState: z.string(),
+    postalOrZip: z.string(),
+    country: z.string().default("US"),
+  }).optional(),
   claimCode: z.string().min(1, "Claim code is required"),
   claimUrl: z.string().url().optional(),
   mergeVariables: z.record(z.string()).optional(),
@@ -166,7 +180,10 @@ export const batchCampaignContactSchema = z.object({
 export type BatchCampaignContact = z.infer<typeof batchCampaignContactSchema>;
 
 export const batchCampaignRequestSchema = z.object({
-  templateId: z.string().min(1, "Template ID is required"),
+  templateId: z.string().optional(),
+  frontTemplateId: z.string().optional(),
+  backTemplateId: z.string().optional(),
+  size: z.enum(["6x4", "9x6", "11x6"]).default("6x4"),
   programId: z.string().min(1, "PassKit Program ID is required"),
   contacts: z.array(batchCampaignContactSchema).min(1, "At least one contact is required"),
   baseClaimUrl: z.string().url().optional(),

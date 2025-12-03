@@ -383,13 +383,20 @@ class PassKitService {
 
       const response = await axios.post(url, payload, authConfig);
 
-      console.log(`✅ Member enrolled successfully: ${response.data?.id}`);
+      const memberId = response.data?.id;
+      console.log(`✅ Member enrolled successfully: ${memberId}`);
+
+      let installUrl = response.data?.passUrl || response.data?.url || response.data?.passInstallUrl;
+
+      if (!installUrl && memberId) {
+        installUrl = `https://pub2.pskt.io/${memberId}`;
+      }
 
       return {
         success: true,
-        passkit_internal_id: response.data?.id,
+        passkit_internal_id: memberId,
         external_id: response.data?.externalId || userData.email,
-        install_url: response.data?.passUrl || response.data?.url,
+        install_url: installUrl,
       };
     } catch (error) {
       let errorMessage = 'PassKit Enrollment Failed';

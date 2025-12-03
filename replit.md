@@ -102,20 +102,30 @@ Closes the Phygital loop: Physical Mail → QR Scan → Digital Wallet
 ```bash
 POST /api/mail/campaign
 {
-  "templateId": "template_xxx",
+  "frontTemplateId": "template_wUMgpJdU5Hi7tPxXNTgLwj",
+  "backTemplateId": "template_rBEJn1PtQepWxnKFb4RezV",
+  "size": "9x6",
   "programId": "4RhsVhHek0dliVogVznjSQ",
+  "baseClaimUrl": "https://your-app.replit.app/claim",
   "contacts": [
     {
       "firstName": "John",
       "lastName": "Doe",
+      "email": "john@example.com",
       "addressLine1": "123 Main St",
       "city": "San Francisco",
       "state": "CA",
-      "postalCode": "94102"
+      "postalCode": "94102",
+      "country": "US"
     }
   ]
 }
 ```
+
+**PostGrid Size Values** (width x height):
+- `6x4` - Standard postcard (default)
+- `9x6` - Mid-size postcard
+- `11x6` - Oversized postcard
 
 ### Claim Route Flow
 1. Looks up claim code (`lookup_claim_code` RPC)
@@ -181,12 +191,15 @@ POSTGRID_API_KEY=
 
 ## Recent Changes
 
-### 2025-12-03 - Physical Bridge
-- Added `sendPostcard()` to PostGrid service
+### 2025-12-03 - Physical Bridge Complete
+- Added `sendPostcard()` to PostGrid service with front/back template support
 - Added claim code RPC functions to Supabase service
 - Created `POST /api/mail/campaign` batch endpoint
-- Created `GET /claim/:id` redirect route
-- Full Phygital loop complete
+- Created `GET /claim/:id` redirect route with PassKit enrollment
+- Created `GET /claim/:id/status` endpoint for claim status lookup
+- Fixed PostGrid size format (width x height: `6x4`, `9x6`, `11x6`)
+- Fixed PassKit enrollment to include required `tierId` parameter
+- Full Phygital loop verified working: Postcard → QR Scan → PassKit Enrollment
 
 ### 2025-12-03 - Coupon Protocol
 - Added `issueCoupon()` function
@@ -196,3 +209,4 @@ POSTGRID_API_KEY=
 - Live pass updates with push notifications
 - JWT authentication via passkitJWT.ts
 - US region: `https://api.pub2.passkit.io`
+- Pass install URL format: `https://pub2.pskt.io/{memberId}`

@@ -258,7 +258,7 @@ export class PostGridController {
 
     try {
       const campaignData: BatchCampaignRequest = req.body;
-      const { templateId, programId, contacts, baseClaimUrl } = campaignData;
+      const { templateId, frontTemplateId, backTemplateId, size, programId, contacts, baseClaimUrl } = campaignData;
 
       const claimBaseUrl = baseClaimUrl || `${req.protocol}://${req.get('host')}/claim`;
 
@@ -300,6 +300,9 @@ export class PostGridController {
 
           const postcardResult = await postGridService.sendPostcard({
             templateId,
+            frontTemplateId,
+            backTemplateId,
+            size: size || "6x9",
             recipientAddress: {
               firstName: contact.firstName,
               lastName: contact.lastName,
@@ -350,7 +353,8 @@ export class PostGridController {
             totalContacts: contacts.length,
             successCount,
             failureCount,
-            templateId,
+            frontTemplateId: frontTemplateId || templateId,
+            backTemplateId: backTemplateId || templateId,
             programId,
           },
           results,

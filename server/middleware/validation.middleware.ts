@@ -288,10 +288,28 @@ export const validateMailId = [
 
 export const validateBatchCampaign = [
   body("templateId")
-    .notEmpty()
-    .withMessage("Template ID is required")
+    .optional()
     .isString()
     .withMessage("Template ID must be a string"),
+  body("frontTemplateId")
+    .optional()
+    .isString()
+    .withMessage("Front template ID must be a string"),
+  body("backTemplateId")
+    .optional()
+    .isString()
+    .withMessage("Back template ID must be a string"),
+  body("size")
+    .optional()
+    .isIn(["6x4", "9x6", "11x6"])
+    .withMessage("Size must be one of: 6x4, 9x6, 11x6"),
+  body()
+    .custom((value) => {
+      if (!value.templateId && (!value.frontTemplateId || !value.backTemplateId)) {
+        throw new Error("Either templateId or both frontTemplateId and backTemplateId are required");
+      }
+      return true;
+    }),
   body("programId")
     .notEmpty()
     .withMessage("PassKit Program ID is required")

@@ -84,6 +84,8 @@ export class ClaimController {
 
       console.log(`🎫 Enrolling new member in PassKit program: ${claim.passkitProgramId}`);
 
+      const DEFAULT_TIER_ID = "base";
+
       const enrollResult = await passKitService.enrollMember(
         claim.passkitProgramId,
         {
@@ -91,6 +93,7 @@ export class ClaimController {
           firstName: claim.firstName || "Guest",
           lastName: claim.lastName,
           points: 0,
+          tierId: DEFAULT_TIER_ID,
         }
       );
 

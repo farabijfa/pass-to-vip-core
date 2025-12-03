@@ -111,8 +111,8 @@ class PostGridService {
         ? `${postcardData.recipientAddress.firstName} ${postcardData.recipientAddress.lastName}`
         : postcardData.recipientAddress.firstName;
 
-      const payload = {
-        template: postcardData.templateId,
+      const payload: Record<string, any> = {
+        size: postcardData.size || "6x4",
         to: {
           firstName: postcardData.recipientAddress.firstName,
           lastName: postcardData.recipientAddress.lastName || '',
@@ -122,6 +122,14 @@ class PostGridService {
           provinceOrState: postcardData.recipientAddress.state,
           postalOrZip: postcardData.recipientAddress.postalCode,
           country: postcardData.recipientAddress.country,
+        },
+        from: postcardData.senderAddress || {
+          companyName: "Pass2VIP Loyalty Program",
+          addressLine1: "123 Main Street",
+          city: "San Francisco",
+          provinceOrState: "CA",
+          postalOrZip: "94102",
+          country: "US",
         },
         mergeVariables: {
           firstName: postcardData.recipientAddress.firstName,
@@ -133,6 +141,14 @@ class PostGridService {
         },
         sendDate: postcardData.sendDate,
       };
+
+      if (postcardData.frontTemplateId && postcardData.backTemplateId) {
+        payload.frontTemplate = postcardData.frontTemplateId;
+        payload.backTemplate = postcardData.backTemplateId;
+      } else if (postcardData.templateId) {
+        payload.frontTemplate = postcardData.templateId;
+        payload.backTemplate = postcardData.templateId;
+      }
 
       console.log(`📮 Sending postcard to ${recipientName} with claim code: ${postcardData.claimCode}`);
 
@@ -150,14 +166,21 @@ class PostGridService {
         message: "Postcard queued successfully",
       };
     } catch (error) {
-      console.error("PostGrid send postcard error:", error);
+      let errorMessage = "Unknown error occurred";
+      if (axios.isAxiosError(error)) {
+        const responseData = error.response?.data;
+        errorMessage = responseData?.error?.message 
+          || responseData?.message 
+          || JSON.stringify(responseData?.error) 
+          || error.message;
+        console.error("PostGrid send postcard error:", JSON.stringify(responseData, null, 2));
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error("PostGrid send postcard error:", error);
+      }
       return {
         success: false,
-        error: error instanceof Error 
-          ? error.message
-          : axios.isAxiosError(error)
-            ? error.response?.data?.error?.message || error.message
-            : "Unknown error occurred",
+        error: errorMessage,
       };
     }
   }
