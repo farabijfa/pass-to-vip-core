@@ -44,6 +44,29 @@ interface EnrollMemberResult {
   error?: string;
 }
 
+interface IssueEventTicketData {
+  productionId: string;
+  ticketTypeId: string;
+  eventId?: string;
+  ticketNumber?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  seat?: {
+    section?: string;
+    row?: string;
+    seat?: string;
+  };
+}
+
+interface IssueEventTicketResult {
+  success: boolean;
+  ticket_id?: string;
+  ticket_number?: string;
+  install_url?: string;
+  error?: string;
+}
+
 class PassKitService {
   private initialized = false;
 
@@ -256,7 +279,8 @@ class PassKitService {
           break;
 
         case 'EVENT_TICKET':
-          url = `${PASSKIT_BASE_URL}/flights/boardingPass/${passkit_internal_id}/redeem`;
+          // Event Tickets use a different API structure
+          url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${passkit_internal_id}/redeem`;
           await axios.put(url, payload, authConfig);
           break;
 
@@ -349,6 +373,168 @@ class PassKitService {
       
       if (axios.isAxiosError(error)) {
         console.error('❌ PassKit Enrollment Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async issueEventTicket(ticketData: IssueEventTicketData): Promise<IssueEventTicketResult> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode for ticket issuance.');
+      return {
+        success: true,
+        ticket_id: `MOCK-TICKET-${Date.now()}`,
+        ticket_number: ticketData.ticketNumber || `TKT-${Date.now()}`,
+        install_url: `https://mock.passkit.io/ticket/${ticketData.ticketNumber}`,
+      };
+    }
+
+    console.log(`🎟️ Issuing event ticket for production: ${ticketData.productionId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket`;
+      
+      const payload: Record<string, unknown> = {
+        ticketType: {
+          id: ticketData.ticketTypeId,
+        },
+        ticketNumber: ticketData.ticketNumber || `TKT-${Date.now()}`,
+      };
+
+      if (ticketData.eventId) {
+        payload.event = { id: ticketData.eventId };
+      } else {
+        payload.event = { 
+          productionId: ticketData.productionId,
+          startDate: new Date().toISOString(),
+        };
+      }
+
+      if (ticketData.email || ticketData.firstName || ticketData.lastName) {
+        payload.person = {
+          emailAddress: ticketData.email,
+          forename: ticketData.firstName,
+          surname: ticketData.lastName,
+        };
+      }
+
+      if (ticketData.seat) {
+        payload.seat = ticketData.seat;
+      }
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.post(url, payload, authConfig);
+
+      console.log(`✅ Event ticket issued successfully: ${response.data?.id}`);
+
+      return {
+        success: true,
+        ticket_id: response.data?.id,
+        ticket_number: response.data?.ticketNumber || ticketData.ticketNumber,
+        install_url: response.data?.passUrl || response.data?.url,
+      };
+    } catch (error) {
+      let errorMessage = 'PassKit Event Ticket Issuance Failed';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit Event Ticket Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async redeemEventTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode for ticket redemption.');
+      return { success: true };
+    }
+
+    console.log(`🎫 Redeeming event ticket: ${ticketId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${ticketId}/redeem`;
+      
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      await axios.put(url, {}, authConfig);
+
+      console.log(`✅ Event ticket redeemed successfully: ${ticketId}`);
+      return { success: true };
+    } catch (error) {
+      let errorMessage = 'PassKit Ticket Redemption Failed';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit Ticket Redemption Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async validateEventTicket(ticketId: string): Promise<{ success: boolean; valid?: boolean; error?: string }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode for ticket validation.');
+      return { success: true, valid: true };
+    }
+
+    console.log(`🔍 Validating event ticket: ${ticketId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/eventTickets/ticket/${ticketId}/validate`;
+      
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.put(url, {}, authConfig);
+
+      console.log(`✅ Event ticket validated: ${ticketId}`);
+      return { success: true, valid: response.data?.valid ?? true };
+    } catch (error) {
+      let errorMessage = 'PassKit Ticket Validation Failed';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit Ticket Validation Error:', {
           status: error.response?.status,
           data: error.response?.data,
         });

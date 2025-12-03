@@ -318,6 +318,86 @@ export class PassKitController {
     }
   }
 
+  async issueEventTicket(req: Request, res: Response, next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+    const startTime = Date.now();
+
+    try {
+      const { productionId, ticketTypeId, eventId, ticketNumber, email, firstName, lastName, seat } = req.body;
+
+      if (!ticketTypeId) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "INVALID_REQUEST",
+              message: "ticketTypeId is required (PassKit Ticket Type ID from your event)",
+            },
+            requestId
+          )
+        );
+      }
+
+      console.log(`[Ticket] Issuing event ticket for ticketType: ${ticketTypeId}`);
+
+      const result = await passKitService.issueEventTicket({
+        productionId: productionId || '',
+        ticketTypeId,
+        eventId,
+        ticketNumber,
+        email,
+        firstName,
+        lastName,
+        seat,
+      });
+
+      if (!result.success) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "TICKET_ISSUANCE_FAILED",
+              message: result.error || "Failed to issue event ticket",
+            },
+            requestId
+          )
+        );
+      }
+
+      const response = createResponse(
+        true,
+        {
+          ticket_id: result.ticket_id,
+          ticket_number: result.ticket_number,
+          install_url: result.install_url,
+          ticketTypeId,
+          issuedAt: new Date().toISOString(),
+        },
+        undefined,
+        requestId
+      );
+
+      response.metadata!.processingTime = Date.now() - startTime;
+
+      return res.status(201).json(response);
+    } catch (error) {
+      console.error("Issue event ticket error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: "An unexpected error occurred while issuing the ticket",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
   async enrollMember(req: Request, res: Response, next: NextFunction) {
     const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();

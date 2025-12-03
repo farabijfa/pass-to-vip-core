@@ -45,4 +45,9 @@ router.post(
   asyncHandler(passKitController.enrollMember.bind(passKitController))
 );
 
+router.post(
+  "/tickets",
+  asyncHandler(passKitController.issueEventTicket.bind(passKitController))
+);
+
 export default router;
