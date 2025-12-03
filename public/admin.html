@@ -35,6 +35,10 @@
     .form-control::placeholder {
       color: rgba(255, 255, 255, 0.5);
     }
+    .form-select option {
+      background: #1a1a2e;
+      color: #fff;
+    }
     .drop-zone {
       border: 2px dashed rgba(255, 255, 255, 0.3);
       border-radius: 10px;
@@ -61,6 +65,33 @@
       width: 1rem;
       height: 1rem;
     }
+    .resource-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .resource-option {
+      flex: 1;
+      padding: 15px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .resource-option:hover {
+      border-color: #0d6efd;
+      background: rgba(13, 110, 253, 0.1);
+    }
+    .resource-option.selected {
+      border-color: #0d6efd;
+      background: rgba(13, 110, 253, 0.2);
+    }
+    .resource-option i {
+      font-size: 2rem;
+      display: block;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -71,7 +102,7 @@
           <h1 class="display-5 fw-bold">
             <i class="bi bi-envelope-paper me-2"></i>Campaign Manager
           </h1>
-          <p class="text-muted">Upload a CSV to send personalized postcards with unique claim codes</p>
+          <p class="text-muted">Upload a CSV to send personalized mail with unique claim codes</p>
         </div>
 
         <div class="card shadow-lg mb-4">
@@ -80,6 +111,20 @@
           </div>
           <div class="card-body">
             <form id="campaignForm">
+              <div class="resource-selector">
+                <div class="resource-option selected" data-type="postcard" id="postcardOption">
+                  <i class="bi bi-postcard"></i>
+                  <strong>Postcard</strong>
+                  <div class="text-muted small">Front & back templates</div>
+                </div>
+                <div class="resource-option" data-type="letter" id="letterOption">
+                  <i class="bi bi-envelope-open"></i>
+                  <strong>Letter</strong>
+                  <div class="text-muted small">Single template</div>
+                </div>
+              </div>
+              <input type="hidden" id="resourceType" value="postcard">
+
               <div class="row g-3 mb-4">
                 <div class="col-12">
                   <label class="form-label">PassKit Program ID</label>
@@ -88,19 +133,35 @@
                          value="4RhsVhHek0dliVogVznjSQ">
                   <div class="form-text text-muted">The membership program for claim code enrollment</div>
                 </div>
-                <div class="col-md-6">
-                  <label class="form-label">Front Template ID</label>
-                  <input type="text" class="form-control" id="frontTemplateId" 
-                         placeholder="template_xxx" required
-                         value="template_wUMgpJdU5Hi7tPxXNTgLwj">
+                
+                <div id="postcardTemplates">
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label">Front Template ID</label>
+                      <input type="text" class="form-control" id="frontTemplateId" 
+                             placeholder="template_xxx" required
+                             value="template_wUMgpJdU5Hi7tPxXNTgLwj">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Back Template ID</label>
+                      <input type="text" class="form-control" id="backTemplateId" 
+                             placeholder="template_xxx" required
+                             value="template_rBEJn1PtQepWxnKFb4RezV">
+                    </div>
+                  </div>
                 </div>
-                <div class="col-md-6">
-                  <label class="form-label">Back Template ID</label>
-                  <input type="text" class="form-control" id="backTemplateId" 
-                         placeholder="template_xxx" required
-                         value="template_rBEJn1PtQepWxnKFb4RezV">
+
+                <div id="letterTemplates" class="d-none">
+                  <div class="col-12">
+                    <label class="form-label">Letter Template ID</label>
+                    <input type="text" class="form-control" id="letterTemplateId" 
+                           placeholder="template_xxx"
+                           value="">
+                    <div class="form-text text-muted">PostGrid letter template with merge variables</div>
+                  </div>
                 </div>
-                <div class="col-md-6">
+
+                <div id="postcardSize" class="col-md-6">
                   <label class="form-label">Postcard Size</label>
                   <select class="form-select" id="size">
                     <option value="6x4">6x4 - Standard</option>
@@ -108,6 +169,7 @@
                     <option value="11x6">11x6 - Oversized</option>
                   </select>
                 </div>
+
                 <div class="col-md-6">
                   <label class="form-label">Base Claim URL</label>
                   <input type="text" class="form-control" id="baseClaimUrl" 
@@ -152,6 +214,7 @@
                   <tr>
                     <th>Contact</th>
                     <th>Claim Code</th>
+                    <th>Mail ID</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -174,6 +237,39 @@
     const resultsCard = document.getElementById('resultsCard');
     const resultsBody = document.getElementById('resultsBody');
     const resultsSummary = document.getElementById('resultsSummary');
+    const postcardOption = document.getElementById('postcardOption');
+    const letterOption = document.getElementById('letterOption');
+    const resourceTypeInput = document.getElementById('resourceType');
+    const postcardTemplates = document.getElementById('postcardTemplates');
+    const letterTemplates = document.getElementById('letterTemplates');
+    const postcardSize = document.getElementById('postcardSize');
+
+    postcardOption.addEventListener('click', () => selectResourceType('postcard'));
+    letterOption.addEventListener('click', () => selectResourceType('letter'));
+
+    function selectResourceType(type) {
+      resourceTypeInput.value = type;
+      
+      if (type === 'postcard') {
+        postcardOption.classList.add('selected');
+        letterOption.classList.remove('selected');
+        postcardTemplates.classList.remove('d-none');
+        letterTemplates.classList.add('d-none');
+        postcardSize.classList.remove('d-none');
+        document.getElementById('frontTemplateId').required = true;
+        document.getElementById('backTemplateId').required = true;
+        document.getElementById('letterTemplateId').required = false;
+      } else {
+        letterOption.classList.add('selected');
+        postcardOption.classList.remove('selected');
+        postcardTemplates.classList.add('d-none');
+        letterTemplates.classList.remove('d-none');
+        postcardSize.classList.add('d-none');
+        document.getElementById('frontTemplateId').required = false;
+        document.getElementById('backTemplateId').required = false;
+        document.getElementById('letterTemplateId').required = true;
+      }
+    }
 
     dropZone.addEventListener('click', () => csvFile.click());
     
@@ -216,12 +312,19 @@
         return;
       }
 
+      const resourceType = resourceTypeInput.value;
       const formData = new FormData();
       formData.append('file', csvFile.files[0]);
       formData.append('program_id', document.getElementById('programId').value);
-      formData.append('front_template_id', document.getElementById('frontTemplateId').value);
-      formData.append('back_template_id', document.getElementById('backTemplateId').value);
-      formData.append('size', document.getElementById('size').value);
+      formData.append('resource_type', resourceType);
+      
+      if (resourceType === 'postcard') {
+        formData.append('front_template_id', document.getElementById('frontTemplateId').value);
+        formData.append('back_template_id', document.getElementById('backTemplateId').value);
+        formData.append('size', document.getElementById('size').value);
+      } else {
+        formData.append('template_id', document.getElementById('letterTemplateId').value);
+      }
       
       const baseUrl = document.getElementById('baseClaimUrl').value;
       if (baseUrl) {
@@ -229,7 +332,8 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="spinner-border me-2"></span>Processing...';
+      const typeLabel = resourceType === 'letter' ? 'letters' : 'postcards';
+      submitBtn.innerHTML = `<span class="spinner-border me-2"></span>Sending ${typeLabel}...`;
       resultsCard.classList.add('d-none');
 
       try {
@@ -255,12 +359,15 @@
 
     function displayResults(data) {
       resultsCard.classList.remove('d-none');
-      resultsSummary.textContent = `${data.summary.success}/${data.summary.total} Successful`;
+      const resourceType = data.summary.resourceType || 'postcard';
+      const typeLabel = resourceType === 'letter' ? 'Letters' : 'Postcards';
+      resultsSummary.textContent = `${data.summary.success}/${data.summary.total} ${typeLabel} Sent`;
       
       resultsBody.innerHTML = data.results.map(r => `
         <tr>
           <td>${r.contact}</td>
           <td><code>${r.claimCode || '-'}</code></td>
+          <td><code class="text-muted">${r.mailId || r.postcardId || '-'}</code></td>
           <td>
             ${r.success 
               ? '<span class="badge badge-success">Sent</span>' 
