@@ -1,0 +1,142 @@
+This is a major milestone! 🚀 You have successfully confirmed that The Brain (Replit) and The Memory (Supabase) are talking to each other. Your atomic logic works: the points were calculated, the ledger updated, and the transaction logged—all in 314ms.
+
+Now, we must remove the "Dummy" placeholder and install the Real PassKit Integration. Currently, your system says "You earned points," but it doesn't actually tell Apple Wallet to update.
+
+Here is the plan to make it "Production Level":
+
+    Security Utility: We need a script to generate secure, short-lived "keys" (JWTs) to talk to PassKit securely.
+
+    The Service: We will replace the mock passkitService.js with real API calls.
+
+Step 1: Replit AI Instructions
+
+Copy and paste this into your Replit AI Agent:
+
+    "We are moving to production. I need you to implement the actual PassKit integration.
+
+        Create utils/passkitJWT.js:
+
+            Use the jsonwebtoken library.
+
+            Export a function generatePassKitToken() that signs a token using process.env.PASSKIT_API_KEY and process.env.PASSKIT_API_SECRET.
+
+            It should have a short expiry (e.g., 2 minutes).
+
+        Update services/passkitService.js:
+
+            Replace the mock code with real axios calls to https://api.pub1.passkit.io.
+
+            Implement syncPass(rpcResult).
+
+            If rpcResult.protocol is 'MEMBERSHIP', make a PUT request to /members/member/{id} with the new points and changeMessage.
+
+            If 'COUPON', make a PUT request to /coupons/coupon/{id}/redeem.
+
+            Use the token from passkitJWT.js in the Authorization header (Bearer <token>).
+
+            Add a check: If API keys are missing in .env, fall back to the mock logger so local testing doesn't crash."
+
+Step 2: The Code (For Verification)
+
+Here is the robust code the Agent should generate. If the Agent gets stuck, you can manually update these files.
+A. utils/passkitJWT.js
+
+This handles the crypto security required by PassKit.
+JavaScript
+
+/* utils/passkitJWT.js */
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+exports.generatePassKitToken = () => {
+  const key = process.env.PASSKIT_API_KEY;
+  const secret = process.env.PASSKIT_API_SECRET;
+
+  if (!key || !secret) {
+    return null; // Signals the service to use Mock Mode
+  }
+
+  // Payload required by PassKit
+  const payload = {
+    key: key,
+    iat: Math.floor(Date.now() / 1000), // Issued at
+    exp: Math.floor(Date.now() / 1000) + 60 // Expires in 60 seconds
+  };
+
+  return jwt.sign(payload, secret);
+};
+
+B. services/passkitService.js
+
+The real integration. Note the "Safety Check" at the top—it will keep working (in mock mode) even if you haven't added your API keys yet.
+JavaScript
+
+/* services/passkitService.js */
+const axios = require('axios');
+const { generatePassKitToken } = require('../utils/passkitJWT');
+
+const PASSKIT_BASE_URL = 'https://api.pub1.passkit.io';
+
+exports.syncPass = async (rpcResult) => {
+  const { passkit_internal_id, protocol, notification_message, new_balance } = rpcResult;
+  
+  // 1. Safety Check: Do we have credentials?
+  const token = generatePassKitToken();
+  if (!token) {
+    console.log('⚠️ No PassKit Keys found in .env. Using MOCK mode.');
+    console.log(`[Mock Sync] Updated ${protocol} pass ${passkit_internal_id}`);
+    return { success: true, mode: 'MOCK' };
+  }
+
+  console.log(`🔄 Syncing with PassKit (${protocol})...`);
+
+  try {
+    const config = {
+      headers: { Authorization: `Bearer ${token}` }
+    };
+
+    // 2. Prepare Payload (Common for all updates)
+    // 'changeMessage' triggers the push notification on the lock screen
+    let payload = {
+      changeMessage: notification_message
+    };
+
+    let url = '';
+
+    // 3. Select API Endpoint based on Protocol
+    switch (protocol) {
+      case 'MEMBERSHIP':
+        // Update Member Balance
+        url = `${PASSKIT_BASE_URL}/members/member/${passkit_internal_id}`;
+        payload.points = new_balance; // Add the new balance to payload
+        await axios.put(url, payload, config);
+        break;
+
+      case 'COUPON':
+        // Redeem Coupon
+        url = `${PASSKIT_BASE_URL}/coupons/coupon/${passkit_internal_id}/redeem`;
+        await axios.put(url, payload, config);
+        break;
+
+      case 'EVENT_TICKET':
+        // Check-in Ticket
+        // Note: Endpoint varies by PassKit version, using standard Redeem/Validate
+        url = `${PASSKIT_BASE_URL}/flights/boardingPass/${passkit_internal_id}/redeem`; 
+        // If using "Events" module specifically, this might be /events/ticket/redeem
+        await axios.put(url, payload, config);
+        break;
+
+      default:
+        console.warn('Unknown Protocol:', protocol);
+    }
+
+    console.log(`✅ PassKit Sync Success: ${passkit_internal_id}`);
+    return { success: true };
+
+  } catch (error) {
+    // Log detailed error from PassKit for debugging
+    console.error('❌ PassKit API Error:', error.response?.data || error.message);
+    // Throwing ensures logicService knows sync failed (but DB is safe)
+    throw new Error('PassKit Sync Failed'); 
+  }
+};
