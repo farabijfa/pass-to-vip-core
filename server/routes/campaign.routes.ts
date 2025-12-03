@@ -1,10 +1,13 @@
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import path from "path";
 import { campaignController } from "../controllers/campaign.controller";
 import { basicAuth } from "../middleware/auth.middleware";
 
 const router = Router();
+
+const VALID_POSTCARD_SIZES = ["6x4", "9x6", "11x6"] as const;
+type PostcardSize = typeof VALID_POSTCARD_SIZES[number];
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -39,10 +42,47 @@ const upload = multer({
   },
 });
 
+const validateCampaignOptions = (req: Request, res: Response, next: NextFunction) => {
+  const { resource_type, size } = req.body;
+
+  const resourceType = resource_type || "postcard";
+  
+  if (resourceType !== "postcard" && resourceType !== "letter") {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: "INVALID_RESOURCE_TYPE",
+        message: "resource_type must be either 'postcard' or 'letter'",
+      },
+    });
+  }
+
+  if (resourceType === "postcard") {
+    const postcardSize = size || "6x4";
+    
+    if (!VALID_POSTCARD_SIZES.includes(postcardSize as PostcardSize)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "INVALID_POSTCARD_SIZE",
+          message: `size must be one of: ${VALID_POSTCARD_SIZES.join(", ")}`,
+        },
+      });
+    }
+
+    req.body.size = postcardSize;
+  }
+
+  req.body.resource_type = resourceType;
+
+  next();
+};
+
 router.post(
   "/upload-csv",
   basicAuth,
   upload.single("file"),
+  validateCampaignOptions,
   campaignController.uploadCsv.bind(campaignController)
 );
 
