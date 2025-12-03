@@ -1,8 +1,8 @@
 import axios, { AxiosInstance } from "axios";
 import { config, isPostGridConfigured } from "../config";
-import type { PostGridMail, PostGridMailResponse, PostGridPostcard, PostGridPostcardResponse } from "@shared/schema";
+import type { PostGridMail, PostGridMailResponse, PostGridPostcard, PostGridPostcardResponse, PostGridLetter, PostGridLetterResponse } from "@shared/schema";
 
-interface PostGridLetterResponse {
+interface PostGridLetterApiResponse {
   id: string;
   status: string;
   estimatedDeliveryDate?: string;
@@ -81,7 +81,7 @@ class PostGridService {
         sendDate: mailData.sendDate,
       };
 
-      const response = await client.post<PostGridLetterResponse>("/letters", payload);
+      const response = await client.post<PostGridLetterApiResponse>("/letters", payload);
 
       return {
         success: true,
@@ -185,10 +185,91 @@ class PostGridService {
     }
   }
 
+  async sendLetter(letterData: PostGridLetter): Promise<PostGridLetterResponse> {
+    try {
+      const client = this.getClient();
+
+      const recipientName = letterData.recipientAddress.lastName 
+        ? `${letterData.recipientAddress.firstName} ${letterData.recipientAddress.lastName}`
+        : letterData.recipientAddress.firstName;
+
+      const payload: Record<string, any> = {
+        template: letterData.templateId,
+        to: {
+          firstName: letterData.recipientAddress.firstName,
+          lastName: letterData.recipientAddress.lastName || '',
+          addressLine1: letterData.recipientAddress.addressLine1,
+          addressLine2: letterData.recipientAddress.addressLine2,
+          city: letterData.recipientAddress.city,
+          provinceOrState: letterData.recipientAddress.state,
+          postalOrZip: letterData.recipientAddress.postalCode,
+          country: letterData.recipientAddress.country,
+        },
+        from: letterData.senderAddress || {
+          companyName: "Pass2VIP Loyalty Program",
+          addressLine1: "123 Main Street",
+          city: "San Francisco",
+          provinceOrState: "CA",
+          postalOrZip: "94102",
+          country: "US",
+        },
+        mergeVariables: {
+          firstName: letterData.recipientAddress.firstName,
+          lastName: letterData.recipientAddress.lastName || '',
+          fullName: recipientName,
+          qrCodeUrl: letterData.claimUrl || '',
+          claimCode: letterData.claimCode,
+          ...letterData.mergeVariables,
+        },
+        addressPlacement: letterData.addressPlacement || 'top_first_page',
+        doubleSided: letterData.doubleSided !== false,
+        color: letterData.color !== false,
+        sendDate: letterData.sendDate,
+      };
+
+      if (letterData.description) {
+        payload.description = letterData.description;
+      }
+
+      console.log(`📮 Sending letter to ${recipientName} with claim code: ${letterData.claimCode}`);
+
+      const response = await client.post<PostGridLetterApiResponse>("/letters", payload);
+
+      console.log(`✅ Letter queued: ${response.data.id}`);
+
+      return {
+        success: true,
+        letterId: response.data.id,
+        status: response.data.status,
+        estimatedDeliveryDate: response.data.estimatedDeliveryDate,
+        claimCode: letterData.claimCode,
+        claimUrl: letterData.claimUrl,
+        message: "Letter queued successfully",
+      };
+    } catch (error) {
+      let errorMessage = "Unknown error occurred";
+      if (axios.isAxiosError(error)) {
+        const responseData = error.response?.data;
+        errorMessage = responseData?.error?.message 
+          || responseData?.message 
+          || JSON.stringify(responseData?.error) 
+          || error.message;
+        console.error("PostGrid send letter error:", JSON.stringify(responseData, null, 2));
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error("PostGrid send letter error:", error);
+      }
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
   async getMailStatus(mailId: string): Promise<PostGridMailResponse> {
     try {
       const client = this.getClient();
-      const response = await client.get<PostGridLetterResponse>(`/letters/${mailId}`);
+      const response = await client.get<PostGridLetterApiResponse>(`/letters/${mailId}`);
 
       return {
         success: true,

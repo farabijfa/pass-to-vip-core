@@ -165,6 +165,54 @@ export const postGridPostcardResponseSchema = z.object({
 
 export type PostGridPostcardResponse = z.infer<typeof postGridPostcardResponseSchema>;
 
+export const postGridLetterSchema = z.object({
+  templateId: z.string().min(1, "Template ID is required"),
+  recipientAddress: z.object({
+    firstName: z.string(),
+    lastName: z.string().optional(),
+    addressLine1: z.string(),
+    addressLine2: z.string().optional(),
+    city: z.string(),
+    state: z.string(),
+    postalCode: z.string(),
+    country: z.string().default("US"),
+  }),
+  senderAddress: z.object({
+    companyName: z.string().optional(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    addressLine1: z.string(),
+    addressLine2: z.string().optional(),
+    city: z.string(),
+    provinceOrState: z.string(),
+    postalOrZip: z.string(),
+    country: z.string().default("US"),
+  }).optional(),
+  claimCode: z.string().min(1, "Claim code is required"),
+  claimUrl: z.string().url().optional(),
+  mergeVariables: z.record(z.string()).optional(),
+  sendDate: z.string().optional(),
+  addressPlacement: z.enum(["top_first_page", "insert_blank_page"]).default("top_first_page"),
+  doubleSided: z.boolean().default(true),
+  color: z.boolean().default(true),
+  description: z.string().optional(),
+});
+
+export type PostGridLetter = z.infer<typeof postGridLetterSchema>;
+
+export const postGridLetterResponseSchema = z.object({
+  success: z.boolean(),
+  letterId: z.string().optional(),
+  status: z.string().optional(),
+  estimatedDeliveryDate: z.string().optional(),
+  claimCode: z.string().optional(),
+  claimUrl: z.string().optional(),
+  message: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export type PostGridLetterResponse = z.infer<typeof postGridLetterResponseSchema>;
+
 export const batchCampaignContactSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().optional(),
