@@ -1,0 +1,99 @@
+app.js (The Robust Entry Point)
+
+Create a file named app.js. Why this is "Production Level":
+
+    Security: Uses helmet to set HTTP headers (protects against basic attacks) and cors to allow Softr to talk to it.
+
+    Resilience: Has a global error handler so the server doesn't crash if a request fails.
+
+    Health Check: Includes a /health endpoint so you can monitor if Replit is sleeping or awake.
+
+JavaScript
+
+/* app.js - Main API Entry Point 
+  Initializes the Express server, middleware, and routes.
+*/
+
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+
+// Initialize Express App
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ==================================================================
+// 1. MIDDLEWARE (Security & Parsing)
+// ==================================================================
+
+// Security Headers
+app.use(helmet());
+
+// CORS Config (Allow Softr and Localhost)
+// Replace '*' with your specific Softr domain in production for better security
+app.use(cors({
+  origin: '*', 
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Request Logging (Good for debugging Replit logs)
+app.use(morgan('combined'));
+
+// JSON Parser (Critical for receiving Webhooks from Softr)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ==================================================================
+// 2. ROUTES
+// ==================================================================
+
+// Health Check (Keep-Alive Endpoint)
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'UP', 
+    timestamp: new Date().toISOString(),
+    service: 'Phygital Loyalty Brain'
+  });
+});
+
+// Import API Routes (We will create this next)
+[cite_start]// [cite: 70] routes/api.js will handle the POS logic
+const apiRoutes = require('./routes/api'); 
+app.use('/api', apiRoutes);
+
+// Root Route
+app.get('/', (req, res) => {
+  res.send('Phygital Loyalty Orchestrator is Running.');
+});
+
+// ==================================================================
+// 3. GLOBAL ERROR HANDLING
+// ==================================================================
+
+// 404 Handler
+app.use((req, res, next) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Global Error Catcher
+app.use((err, req, res, next) => {
+  console.error('🔥 Critical Error:', err.stack);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+    // Only show stack trace in development
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// ==================================================================
+// 4. SERVER START
+// ==================================================================
+
+app.listen(PORT, () => {
+  console.log(`\n🚀 Server is running on port ${PORT}`);
+  console.log(`👉 Health check: http://localhost:${PORT}/health`);
+});
