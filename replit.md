@@ -1,88 +1,61 @@
 # Phygital Loyalty Ecosystem - Backend API
 
 ## Overview
+This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem. It integrates digital wallets with physical rewards processing to create a seamless experience between physical interactions and digital loyalty programs. Key capabilities include membership point management, one-time offer redemptions, digital pass creation and updates, and a "Physical Bridge" to convert physical mail recipients into digital wallet users.
 
-A Node.js/Express backend API system for a 'Phygital' Loyalty Ecosystem that integrates digital wallets with physical rewards processing. Built with a strict Service/Controller architecture pattern using Supabase PostgreSQL for data persistence.
+## System Architecture
 
-## Project Architecture
+### Core Design
+- **Controllers:** Handle incoming requests and delegate to services
+- **Services:** Business logic and external system integration (Supabase, PassKit, PostGrid)
+- **Logic Service:** Main orchestrator for POS actions, routing to Supabase RPC and PassKit sync
 
-```
-server/
-├── config/           # Environment configuration
-│   ├── index.ts      # Centralized config for Supabase, PassKit, PostGrid
-│   └── supabase.ts   # Supabase client initialization
-├── utils/            # Utility functions
-│   └── passkitJWT.ts # JWT token generation for PassKit API auth
-├── services/         # Business logic adapters
-│   ├── supabase.service.ts   # Supabase RPC calls for transactions
-│   ├── passkit.service.ts    # Digital wallet management + syncPass (production ready)
-│   ├── postgrid.service.ts   # Direct mail services
-│   ├── logic.service.ts      # Main orchestrator (The Brain)
-│   └── index.ts
-├── controllers/      # Request handlers
-│   ├── loyalty.controller.ts  # Membership & one-time use processing
-│   ├── passkit.controller.ts  # Wallet pass operations
-│   ├── postgrid.controller.ts # Mail campaign operations
-│   ├── health.controller.ts   # Health check endpoints
-│   └── index.ts
-├── routes/           # API endpoint definitions
-│   ├── pos.routes.ts         # POS action endpoint (Softr integration)
-│   ├── loyalty.routes.ts
-│   ├── passkit.routes.ts
-│   ├── postgrid.routes.ts
-│   ├── health.routes.ts
-│   └── index.ts
-├── middleware/       # Express middleware
-│   ├── validation.middleware.ts  # Request validation
-│   ├── error.middleware.ts       # Error handling
-│   ├── requestId.middleware.ts   # Request tracking
-│   └── index.ts
-├── routes.ts         # Main route registration
-├── index.ts          # Express server entry point
-└── storage.ts        # Storage interface (if needed)
-```
+### Data Flow
+1. Request → Controller → logic.service.ts
+2. Logic Service → Supabase RPC (stored procedure)
+3. Supabase executes transaction
+4. Logic Service → passkit.service.ts (wallet sync if needed)
 
 ## API Endpoints
 
 ### POS Actions (Softr Integration)
-- `POST /api/pos/action` - Process POS action (all action types below)
-- `GET /api/pos/actions` - List available action types and Supabase RPC field requirements
+- `POST /api/pos/action` - Process POS action
+- `GET /api/pos/actions` - List available action types
 
 ### Loyalty Operations
-- `POST /api/loyalty/membership` - Process membership transaction (earn/redeem/adjust/expire points)
-- `POST /api/loyalty/one-time-use` - Process one-time offer redemption
-- `GET /api/loyalty/members/:memberId/balance` - Get member points balance
+- `POST /api/loyalty/membership` - Process membership transaction
+- `POST /api/loyalty/one-time-use` - Process one-time offer
+- `GET /api/loyalty/members/:memberId/balance` - Get points balance
 - `GET /api/loyalty/members/:memberId/transactions` - Get transaction history
 
 ### Digital Wallet (PassKit)
-- `POST /api/wallet/passes` - Create new digital wallet pass
-- `GET /api/wallet/passes/:serialNumber` - Get pass details
+- `POST /api/wallet/enroll` - Enroll new member
+- `POST /api/wallet/coupons` - Issue single-use coupon
+- `POST /api/wallet/passes` - Create pass
 - `PATCH /api/wallet/passes/:serialNumber` - Update pass
 - `DELETE /api/wallet/passes/:serialNumber` - Delete pass
 - `POST /api/wallet/passes/:serialNumber/push` - Send push notification
-- `POST /api/wallet/enroll` - **LIVE** Enroll new member (creates pass in wallet)
-- `POST /api/wallet/coupons` - **LIVE** Issue single-use coupon
-- `POST /api/wallet/tickets` - **PLACEHOLDER** Issue event ticket (requires Venue + Event setup)
 
 ### Direct Mail (PostGrid)
-- `POST /api/mail/mail` - Send direct mail piece
+- `POST /api/mail/mail` - Send direct mail
 - `GET /api/mail/mail/:mailId` - Get mail status
-- `DELETE /api/mail/mail/:mailId` - Cancel pending mail
-- `GET /api/mail/templates` - List available templates
+- `DELETE /api/mail/mail/:mailId` - Cancel mail
+- `GET /api/mail/templates` - List templates
+- `POST /api/mail/campaign` - Send batch campaign (postcards)
+
+### Physical Bridge (Claim Route)
+- `GET /claim/:id` - Process claim code and redirect to PassKit
+- `GET /claim/:id/status` - Check claim code status
 
 ### Health Checks
-- `GET /api/health` - Full health check with service statuses
-- `GET /api/health/ready` - Readiness probe for deployments
-- `GET /api/health/live` - Liveness probe for deployments
+- `GET /api/health` - Full health check
+- `GET /api/health/ready` - Readiness probe
+- `GET /api/health/live` - Liveness probe
 
-## POS Action Endpoint
-
-The main endpoint for Softr button integration:
+## POS Actions
 
 ```bash
 POST /api/pos/action
-Content-Type: application/json
-
 {
   "external_id": "QR_CODE_OR_PIN",
   "action": "MEMBER_EARN",
@@ -90,236 +63,136 @@ Content-Type: application/json
 }
 ```
 
-### Supported Actions
+### Action Types
+- `MEMBER_EARN` / `MEMBER_REDEEM` / `MEMBER_ADJUST` - Membership points
+- `COUPON_ISSUE` / `COUPON_REDEEM` - Coupon operations
+- `TICKET_CHECKIN` - Event tickets (placeholder)
+- `INSTALL` / `UNINSTALL` - Pass lifecycle
 
-**Membership Actions** (require `amount`):
-- `MEMBER_EARN` - Add points to member balance
-- `MEMBER_REDEEM` - Deduct points from member balance
-- `MEMBER_ADJUST` - Adjust points (positive or negative)
+### Supabase RPC Return Fields
 
-**Coupon Actions**:
-- `COUPON_ISSUE` - Issue a new coupon (creates pass in PassKit)
-- `COUPON_REDEEM` - Redeem an existing coupon
-
-**One-Time Actions**:
-- `TICKET_CHECKIN` - Check in a ticket (placeholder)
-- `INSTALL` - Record pass installation
-- `UNINSTALL` - Record pass removal
-
-### Supabase RPC Return Field Requirements
-
-Your Supabase stored procedures must return these fields for PassKit sync to work:
-
-**For MEMBERSHIP actions** (`process_membership_transaction`):
+**MEMBERSHIP actions:**
 ```json
 {
-  "passkit_internal_id": "member_external_id",
+  "passkit_internal_id": "member_id",
   "passkit_program_id": "4RhsVhHek0dliVogVznjSQ",
-  "new_balance": 1100,
-  "notification_message": "You earned 100 points!",
-  "member_name": "John Doe",
-  "tier_level": "gold"
+  "new_balance": 1100
 }
 ```
 
-**For COUPON_ISSUE action** (`process_one_time_use`):
+**COUPON_ISSUE action:**
 ```json
 {
-  "passkit_campaign_id": "YOUR_PASSKIT_CAMPAIGN_ID",
-  "passkit_offer_id": "YOUR_PASSKIT_OFFER_ID",
-  "passkit_internal_id": "coupon_external_id",
-  "email": "customer@example.com",
-  "first_name": "John",
-  "last_name": "Doe"
+  "passkit_campaign_id": "YOUR_CAMPAIGN_ID",
+  "passkit_offer_id": "YOUR_OFFER_ID"
 }
 ```
 
-**For COUPON_REDEEM action** (`process_one_time_use`):
-```json
+## Physical Bridge
+
+Closes the Phygital loop: Physical Mail → QR Scan → Digital Wallet
+
+### Flow
+1. **Batch Campaign** → Generate claim codes in Supabase → Send postcards via PostGrid
+2. **User Scans QR** → Hits `/claim/{code}` → Lookup in Supabase → Redirect to PassKit
+3. **Pass Installed** → User is now a digital loyalty member
+
+### Batch Campaign
+
+```bash
+POST /api/mail/campaign
 {
-  "passkit_internal_id": "coupon_id_to_redeem",
-  "notification_message": "Coupon redeemed!"
+  "templateId": "template_xxx",
+  "programId": "4RhsVhHek0dliVogVznjSQ",
+  "contacts": [
+    {
+      "firstName": "John",
+      "lastName": "Doe",
+      "addressLine1": "123 Main St",
+      "city": "San Francisco",
+      "state": "CA",
+      "postalCode": "94102"
+    }
+  ]
 }
 ```
 
-### Response Format
+### Claim Route Flow
+1. Looks up claim code (`lookup_claim_code` RPC)
+2. Validates status is `ISSUED`
+3. Enrolls user in PassKit (`enrollMember`)
+4. Updates status to `INSTALLED`
+5. Redirects to PassKit install URL
 
-```json
-{
-  "success": true,
-  "message": "Points earned successfully",
-  "data": {
-    "transaction_id": "txn_123",
-    "new_balance": 1100,
-    "previous_balance": 1000,
-    "notification_message": "You earned 100 points!"
-  },
-  "metadata": {
-    "requestId": "abc123",
-    "timestamp": "2025-12-03T16:30:00.000Z",
-    "processingTime": 45
-  }
-}
-```
-
-## Logic Service (The Brain)
-
-The `logic.service.ts` orchestrates all POS actions:
-
-1. **Intelligent Routing**: Routes to correct Supabase RPC based on action type
-2. **Atomic Execution**: Calls Supabase stored procedures
-3. **PassKit Sync**: Updates digital wallet after successful transactions
-
-## Environment Variables
-
-### Required for Full Functionality
-```
-SUPABASE_URL=           # Supabase project URL
-SUPABASE_ANON_KEY=      # Supabase anonymous key
-SUPABASE_SERVICE_ROLE_KEY=  # Supabase service role key (recommended for backend)
-
-PASSKIT_API_KEY=        # PassKit API key (from PassKit dashboard)
-PASSKIT_API_SECRET=     # PassKit API secret (from PassKit dashboard)
-
-POSTGRID_API_URL=       # PostGrid API URL (default: https://api.postgrid.com/print-mail/v1)
-POSTGRID_API_KEY=       # PostGrid API key
-
-CORS_ORIGINS=           # Comma-separated list of allowed origins
-```
-
-## PassKit Integration (Production)
-
-The PassKit service (`server/services/passkit.service.ts`) connects to the PassKit API at `https://api.pub2.passkit.io` (US region).
-
-### Authentication
-- Uses JWT tokens generated by `server/utils/passkitJWT.ts`
-- Tokens are short-lived (60 seconds) for security
-- Tokens are generated using `PASSKIT_API_KEY` and `PASSKIT_API_SECRET`
-
-### Mock Mode
-If `PASSKIT_API_KEY` or `PASSKIT_API_SECRET` are not set, the service falls back to mock mode:
-- Logs sync operations to console
-- Returns success without making API calls
-- Allows local development without PassKit credentials
-
-### PassKit Protocol Status
-
-| Protocol | Status | Endpoint | Notes |
-|----------|--------|----------|-------|
-| MEMBERSHIP | ✅ LIVE | `PUT /members/member` | Fully working with push notifications |
-| COUPON | ✅ LIVE | `PUT /coupon/singleUse/coupon/{id}/redeem` | Ready for redemption |
-| EVENT_TICKET | ⏳ PLACEHOLDER | `POST /eventTickets/ticket` | Requires Venue + Event setup |
-
-### Protocol Hierarchy
-
-**MEMBERSHIP (Simple):**
-- `programId` + `tierId` → Ready to enroll/update members
-
-**COUPON (Simple):**
-- `campaignId` + `offerId` → Ready to issue/redeem coupons
-
-**EVENT_TICKET (Complex - TODO):**
-- Requires: `Production` → `Venue` → `Event` → `TicketType`
-- Current IDs: productionId=`68354tE85PxHKqRMTzUhdq`, ticketTypeId=`1lhTkqdRkfcYCNTxpfRmLJ`
-- Missing: `venueId` and `eventId` (create in PassKit dashboard)
-- Search code for `TODO: EVENT_TICKET` to find implementation placeholders
-
-### Push Notifications
-The `changeMessage` field triggers lock screen push notifications on the user's device when the pass is updated.
+### PostGrid Template Variables
+- `{{firstName}}`, `{{lastName}}`, `{{fullName}}`
+- `{{qrCodeUrl}}` - The claim URL for QR code
+- `{{claimCode}}` - Raw claim code
 
 ## Supabase RPC Functions
-
-The backend expects these stored procedures in Supabase:
 
 ### process_membership_transaction
 ```sql
 -- Parameters: p_external_id, p_action, p_amount
--- Returns: { transaction_id, new_balance, previous_balance, notification_message, passkit_internal_id }
+-- Returns: transaction_id, new_balance, passkit_internal_id, passkit_program_id
 ```
 
 ### process_one_time_use
 ```sql
 -- Parameters: p_external_id, p_action
--- Returns: { redemption_id, notification_message, passkit_internal_id, offer_details }
+-- Returns: passkit_internal_id, passkit_campaign_id, passkit_offer_id
 ```
 
-### get_member_balance
+### generate_claim_code
 ```sql
--- Parameters: p_member_id
--- Returns: { balance }
+-- Parameters: p_passkit_program_id, p_first_name, p_last_name, p_email, p_address_*
+-- Returns: { claim_code }
 ```
 
-### get_member_transaction_history
+### lookup_claim_code
 ```sql
--- Parameters: p_member_id, p_limit, p_offset
--- Returns: Array of transaction records
+-- Parameters: p_claim_code
+-- Returns: claim_code, status, passkit_program_id, passkit_install_url, first_name, etc.
+-- Status: ISSUED, INSTALLED, EXPIRED, CANCELLED
 ```
 
-## API Response Format
-
-All responses follow a consistent format:
-
-```json
-{
-  "success": true|false,
-  "message": "Human readable message",
-  "data": { ... },
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message",
-    "details": { ... }
-  },
-  "metadata": {
-    "requestId": "short-uuid",
-    "timestamp": "ISO8601",
-    "processingTime": 123
-  }
-}
+### update_claim_code_status
+```sql
+-- Parameters: p_claim_code, p_status, p_passkit_install_url
 ```
 
-## Tech Stack
-- Node.js with Express.js framework
-- TypeScript for type safety
-- Supabase PostgreSQL for database
-- axios for external API calls
-- helmet for security headers
-- morgan for HTTP request logging
-- short-uuid for readable request IDs
-- express-validator for request validation
-- Zod for schema validation
+## PassKit Protocol Status
 
-## Development
+| Protocol | Status | Notes |
+|----------|--------|-------|
+| MEMBERSHIP | ✅ LIVE | Push notifications working |
+| COUPON | ✅ LIVE | Issue and redeem |
+| EVENT_TICKET | ⏳ PLACEHOLDER | Requires Venue + Event setup |
 
-Run the development server:
-```bash
-npm run dev
+## Environment Variables
+
 ```
-
-The server binds to port 5000 by default.
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+PASSKIT_API_KEY=
+PASSKIT_API_SECRET=
+POSTGRID_API_KEY=
+```
 
 ## Recent Changes
 
-### 2025-12-03 - Coupon Protocol + Event Ticket Placeholder
-- ✅ Added `issueCoupon()` function for single-use coupon creation
-- ✅ Fixed Coupon redeem endpoint: `/coupon/singleUse/coupon/{id}/redeem`
-- ✅ Added `POST /api/wallet/coupons` endpoint
-- ⏳ Event Ticket code refactored as searchable placeholder (search: `TODO: EVENT_TICKET`)
-- 📝 Updated replit.md with protocol status table
+### 2025-12-03 - Physical Bridge
+- Added `sendPostcard()` to PostGrid service
+- Added claim code RPC functions to Supabase service
+- Created `POST /api/mail/campaign` batch endpoint
+- Created `GET /claim/:id` redirect route
+- Full Phygital loop complete
 
-### 2025-12-03 - PassKit Production Integration - LIVE
-- ✅ Live pass updates working with push notifications to user's phone
-- Created `server/utils/passkitJWT.ts` for JWT token generation (HS256, 60-second tokens)
-- Updated `passkit.service.ts` with real API calls to `https://api.pub2.passkit.io` (US region)
-- JWT token uses `uid` claim (not `key`) for authentication
-- Member update uses `PUT /members/member` with `externalId + programId` in body
-- PassKit Program ID: `4RhsVhHek0dliVogVznjSQ` (hardcoded in service)
-- Added mock mode fallback when API keys are not configured
-- Implemented protocol-based routing (MEMBERSHIP, COUPON, EVENT_TICKET, LIFECYCLE)
+### 2025-12-03 - Coupon Protocol
+- Added `issueCoupon()` function
+- Added `POST /api/wallet/coupons` endpoint
 
-### Earlier
-- Added POS action endpoint (`/api/pos/action`) for Softr integration
-- Created Logic Service as the main orchestrator for action routing
-- Added syncPass method to PassKit service for automatic wallet sync
-- Created dedicated Supabase client initialization
-- Enhanced startup console messages with service status banner
-- Added security headers via helmet and request logging via morgan
+### 2025-12-03 - PassKit Production
+- Live pass updates with push notifications
+- JWT authentication via passkitJWT.ts
+- US region: `https://api.pub2.passkit.io`

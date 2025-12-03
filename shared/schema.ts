@@ -118,6 +118,76 @@ export const postGridMailResponseSchema = z.object({
 
 export type PostGridMailResponse = z.infer<typeof postGridMailResponseSchema>;
 
+export const postGridPostcardSchema = z.object({
+  templateId: z.string().min(1, "Template ID is required"),
+  recipientAddress: z.object({
+    firstName: z.string(),
+    lastName: z.string().optional(),
+    addressLine1: z.string(),
+    addressLine2: z.string().optional(),
+    city: z.string(),
+    state: z.string(),
+    postalCode: z.string(),
+    country: z.string().default("US"),
+  }),
+  claimCode: z.string().min(1, "Claim code is required"),
+  claimUrl: z.string().url().optional(),
+  mergeVariables: z.record(z.string()).optional(),
+  sendDate: z.string().optional(),
+});
+
+export type PostGridPostcard = z.infer<typeof postGridPostcardSchema>;
+
+export const postGridPostcardResponseSchema = z.object({
+  success: z.boolean(),
+  postcardId: z.string().optional(),
+  status: z.string().optional(),
+  estimatedDeliveryDate: z.string().optional(),
+  claimCode: z.string().optional(),
+  claimUrl: z.string().optional(),
+  message: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export type PostGridPostcardResponse = z.infer<typeof postGridPostcardResponseSchema>;
+
+export const batchCampaignContactSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().optional(),
+  addressLine1: z.string().min(1, "Address is required"),
+  addressLine2: z.string().optional(),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  postalCode: z.string().min(1, "Postal code is required"),
+  country: z.string().default("US"),
+  email: z.string().email().optional(),
+});
+
+export type BatchCampaignContact = z.infer<typeof batchCampaignContactSchema>;
+
+export const batchCampaignRequestSchema = z.object({
+  templateId: z.string().min(1, "Template ID is required"),
+  programId: z.string().min(1, "PassKit Program ID is required"),
+  contacts: z.array(batchCampaignContactSchema).min(1, "At least one contact is required"),
+  baseClaimUrl: z.string().url().optional(),
+});
+
+export type BatchCampaignRequest = z.infer<typeof batchCampaignRequestSchema>;
+
+export const claimCodeSchema = z.object({
+  claimCode: z.string(),
+  status: z.enum(["ISSUED", "INSTALLED", "EXPIRED", "CANCELLED"]),
+  passkitProgramId: z.string(),
+  passkitInstallUrl: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  email: z.string().optional(),
+  createdAt: z.string(),
+  installedAt: z.string().optional(),
+});
+
+export type ClaimCode = z.infer<typeof claimCodeSchema>;
+
 export const healthCheckSchema = z.object({
   status: z.enum(["healthy", "degraded", "unhealthy"]),
   timestamp: z.string(),

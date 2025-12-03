@@ -1,11 +1,21 @@
 import axios, { AxiosInstance } from "axios";
 import { config, isPostGridConfigured } from "../config";
-import type { PostGridMail, PostGridMailResponse } from "@shared/schema";
+import type { PostGridMail, PostGridMailResponse, PostGridPostcard, PostGridPostcardResponse } from "@shared/schema";
 
 interface PostGridLetterResponse {
   id: string;
   status: string;
   estimatedDeliveryDate?: string;
+}
+
+interface PostGridPostcardApiResponse {
+  id: string;
+  status: string;
+  estimatedDeliveryDate?: string;
+  to?: {
+    firstName?: string;
+    lastName?: string;
+  };
 }
 
 class PostGridService {
@@ -82,6 +92,65 @@ class PostGridService {
       };
     } catch (error) {
       console.error("PostGrid send mail error:", error);
+      return {
+        success: false,
+        error: error instanceof Error 
+          ? error.message
+          : axios.isAxiosError(error)
+            ? error.response?.data?.error?.message || error.message
+            : "Unknown error occurred",
+      };
+    }
+  }
+
+  async sendPostcard(postcardData: PostGridPostcard): Promise<PostGridPostcardResponse> {
+    try {
+      const client = this.getClient();
+
+      const recipientName = postcardData.recipientAddress.lastName 
+        ? `${postcardData.recipientAddress.firstName} ${postcardData.recipientAddress.lastName}`
+        : postcardData.recipientAddress.firstName;
+
+      const payload = {
+        template: postcardData.templateId,
+        to: {
+          firstName: postcardData.recipientAddress.firstName,
+          lastName: postcardData.recipientAddress.lastName || '',
+          addressLine1: postcardData.recipientAddress.addressLine1,
+          addressLine2: postcardData.recipientAddress.addressLine2,
+          city: postcardData.recipientAddress.city,
+          provinceOrState: postcardData.recipientAddress.state,
+          postalOrZip: postcardData.recipientAddress.postalCode,
+          country: postcardData.recipientAddress.country,
+        },
+        mergeVariables: {
+          firstName: postcardData.recipientAddress.firstName,
+          lastName: postcardData.recipientAddress.lastName || '',
+          fullName: recipientName,
+          qrCodeUrl: postcardData.claimUrl || '',
+          claimCode: postcardData.claimCode,
+          ...postcardData.mergeVariables,
+        },
+        sendDate: postcardData.sendDate,
+      };
+
+      console.log(`📮 Sending postcard to ${recipientName} with claim code: ${postcardData.claimCode}`);
+
+      const response = await client.post<PostGridPostcardApiResponse>("/postcards", payload);
+
+      console.log(`✅ Postcard queued: ${response.data.id}`);
+
+      return {
+        success: true,
+        postcardId: response.data.id,
+        status: response.data.status,
+        estimatedDeliveryDate: response.data.estimatedDeliveryDate,
+        claimCode: postcardData.claimCode,
+        claimUrl: postcardData.claimUrl,
+        message: "Postcard queued successfully",
+      };
+    } catch (error) {
+      console.error("PostGrid send postcard error:", error);
       return {
         success: false,
         error: error instanceof Error 

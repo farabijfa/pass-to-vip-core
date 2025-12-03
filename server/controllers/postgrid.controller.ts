@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { postGridService } from "../services";
-import type { PostGridMail, ApiResponse } from "@shared/schema";
+import { postGridService, supabaseService } from "../services";
+import type { PostGridMail, ApiResponse, BatchCampaignRequest, BatchCampaignContact } from "@shared/schema";
 import { generate } from "short-uuid";
 
 function createResponse<T>(
@@ -245,6 +245,137 @@ export class PostGridController {
           {
             code: "INTERNAL_ERROR",
             message: "An unexpected error occurred while listing templates",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
+  async sendBatchCampaign(req: Request, res: Response, next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+    const startTime = Date.now();
+
+    try {
+      const campaignData: BatchCampaignRequest = req.body;
+      const { templateId, programId, contacts, baseClaimUrl } = campaignData;
+
+      const claimBaseUrl = baseClaimUrl || `${req.protocol}://${req.get('host')}/claim`;
+
+      console.log(`📬 Starting batch campaign: ${contacts.length} contacts, program: ${programId}`);
+
+      const results: Array<{
+        contact: string;
+        success: boolean;
+        claimCode?: string;
+        postcardId?: string;
+        error?: string;
+      }> = [];
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (const contact of contacts) {
+        const contactName = contact.lastName 
+          ? `${contact.firstName} ${contact.lastName}`
+          : contact.firstName;
+
+        try {
+          const claimResult = await supabaseService.generateClaimCode({
+            passkitProgramId: programId,
+            contact,
+          });
+
+          if (!claimResult.success || !claimResult.claimCode) {
+            failureCount++;
+            results.push({
+              contact: contactName,
+              success: false,
+              error: claimResult.error || "Failed to generate claim code",
+            });
+            continue;
+          }
+
+          const claimUrl = `${claimBaseUrl}/${claimResult.claimCode}`;
+
+          const postcardResult = await postGridService.sendPostcard({
+            templateId,
+            recipientAddress: {
+              firstName: contact.firstName,
+              lastName: contact.lastName,
+              addressLine1: contact.addressLine1,
+              addressLine2: contact.addressLine2,
+              city: contact.city,
+              state: contact.state,
+              postalCode: contact.postalCode,
+              country: contact.country || 'US',
+            },
+            claimCode: claimResult.claimCode,
+            claimUrl,
+          });
+
+          if (!postcardResult.success) {
+            failureCount++;
+            results.push({
+              contact: contactName,
+              success: false,
+              claimCode: claimResult.claimCode,
+              error: postcardResult.error || "Failed to send postcard",
+            });
+            continue;
+          }
+
+          successCount++;
+          results.push({
+            contact: contactName,
+            success: true,
+            claimCode: claimResult.claimCode,
+            postcardId: postcardResult.postcardId,
+          });
+
+        } catch (err) {
+          failureCount++;
+          results.push({
+            contact: contactName,
+            success: false,
+            error: err instanceof Error ? err.message : "Unexpected error",
+          });
+        }
+      }
+
+      const response = createResponse(
+        successCount > 0,
+        {
+          campaignSummary: {
+            totalContacts: contacts.length,
+            successCount,
+            failureCount,
+            templateId,
+            programId,
+          },
+          results,
+        },
+        failureCount === contacts.length ? {
+          code: "CAMPAIGN_FAILED",
+          message: "All postcards failed to send",
+        } : undefined,
+        requestId
+      );
+
+      response.metadata!.processingTime = Date.now() - startTime;
+
+      console.log(`📮 Batch campaign complete: ${successCount}/${contacts.length} sent`);
+
+      return res.status(successCount > 0 ? 201 : 400).json(response);
+    } catch (error) {
+      console.error("Batch campaign error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: "An unexpected error occurred while processing batch campaign",
           },
           requestId
         )

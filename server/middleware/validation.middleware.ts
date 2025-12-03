@@ -285,3 +285,58 @@ export const validateMailId = [
     .withMessage("Mail ID must be a string"),
   handleValidationErrors,
 ];
+
+export const validateBatchCampaign = [
+  body("templateId")
+    .notEmpty()
+    .withMessage("Template ID is required")
+    .isString()
+    .withMessage("Template ID must be a string"),
+  body("programId")
+    .notEmpty()
+    .withMessage("PassKit Program ID is required")
+    .isString()
+    .withMessage("Program ID must be a string"),
+  body("contacts")
+    .isArray({ min: 1 })
+    .withMessage("At least one contact is required"),
+  body("contacts.*.firstName")
+    .notEmpty()
+    .withMessage("First name is required for each contact")
+    .isString()
+    .withMessage("First name must be a string"),
+  body("contacts.*.addressLine1")
+    .notEmpty()
+    .withMessage("Address is required for each contact")
+    .isString()
+    .withMessage("Address must be a string"),
+  body("contacts.*.city")
+    .notEmpty()
+    .withMessage("City is required for each contact")
+    .isString()
+    .withMessage("City must be a string"),
+  body("contacts.*.state")
+    .notEmpty()
+    .withMessage("State is required for each contact")
+    .isString()
+    .withMessage("State must be a string"),
+  body("contacts.*.postalCode")
+    .notEmpty()
+    .withMessage("Postal code is required for each contact")
+    .isString()
+    .withMessage("Postal code must be a string"),
+  body("baseClaimUrl")
+    .optional()
+    .isURL()
+    .withMessage("Base claim URL must be a valid URL"),
+  handleValidationErrors,
+];
+
+export const validateClaimCode = [
+  param("id")
+    .notEmpty()
+    .withMessage("Claim code is required")
+    .isString()
+    .withMessage("Claim code must be a string"),
+  handleValidationErrors,
+];

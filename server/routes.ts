@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import apiRoutes from "./routes/index";
+import claimRoutes from "./routes/claim.routes";
 import { 
   errorHandler, 
   notFoundHandler, 
@@ -51,11 +52,14 @@ export async function registerRoutes(
         loyalty: "/api/loyalty",
         wallet: "/api/wallet",
         mail: "/api/mail",
+        claim: "/claim/:id",
       },
     });
   });
 
   app.use("/api", apiRoutes);
+
+  app.use("/claim", claimRoutes);
 
   app.use("/api/*", notFoundHandler);
 

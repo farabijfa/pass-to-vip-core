@@ -4,8 +4,31 @@ import type {
   MembershipTransaction, 
   MembershipTransactionResponse,
   OneTimeUse,
-  OneTimeUseResponse 
+  OneTimeUseResponse,
+  ClaimCode,
+  BatchCampaignContact
 } from "@shared/schema";
+
+interface GenerateClaimCodeParams {
+  passkitProgramId: string;
+  contact: BatchCampaignContact;
+}
+
+interface GenerateClaimCodeResult {
+  success: boolean;
+  claimCode?: string;
+  passkitProgramId?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  error?: string;
+}
+
+interface LookupClaimCodeResult {
+  success: boolean;
+  claimCode?: ClaimCode;
+  error?: string;
+}
 
 class SupabaseService {
   private client: SupabaseClient | null = null;
@@ -173,6 +196,130 @@ class SupabaseService {
     } catch (error) {
       console.error("Get transaction history error:", error);
       return [];
+    }
+  }
+
+  async generateClaimCode(params: GenerateClaimCodeParams): Promise<GenerateClaimCodeResult> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client.rpc("generate_claim_code", {
+        p_passkit_program_id: params.passkitProgramId,
+        p_first_name: params.contact.firstName,
+        p_last_name: params.contact.lastName || null,
+        p_email: params.contact.email || null,
+        p_address_line_1: params.contact.addressLine1,
+        p_address_line_2: params.contact.addressLine2 || null,
+        p_city: params.contact.city,
+        p_state: params.contact.state,
+        p_postal_code: params.contact.postalCode,
+        p_country: params.contact.country || 'US',
+      });
+
+      if (error) {
+        console.error("Generate claim code RPC error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to generate claim code",
+        };
+      }
+
+      console.log(`🎟️ Generated claim code: ${data?.claim_code}`);
+
+      return {
+        success: true,
+        claimCode: data?.claim_code,
+        passkitProgramId: params.passkitProgramId,
+        firstName: params.contact.firstName,
+        lastName: params.contact.lastName,
+        email: params.contact.email,
+      };
+    } catch (error) {
+      console.error("Generate claim code error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async lookupClaimCode(claimCode: string): Promise<LookupClaimCodeResult> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client.rpc("lookup_claim_code", {
+        p_claim_code: claimCode,
+      });
+
+      if (error) {
+        console.error("Lookup claim code RPC error:", error);
+        return {
+          success: false,
+          error: error.message || "Claim code not found",
+        };
+      }
+
+      if (!data) {
+        return {
+          success: false,
+          error: "Claim code not found",
+        };
+      }
+
+      return {
+        success: true,
+        claimCode: {
+          claimCode: data.claim_code,
+          status: data.status,
+          passkitProgramId: data.passkit_program_id,
+          passkitInstallUrl: data.passkit_install_url,
+          firstName: data.first_name,
+          lastName: data.last_name,
+          email: data.email,
+          createdAt: data.created_at,
+          installedAt: data.installed_at,
+        },
+      };
+    } catch (error) {
+      console.error("Lookup claim code error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async updateClaimCodeStatus(
+    claimCode: string,
+    status: "INSTALLED" | "EXPIRED" | "CANCELLED",
+    passkitInstallUrl?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const client = this.getClient();
+
+      const { error } = await client.rpc("update_claim_code_status", {
+        p_claim_code: claimCode,
+        p_status: status,
+        p_passkit_install_url: passkitInstallUrl || null,
+      });
+
+      if (error) {
+        console.error("Update claim code status RPC error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to update claim code status",
+        };
+      }
+
+      console.log(`✅ Claim code ${claimCode} updated to ${status}`);
+
+      return { success: true };
+    } catch (error) {
+      console.error("Update claim code status error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
     }
   }
 

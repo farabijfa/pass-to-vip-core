@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { postGridController } from "../controllers";
-import { validatePostGridMail, validateMailId } from "../middleware";
+import { validatePostGridMail, validateMailId, validateBatchCampaign } from "../middleware";
 import { asyncHandler } from "../middleware/error.middleware";
 
 const router = Router();
@@ -26,6 +26,12 @@ router.delete(
 router.get(
   "/templates",
   asyncHandler(postGridController.listTemplates.bind(postGridController))
+);
+
+router.post(
+  "/campaign",
+  validateBatchCampaign,
+  asyncHandler(postGridController.sendBatchCampaign.bind(postGridController))
 );
 
 export default router;
