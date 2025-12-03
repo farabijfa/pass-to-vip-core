@@ -1,0 +1,193 @@
+This is the "Engine Room" of your marketing operation. You need a robust **Bulk Campaign Manager**.
+
+Instead of trying to force Softr to handle complex CSV parsing (which it is bad at), we will build a dedicated **Admin Upload Dashboard** directly inside Replit.
+
+Here is the architectural solution:
+
+1.  **Input:** You upload a CSV file (Name, Address, City, State, Zip) to a protected Replit page.
+2.  **Processing:** Replit reads the file line-by-line.
+3.  **Generation:** For every row, it generates a **Unique Claim Code** in Supabase (`ISSUED` status).
+4.  **Execution:** It sends the print job to PostGrid, injecting that specific Claim Code into the QR Code merge variable on the postcard.
+
+Here is the Step-by-Step implementation plan.
+
+-----
+
+### Phase 1: Install Dependencies
+
+We need tools to handle file uploads and CSV parsing.
+
+**Replit AI Instruction:**
+
+> "Install the following packages: `multer` (for file uploads) and `csv-parser` (to read the data). Then, update `package.json` to include them."
+
+-----
+
+### Phase 2: The Campaign Service (The Logic)
+
+This service performs the "Phygital" magic. It ensures that the postcard sent to "John Doe" has a QR code that is uniquely linked to "John Doe's" future wallet pass.
+
+**Replit AI Instruction:**
+
+> "Create a new service `services/campaign.service.ts`.
+>
+> **Requirements:**
+>
+> 1.  Import `fs`, `csv-parser`, and our existing `supabase` and `postgrid` clients.
+> 2.  Create a function `processBatchUpload(filePath, programId, postgridTemplateId)`.
+> 3.  Stream the CSV file. For each row:
+>     a. Generate a unique `external_id` (using `short-uuid` or similar).
+>     b. Insert a record into Supabase `passes_master` with `status: 'ISSUED'` and `program_id`.
+>     c. Construct the **Claim URL**: `https://[YOUR_REPLIT_URL]/claim/${external_id}`.
+>     d. Call PostGrid's `createPostcard` API. **Crucial:** Pass the Claim URL as a merge variable (e.g., `qr_code_url`) and the user's name/address.
+> 4.  Return a summary (Total Rows, Success Count, specific Errors)."
+
+**The Code (Reference for you):**
+
+```javascript
+/* services/campaign.service.js */
+const fs = require('fs');
+const csv = require('csv-parser');
+const supabase = require('../config/supabase');
+const axios = require('axios');
+require('dotenv').config();
+
+exports.processBatchUpload = (filePath, programId, templateId) => {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    const errors = [];
+    
+    fs.createReadStream(filePath)
+      .pipe(csv())
+      .on('data', (data) => results.push(data))
+      .on('end', async () => {
+        let successCount = 0;
+        
+        console.log(`📂 Processing ${results.length} records...`);
+
+        // Loop through CSV Rows
+        for (const row of results) {
+          try {
+            // 1. Generate Unique ID for the QR Code
+            const externalId = `MAIL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const claimUrl = `${process.env.APP_URL}/claim/${externalId}`;
+
+            // 2. Save to Supabase (The "Digital Promise")
+            const { error: dbError } = await supabase
+              .from('passes_master')
+              .insert([{
+                program_id: programId,
+                protocol: 'MEMBERSHIP', // Or read from CSV if mixed
+                external_id: externalId,
+                status: 'ISSUED',
+                is_active: true
+              }]);
+
+            if (dbError) throw new Error(`DB Error: ${dbError.message}`);
+
+            // 3. Trigger PostGrid (The Physical Asset)
+            // We verify the address exists before sending
+            if (row.address && row.city) {
+                await axios.post('https://api.postgrid.com/print/v1/postcards', {
+                    to: {
+                        firstName: row.first_name,
+                        lastName: row.last_name,
+                        addressLine1: row.address,
+                        city: row.city,
+                        state: row.state,
+                        postalCode: row.zip,
+                        countryCode: "US"
+                    },
+                    templateId: templateId,
+                    mergeVariables: {
+                        firstName: row.first_name,
+                        qrCodeUrl: claimUrl // <--- THIS IS THE MAGIC LINK
+                    }
+                }, {
+                    auth: { username: process.env.POSTGRID_API_KEY, password: '' }
+                });
+                successCount++;
+            }
+          } catch (err) {
+            console.error(`❌ Failed row for ${row.email || 'unknown'}:`, err.message);
+            errors.push({ row, error: err.message });
+          }
+        }
+        
+        // Cleanup file
+        fs.unlinkSync(filePath);
+        resolve({ total: results.length, success: successCount, errors });
+      });
+  });
+};
+```
+
+-----
+
+### Phase 3: The API Route
+
+We need a secure endpoint to accept the file.
+
+**Replit AI Instruction:**
+
+> "Create a new route `routes/campaign.routes.js`.
+>
+> 1.  Setup `multer` to save uploaded files to a temporary `./uploads` folder.
+> 2.  Create a POST endpoint `/upload-csv`.
+> 3.  It should accept fields: `file` (the CSV), `program_id`, and `template_id`.
+> 4.  Call `campaignService.processBatchUpload`.
+> 5.  Return the success/error report JSON."
+
+-----
+
+### Phase 4: The "Admin Dashboard" (HTML Interface)
+
+Instead of fighting with Softr, we will serve a simple HTML file from Replit that allows you to drag-and-drop the CSV. This is your "Mission Control".
+
+**Replit AI Instruction:**
+
+> "Create a file `public/admin.html`.
+> It should contain a clean Bootstrap UI with:
+>
+> 1.  A File Input for CSV.
+> 2.  Text Inputs for `Program ID` and `PostGrid Template ID`.
+> 3.  A 'Launch Campaign' button.
+> 4.  JavaScript to `fetch()` the POST `/api/campaign/upload-csv` endpoint and display the results alert.
+>
+> Also, update `app.js` to serve this static file at the route `/admin/campaign`."
+
+-----
+
+### Phase 5: Testing (The Batch Simulation)
+
+**1. Prepare your CSV (`test_campaign.csv`)**
+Create a file with these headers (case sensitive based on the code above):
+
+```csv
+first_name,last_name,address,city,state,zip
+Alice,Smith,123 Maple Ave,New York,NY,10001
+Bob,Jones,456 Oak Ln,Austin,TX,73301
+```
+
+**2. Get your IDs**
+
+  * **Program ID:** Copy the UUID from your Supabase `programs` table (e.g., the one for "Gold VIP").
+  * **Template ID:** Copy a test template ID from PostGrid.
+
+**3. Launch**
+
+1.  Go to `https://[YOUR-REPLIT-URL]/admin/campaign`.
+2.  Upload the CSV.
+3.  Paste the IDs.
+4.  Click **Launch**.
+
+### What happens next (The Actionable Solution):
+
+1.  **System:** Reads "Alice Smith".
+2.  **Supabase:** Creates a new row `external_id: MAIL-12345`. Status is `ISSUED`.
+3.  **PostGrid:** Receives a request to print a card for Alice.
+      * It injects `qrCodeUrl` = `.../claim/MAIL-12345`.
+      * PostGrid generates the PDF. The QR code on the PDF encodes that specific URL.
+4.  **Real Life:** Alice gets the card -\> Scans QR -\> Hits your `/claim` route -\> System finds `MAIL-12345` -\> Redirects Alice to PassKit to install her unique pass.
+
+**Does this Bulk Upload workflow meet your requirements for the targeted loyalty rollout?**
