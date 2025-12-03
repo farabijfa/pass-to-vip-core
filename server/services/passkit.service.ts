@@ -184,6 +184,53 @@ class PassKitService {
     }
   }
 
+  async syncPass(rpcResult: {
+    passkit_internal_id?: string;
+    notification_message?: string;
+    new_balance?: number;
+    member_name?: string;
+    tier_level?: string;
+  }): Promise<{ success: boolean; synced: boolean; error?: string }> {
+    if (!isPassKitConfigured()) {
+      console.log(`[PassKit Mock] Syncing pass: ${rpcResult.passkit_internal_id}`);
+      console.log(`[PassKit Mock] Notification: "${rpcResult.notification_message}"`);
+      return { success: true, synced: false };
+    }
+
+    try {
+      if (rpcResult.passkit_internal_id) {
+        const updateResult = await this.updatePass({
+          serialNumber: rpcResult.passkit_internal_id,
+          updates: {
+            pointsBalance: rpcResult.new_balance,
+            tierLevel: rpcResult.tier_level,
+            memberName: rpcResult.member_name,
+          },
+        });
+
+        if (!updateResult.success) {
+          return { success: false, synced: false, error: updateResult.error };
+        }
+
+        if (rpcResult.notification_message) {
+          await this.sendPushNotification(
+            rpcResult.passkit_internal_id,
+            rpcResult.notification_message
+          );
+        }
+      }
+
+      return { success: true, synced: true };
+    } catch (error) {
+      console.error("PassKit sync error:", error);
+      return {
+        success: false,
+        synced: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
   isInitialized(): boolean {
     return this.initialized && isPassKitConfigured();
   }

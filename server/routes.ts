@@ -46,6 +46,7 @@ export async function registerRoutes(
       version: config.server.apiVersion,
       timestamp: new Date().toISOString(),
       endpoints: {
+        pos: "/api/pos/action",
         health: "/api/health",
         loyalty: "/api/loyalty",
         wallet: "/api/wallet",
