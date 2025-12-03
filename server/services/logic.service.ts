@@ -20,6 +20,7 @@ interface PosActionResult {
     previous_balance?: number;
     passkit_internal_id?: string;
     notification_message?: string;
+    protocol?: string;
     offer_details?: {
       offer_id: string;
       offer_name: string;
@@ -72,10 +73,22 @@ class LogicService {
 
     console.log("[Logic] Database Transaction Success:", rpcResult?.notification_message);
 
+    let protocol: string;
+    if (MEMBERSHIP_ACTIONS.includes(actionType)) {
+      protocol = "MEMBERSHIP";
+    } else if (actionType === "COUPON_REDEEM") {
+      protocol = "COUPON";
+    } else if (actionType === "TICKET_CHECKIN") {
+      protocol = "EVENT_TICKET";
+    } else {
+      protocol = "OTHER";
+    }
+
     let passKitSync = { synced: false, error: undefined as string | undefined };
     try {
       const syncResult = await passKitService.syncPass({
         passkit_internal_id: rpcResult?.passkit_internal_id,
+        protocol,
         notification_message: rpcResult?.notification_message,
         new_balance: rpcResult?.new_balance,
         member_name: rpcResult?.member_name,
@@ -90,7 +103,7 @@ class LogicService {
     return {
       success: true,
       message: rpcResult?.notification_message || "Action processed successfully",
-      data: rpcResult,
+      data: { ...rpcResult, protocol },
       passKitSync,
     };
   }
