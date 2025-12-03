@@ -1,0 +1,54 @@
+ou have the Digital side (PassKit) and the Logic side (Supabase). The only missing link is the Physical side (PostGrid).
+
+Currently, you can issue a pass if you have an email, but you cannot yet mail a postcard that turns a physical neighbor into a digital user.
+
+We need to implement the PostGrid Service to:
+
+    Take a mailing list (Name/Address).
+
+    Pre-generate a unique "Claim Code" (QR) in Supabase.
+
+    Send that data to PostGrid to print on a card.
+
+Here is the strategy to close the loop.
+Step 1: Verify postgrid.service.ts
+
+I see postgrid.service.ts in your file list, but we need to ensure it handles the Merge Variables correctly. The QR code on the postcard must point to your "Claim URL".
+
+Paste this instruction into your Replit Agent to finalize the Physical Bridge:
+
+    "We are moving to the final phase: Physical Distribution. Please review and update services/postgrid.service.ts.
+
+        Implement a function sendPostcard(contact, templateId, claimCode).
+
+        It should use axios to call the PostGrid /postcards API.
+
+        Critical: It must pass a mergeVariables object containing:
+
+            firstName: contact.firstName
+
+            qrCodeUrl: A generated URL (e.g., https://passtovip.replit.app/claim/${claimCode})
+
+        Update controllers/postgrid.controller.ts to accept a batch request (array of addresses) and loop through them, generating a unique external_id (Claim Code) in Supabase for each one before calling PostGrid."
+
+Step 2: The "Claim" Route (Closing the Loop)
+
+When the user receives the postcard and scans the QR code, they hit https://passtovip.replit.app/claim/{claimCode}.
+
+You need a route that:
+
+    Looks up the claimCode in Supabase.
+
+    Checks if it is ISSUED (not yet installed).
+
+    Redirects the user to the PassKit Public URL (the "Click to Add to Wallet" page).
+
+Add this instruction to the Replit Agent:
+
+    "Also, create a new route GET /claim/:id.
+
+        It should look up the external_id in the passes_master table.
+
+        If valid, retrieve the associated passkit_program_id (or campaign URL).
+
+        Redirect (res.redirect) the user's browser to the PassKit installation URL so the pass pops up on their phone."
