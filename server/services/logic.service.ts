@@ -74,30 +74,42 @@ class LogicService {
     console.log("[Logic] Database Transaction Success:", rpcResult?.notification_message);
 
     let protocol: string;
+    let skipPassKitSync = false;
+    
     if (MEMBERSHIP_ACTIONS.includes(actionType)) {
       protocol = "MEMBERSHIP";
     } else if (actionType === "COUPON_REDEEM") {
       protocol = "COUPON";
     } else if (actionType === "TICKET_CHECKIN") {
       protocol = "EVENT_TICKET";
+    } else if (actionType === "INSTALL" || actionType === "UNINSTALL") {
+      protocol = "LIFECYCLE";
+      skipPassKitSync = true;
     } else {
       protocol = "OTHER";
+      skipPassKitSync = true;
     }
 
-    let passKitSync = { synced: false, error: undefined as string | undefined };
-    try {
-      const syncResult = await passKitService.syncPass({
-        passkit_internal_id: rpcResult?.passkit_internal_id,
-        protocol,
-        notification_message: rpcResult?.notification_message,
-        new_balance: rpcResult?.new_balance,
-        member_name: rpcResult?.member_name,
-        tier_level: rpcResult?.tier_level,
-      });
-      passKitSync = { synced: syncResult.synced, error: syncResult.error };
-    } catch (syncError) {
-      console.error("[Logic] PassKit Sync Warning:", syncError);
-      passKitSync.error = syncError instanceof Error ? syncError.message : "Sync failed";
+    let passKitSync = { synced: false, error: undefined as string | undefined, skipped: false };
+    
+    if (skipPassKitSync) {
+      console.log(`[Logic] PassKit Sync skipped for ${protocol} action`);
+      passKitSync.skipped = true;
+    } else {
+      try {
+        const syncResult = await passKitService.syncPass({
+          passkit_internal_id: rpcResult?.passkit_internal_id,
+          protocol,
+          notification_message: rpcResult?.notification_message,
+          new_balance: rpcResult?.new_balance,
+          member_name: rpcResult?.member_name,
+          tier_level: rpcResult?.tier_level,
+        });
+        passKitSync = { synced: syncResult.synced, error: syncResult.error, skipped: false };
+      } catch (syncError) {
+        console.error("[Logic] PassKit Sync Warning:", syncError);
+        passKitSync.error = syncError instanceof Error ? syncError.message : "Sync failed";
+      }
     }
 
     return {

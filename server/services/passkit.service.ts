@@ -250,8 +250,23 @@ class PassKitService {
       return { success: true, synced: true };
 
     } catch (error) {
-      console.error('❌ PassKit API Error:', axios.isAxiosError(error) ? error.response?.data : (error instanceof Error ? error.message : error));
-      throw new Error('PassKit Sync Failed');
+      let errorMessage = 'PassKit Sync Failed';
+      let errorDetails: Record<string, unknown> = {};
+      
+      if (axios.isAxiosError(error)) {
+        errorDetails = {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          url: error.config?.url,
+        };
+        errorMessage = `PassKit API Error: ${error.response?.status} ${error.response?.statusText || ''} - ${JSON.stringify(error.response?.data) || error.message}`;
+      } else if (error instanceof Error) {
+        errorMessage = `PassKit Sync Failed: ${error.message}`;
+      }
+      
+      console.error('❌ PassKit API Error:', errorDetails);
+      throw new Error(errorMessage);
     }
   }
 
