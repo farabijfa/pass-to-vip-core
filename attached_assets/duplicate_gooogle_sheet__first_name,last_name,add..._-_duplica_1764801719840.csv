@@ -1,0 +1,6 @@
+"first_name,last_name,email,address,city,state,zip"
+"Alice,Smith,alice.smith@example.com,123 Maple Ave,New York,NY,10001"
+"Bob,Jones,bob.jones@example.com,456 Oak Ln,Austin,TX,73301"
+"Charlie,Davis,charlie.davis@example.com,789 Pine St,Chicago,IL,60601"
+"Diana,Miller,diana.miller@example.com,321 Elm Dr,Seattle,WA,98101"
+"Evan,Wilson,evan.wilson@example.com,654 Cedar Blvd,Miami,FL,33101"
