@@ -20,11 +20,28 @@ interface PassKitUpdateResponse {
 
 interface SyncPassResult {
   passkit_internal_id?: string;
+  passkit_program_id?: string;
   protocol?: string;
   notification_message?: string;
   new_balance?: number;
   member_name?: string;
   tier_level?: string;
+}
+
+interface EnrollMemberData {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  points?: number;
+  tierId?: string;
+}
+
+interface EnrollMemberResult {
+  success: boolean;
+  passkit_internal_id?: string;
+  external_id?: string;
+  install_url?: string;
+  error?: string;
 }
 
 class PassKitService {
@@ -228,7 +245,7 @@ class PassKitService {
           // PassKit API uses /members/member with externalId + programId in the body
           url = `${PASSKIT_BASE_URL}/members/member`;
           payload.externalId = passkit_internal_id;
-          payload.programId = '4RhsVhHek0dliVogVznjSQ';  // PassKit program ID
+          payload.programId = rpcResult.passkit_program_id || '4RhsVhHek0dliVogVznjSQ';
           payload.points = new_balance;
           await axios.put(url, payload, authConfig);
           break;
@@ -275,6 +292,76 @@ class PassKitService {
 
   isInitialized(): boolean {
     return this.initialized && isPassKitConfigured();
+  }
+
+  async enrollMember(
+    passkitProgramId: string,
+    userData: EnrollMemberData
+  ): Promise<EnrollMemberResult> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode for enrollment.');
+      return {
+        success: true,
+        passkit_internal_id: `MOCK-${Date.now()}`,
+        external_id: userData.email,
+        install_url: `https://mock.passkit.io/install/${userData.email}`,
+      };
+    }
+
+    console.log(`🎫 Enrolling new member in program: ${passkitProgramId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/member`;
+      
+      const payload: Record<string, unknown> = {
+        programId: passkitProgramId,
+        externalId: userData.email,
+        points: userData.points || 0,
+        person: {
+          forename: userData.firstName || '',
+          surname: userData.lastName || '',
+          emailAddress: userData.email,
+        },
+      };
+
+      if (userData.tierId) {
+        payload.tierId = userData.tierId;
+      }
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.post(url, payload, authConfig);
+
+      console.log(`✅ Member enrolled successfully: ${response.data?.id}`);
+
+      return {
+        success: true,
+        passkit_internal_id: response.data?.id,
+        external_id: response.data?.externalId || userData.email,
+        install_url: response.data?.passUrl || response.data?.url,
+      };
+    } catch (error) {
+      let errorMessage = 'PassKit Enrollment Failed';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit Enrollment Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
   }
 }
 

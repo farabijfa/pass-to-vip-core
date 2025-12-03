@@ -317,6 +317,98 @@ export class PassKitController {
       );
     }
   }
+
+  async enrollMember(req: Request, res: Response, next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+    const startTime = Date.now();
+
+    try {
+      const { programId, email, firstName, lastName, points, tierId } = req.body;
+
+      if (!programId) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "INVALID_REQUEST",
+              message: "programId is required (PassKit Program ID from your client's program)",
+            },
+            requestId
+          )
+        );
+      }
+
+      if (!email) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "INVALID_REQUEST",
+              message: "email is required for member enrollment",
+            },
+            requestId
+          )
+        );
+      }
+
+      console.log(`[Enroll] Creating member for program: ${programId}, email: ${email}`);
+
+      const result = await passKitService.enrollMember(programId, {
+        email,
+        firstName,
+        lastName,
+        points: points || 0,
+        tierId,
+      });
+
+      if (!result.success) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "ENROLLMENT_FAILED",
+              message: result.error || "Failed to enroll member",
+            },
+            requestId
+          )
+        );
+      }
+
+      const response = createResponse(
+        true,
+        {
+          passkit_internal_id: result.passkit_internal_id,
+          external_id: result.external_id,
+          install_url: result.install_url,
+          programId,
+          email,
+          enrolledAt: new Date().toISOString(),
+        },
+        undefined,
+        requestId
+      );
+
+      response.metadata!.processingTime = Date.now() - startTime;
+
+      return res.status(201).json(response);
+    } catch (error) {
+      console.error("Enroll member error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: "An unexpected error occurred while enrolling the member",
+          },
+          requestId
+        )
+      );
+    }
+  }
 }
 
 export const passKitController = new PassKitController();

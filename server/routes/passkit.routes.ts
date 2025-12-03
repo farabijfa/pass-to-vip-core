@@ -40,4 +40,9 @@ router.post(
   asyncHandler(passKitController.sendPushNotification.bind(passKitController))
 );
 
+router.post(
+  "/enroll",
+  asyncHandler(passKitController.enrollMember.bind(passKitController))
+);
+
 export default router;

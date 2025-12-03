@@ -99,6 +99,7 @@ class LogicService {
       try {
         const syncResult = await passKitService.syncPass({
           passkit_internal_id: rpcResult?.passkit_internal_id,
+          passkit_program_id: rpcResult?.passkit_program_id,
           protocol,
           notification_message: rpcResult?.notification_message,
           new_balance: rpcResult?.new_balance,
