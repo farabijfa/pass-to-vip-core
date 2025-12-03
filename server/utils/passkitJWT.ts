@@ -9,7 +9,7 @@ export function generatePassKitToken(): string | null {
   }
 
   const payload = {
-    key: key,
+    uid: key,  // PassKit requires 'uid' claim, not 'key'
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 60
   };
