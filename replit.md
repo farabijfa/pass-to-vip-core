@@ -189,7 +189,58 @@ PASSKIT_API_SECRET=
 POSTGRID_API_KEY=
 ```
 
+## Bulk Campaign Manager
+
+### Admin Dashboard
+- **URL:** `/admin/campaign`
+- **Authentication:** Basic Auth (default: admin/phygital2024)
+- **Features:**
+  - Drag-and-drop CSV file upload
+  - Configurable program ID, templates, and postcard size
+  - Real-time processing status with results table
+
+### CSV Upload Endpoint
+```bash
+POST /api/campaign/upload-csv
+Content-Type: multipart/form-data
+Authorization: Basic base64(username:password)
+
+file: campaign.csv
+program_id: 4RhsVhHek0dliVogVznjSQ
+front_template_id: template_wUMgpJdU5Hi7tPxXNTgLwj
+back_template_id: template_rBEJn1PtQepWxnKFb4RezV
+size: 9x6
+base_claim_url: https://your-app.replit.app/claim (optional)
+```
+
+### CSV Format
+```csv
+first_name,last_name,email,address,city,state,zip
+John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
+```
+
+### Response
+```json
+{
+  "success": true,
+  "data": {
+    "summary": { "total": 10, "success": 9, "failed": 1 },
+    "results": [
+      { "contact": "John Doe", "success": true, "claimCode": "ABC12345", "postcardId": "postcard_xxx" }
+    ]
+  }
+}
+```
+
 ## Recent Changes
+
+### 2025-12-03 - Bulk Campaign Manager
+- Added multer for CSV file upload handling
+- Created campaign.service.ts with CSV stream processing
+- Created campaign.controller.ts and POST /api/campaign/upload-csv endpoint
+- Built admin dashboard at /admin/campaign with Bootstrap UI
+- Added basic auth middleware for admin routes
+- End-to-end tested: CSV upload → claim codes generated → postcards sent
 
 ### 2025-12-03 - Physical Bridge Complete
 - Added `sendPostcard()` to PostGrid service with front/back template support
