@@ -1,22 +1,21 @@
 import fs from "fs";
 import csv from "csv-parser";
+import { Readable } from "stream";
 import { supabaseService } from "./supabase.service";
 import { postGridService } from "./postgrid.service";
 
 interface CampaignContact {
-  first_name?: string;
-  firstName?: string;
-  last_name?: string;
-  lastName?: string;
-  email?: string;
-  address?: string;
-  addressLine1?: string;
-  address_line_1?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-  postalCode?: string;
-  postal_code?: string;
+  [key: string]: string | undefined;
+}
+
+interface NormalizedContact {
+  firstName: string;
+  lastName: string;
+  email: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
 }
 
 interface CampaignResult {
@@ -41,7 +40,99 @@ interface CampaignOptions {
   baseClaimUrl?: string;
 }
 
+const COLUMN_MAPPINGS: Record<string, string[]> = {
+  firstName: ["first_name", "firstname", "first name", "fname", "given_name", "givenname"],
+  lastName: ["last_name", "lastname", "last name", "lname", "surname", "family_name", "familyname"],
+  email: ["email", "e-mail", "email_address", "emailaddress"],
+  addressLine1: ["address", "addressline1", "address_line_1", "address_line1", "street", "street_address", "addr", "address1"],
+  city: ["city", "town", "locality"],
+  state: ["state", "province", "region", "st"],
+  postalCode: ["zip", "zipcode", "zip_code", "postal_code", "postalcode", "postal"],
+};
+
 class CampaignService {
+  private normalizeColumnName(name: string): string {
+    return name.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  }
+
+  private findColumnValue(row: CampaignContact, targetField: string): string {
+    const variations = COLUMN_MAPPINGS[targetField] || [targetField];
+    
+    for (const key of Object.keys(row)) {
+      const normalizedKey = this.normalizeColumnName(key);
+      if (normalizedKey === this.normalizeColumnName(targetField)) {
+        return (row[key] || "").trim();
+      }
+      for (const variation of variations) {
+        if (normalizedKey === this.normalizeColumnName(variation)) {
+          return (row[key] || "").trim();
+        }
+      }
+    }
+    return "";
+  }
+
+  private normalizeContact(row: CampaignContact): NormalizedContact {
+    return {
+      firstName: this.findColumnValue(row, "firstName"),
+      lastName: this.findColumnValue(row, "lastName"),
+      email: this.findColumnValue(row, "email"),
+      addressLine1: this.findColumnValue(row, "addressLine1"),
+      city: this.findColumnValue(row, "city"),
+      state: this.findColumnValue(row, "state"),
+      postalCode: this.findColumnValue(row, "postalCode"),
+    };
+  }
+
+  private preprocessCsvContent(content: string): string {
+    const lines = content.split(/\r?\n/).filter(line => line.trim());
+    
+    if (lines.length === 0) {
+      return content;
+    }
+
+    const firstLine = lines[0].trim();
+    const isMalformed = firstLine.startsWith('"') && 
+                        firstLine.endsWith('"') && 
+                        !firstLine.includes('","');
+
+    if (!isMalformed) {
+      console.log("📋 CSV format looks standard, processing normally");
+      return content;
+    }
+
+    console.log("🔧 Detected malformed CSV (quoted rows), fixing format...");
+    
+    const fixedLines = lines.map(line => {
+      let trimmed = line.trim();
+      if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+        trimmed = trimmed.slice(1, -1);
+      }
+      return trimmed;
+    });
+
+    return fixedLines.join("\n");
+  }
+
+  private validateCsvHeaders(headers: string[]): { valid: boolean; missing: string[] } {
+    const requiredFields = ["addressLine1", "city", "state", "postalCode"];
+    const missing: string[] = [];
+
+    for (const field of requiredFields) {
+      const variations = COLUMN_MAPPINGS[field] || [field];
+      const found = headers.some(header => {
+        const normalizedHeader = this.normalizeColumnName(header);
+        return variations.some(v => this.normalizeColumnName(v) === normalizedHeader) ||
+               normalizedHeader === this.normalizeColumnName(field);
+      });
+      if (!found) {
+        missing.push(field);
+      }
+    }
+
+    return { valid: missing.length === 0, missing };
+  }
+
   async processBatchUpload(options: CampaignOptions): Promise<CampaignResult> {
     const {
       filePath,
@@ -59,134 +150,169 @@ class CampaignService {
       const results: CampaignResult["results"] = [];
       let successCount = 0;
       let failedCount = 0;
+      let headers: string[] = [];
 
       console.log(`📂 Reading CSV file: ${filePath}`);
 
-      fs.createReadStream(filePath)
-        .pipe(csv())
-        .on("data", (data: CampaignContact) => rows.push(data))
-        .on("error", (error) => {
-          console.error("❌ CSV parsing error:", error);
-          reject(error);
-        })
-        .on("end", async () => {
-          console.log(`📊 Processing ${rows.length} contacts...`);
-
-          for (const row of rows) {
-            const firstName = row.first_name || row.firstName || "";
-            const lastName = row.last_name || row.lastName || "";
-            const email = row.email || "";
-            const addressLine1 =
-              row.address || row.addressLine1 || row.address_line_1 || "";
-            const city = row.city || "";
-            const state = row.state || "";
-            const postalCode = row.zip || row.postalCode || row.postal_code || "";
-            const contactName = `${firstName} ${lastName}`.trim() || "Unknown";
-
-            if (!addressLine1 || !city || !state || !postalCode) {
-              console.log(`⚠️ Skipping ${contactName}: Missing address info`);
-              results.push({
-                contact: contactName,
-                success: false,
-                error: "Missing required address fields",
+      try {
+        const rawContent = fs.readFileSync(filePath, "utf-8");
+        const fixedContent = this.preprocessCsvContent(rawContent);
+        
+        const stream = Readable.from([fixedContent]);
+        
+        stream
+          .pipe(csv())
+          .on("headers", (h: string[]) => {
+            headers = h;
+            console.log(`📋 Detected columns: ${headers.join(", ")}`);
+            
+            const validation = this.validateCsvHeaders(headers);
+            if (!validation.valid) {
+              console.warn(`⚠️ Warning: Missing recommended columns: ${validation.missing.join(", ")}`);
+            }
+          })
+          .on("data", (data: CampaignContact) => rows.push(data))
+          .on("error", (error) => {
+            console.error("❌ CSV parsing error:", error);
+            reject(new Error(`CSV parsing failed: ${error.message}`));
+          })
+          .on("end", async () => {
+            if (rows.length === 0) {
+              console.error("❌ No data rows found in CSV");
+              resolve({
+                total: 0,
+                success: 0,
+                failed: 0,
+                results: [{
+                  contact: "N/A",
+                  success: false,
+                  error: "No data rows found in CSV file. Check that your file has data and proper headers.",
+                }],
               });
-              failedCount++;
-              continue;
+              return;
+            }
+
+            console.log(`📊 Processing ${rows.length} contacts...`);
+
+            for (const row of rows) {
+              const contact = this.normalizeContact(row);
+              const contactName = `${contact.firstName} ${contact.lastName}`.trim() || "Unknown";
+
+              if (!contact.addressLine1 || !contact.city || !contact.state || !contact.postalCode) {
+                const missingFields: string[] = [];
+                if (!contact.addressLine1) missingFields.push("address");
+                if (!contact.city) missingFields.push("city");
+                if (!contact.state) missingFields.push("state");
+                if (!contact.postalCode) missingFields.push("zip/postal code");
+                
+                console.log(`⚠️ Skipping ${contactName}: Missing ${missingFields.join(", ")}`);
+                results.push({
+                  contact: contactName,
+                  success: false,
+                  error: `Missing required fields: ${missingFields.join(", ")}`,
+                });
+                failedCount++;
+                continue;
+              }
+
+              try {
+                console.log(`🎟️ Generating claim code for ${contactName}...`);
+
+                const claimResult = await supabaseService.generateClaimCode({
+                  passkitProgramId: programId,
+                  contact: {
+                    firstName: contact.firstName,
+                    lastName: contact.lastName,
+                    email: contact.email,
+                    addressLine1: contact.addressLine1,
+                    city: contact.city,
+                    state: contact.state,
+                    postalCode: contact.postalCode,
+                    country: "US",
+                  },
+                });
+
+                if (!claimResult.success || !claimResult.claimCode) {
+                  throw new Error(claimResult.error || "Failed to generate claim code");
+                }
+
+                const claimCode = claimResult.claimCode;
+                const claimUrl = `${baseClaimUrl}/${claimCode}`;
+
+                console.log(`📮 Sending postcard to ${contactName}...`);
+
+                const postcardResult = await postGridService.sendPostcard({
+                  frontTemplateId,
+                  backTemplateId: backTemplateId || frontTemplateId,
+                  size,
+                  recipientAddress: {
+                    firstName: contact.firstName,
+                    lastName: contact.lastName,
+                    addressLine1: contact.addressLine1,
+                    city: contact.city,
+                    state: contact.state,
+                    postalCode: contact.postalCode,
+                    country: "US",
+                  },
+                  claimCode,
+                  claimUrl,
+                  mergeVariables: {
+                    firstName: contact.firstName,
+                    lastName: contact.lastName,
+                    fullName: contactName,
+                    qrCodeUrl: claimUrl,
+                    claimCode,
+                  },
+                });
+
+                if (postcardResult.success) {
+                  console.log(`✅ Success: ${contactName}`);
+                  results.push({
+                    contact: contactName,
+                    success: true,
+                    claimCode,
+                    postcardId: postcardResult.postcardId,
+                  });
+                  successCount++;
+                } else {
+                  throw new Error(postcardResult.error || "PostGrid failed");
+                }
+              } catch (error) {
+                const errorMessage =
+                  error instanceof Error ? error.message : "Unknown error";
+                console.error(`❌ Failed: ${contactName} - ${errorMessage}`);
+                results.push({
+                  contact: contactName,
+                  success: false,
+                  error: errorMessage,
+                });
+                failedCount++;
+              }
             }
 
             try {
-              console.log(`🎟️ Generating claim code for ${contactName}...`);
-
-              const claimResult = await supabaseService.generateClaimCode({
-                passkitProgramId: programId,
-                contact: {
-                  firstName,
-                  lastName,
-                  email,
-                  addressLine1,
-                  city,
-                  state,
-                  postalCode,
-                  country: "US",
-                },
-              });
-
-              if (!claimResult.success || !claimResult.claimCode) {
-                throw new Error(claimResult.error || "Failed to generate claim code");
-              }
-
-              const claimCode = claimResult.claimCode;
-              const claimUrl = `${baseClaimUrl}/${claimCode}`;
-
-              console.log(`📮 Sending postcard to ${contactName}...`);
-
-              const postcardResult = await postGridService.sendPostcard({
-                frontTemplateId,
-                backTemplateId: backTemplateId || frontTemplateId,
-                size,
-                recipientAddress: {
-                  firstName,
-                  lastName,
-                  addressLine1,
-                  city,
-                  state,
-                  postalCode,
-                  country: "US",
-                },
-                claimCode,
-                claimUrl,
-                mergeVariables: {
-                  firstName,
-                  lastName,
-                  fullName: contactName,
-                  qrCodeUrl: claimUrl,
-                  claimCode,
-                },
-              });
-
-              if (postcardResult.success) {
-                console.log(`✅ Success: ${contactName}`);
-                results.push({
-                  contact: contactName,
-                  success: true,
-                  claimCode,
-                  postcardId: postcardResult.postcardId,
-                });
-                successCount++;
-              } else {
-                throw new Error(postcardResult.error || "PostGrid failed");
-              }
-            } catch (error) {
-              const errorMessage =
-                error instanceof Error ? error.message : "Unknown error";
-              console.error(`❌ Failed: ${contactName} - ${errorMessage}`);
-              results.push({
-                contact: contactName,
-                success: false,
-                error: errorMessage,
-              });
-              failedCount++;
+              fs.unlinkSync(filePath);
+              console.log(`🗑️ Cleaned up temp file: ${filePath}`);
+            } catch (e) {
+              console.log(`⚠️ Could not delete temp file: ${filePath}`);
             }
-          }
 
-          try {
-            fs.unlinkSync(filePath);
-            console.log(`🗑️ Cleaned up temp file: ${filePath}`);
-          } catch (e) {
-            console.log(`⚠️ Could not delete temp file: ${filePath}`);
-          }
+            console.log(
+              `📊 Campaign complete: ${successCount}/${rows.length} successful`
+            );
 
-          console.log(
-            `📊 Campaign complete: ${successCount}/${rows.length} successful`
-          );
-
-          resolve({
-            total: rows.length,
-            success: successCount,
-            failed: failedCount,
-            results,
+            resolve({
+              total: rows.length,
+              success: successCount,
+              failed: failedCount,
+              results,
+            });
           });
-        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error("❌ Failed to read CSV file:", errorMessage);
+        reject(new Error(`Failed to read CSV file: ${errorMessage}`));
+      }
     });
   }
 }
