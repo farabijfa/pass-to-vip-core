@@ -3,12 +3,15 @@ import { createServer, type Server } from "http";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import path from "path";
+import fs from "fs";
 import apiRoutes from "./routes/index";
 import claimRoutes from "./routes/claim.routes";
 import { 
   errorHandler, 
   notFoundHandler, 
-  requestIdMiddleware 
+  requestIdMiddleware,
+  basicAuth 
 } from "./middleware";
 import { config } from "./config";
 
@@ -60,6 +63,15 @@ export async function registerRoutes(
   app.use("/api", apiRoutes);
 
   app.use("/claim", claimRoutes);
+
+  app.get("/admin/campaign", basicAuth, (_req, res) => {
+    const adminPath = path.join(process.cwd(), "public", "admin.html");
+    if (fs.existsSync(adminPath)) {
+      res.sendFile(adminPath);
+    } else {
+      res.status(404).send("Admin page not found");
+    }
+  });
 
   app.use("/api/*", notFoundHandler);
 

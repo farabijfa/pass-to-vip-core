@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campaign Manager - Phygital Loyalty</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .card-header {
+      background: rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .form-control, .form-select {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+    .form-control:focus, .form-select:focus {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #0d6efd;
+      color: #fff;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .form-control::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .drop-zone {
+      border: 2px dashed rgba(255, 255, 255, 0.3);
+      border-radius: 10px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #0d6efd;
+      background: rgba(13, 110, 253, 0.1);
+    }
+    .drop-zone.has-file {
+      border-color: #198754;
+      background: rgba(25, 135, 84, 0.1);
+    }
+    .results-table {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .badge-success { background: #198754; }
+    .badge-error { background: #dc3545; }
+    .spinner-border {
+      width: 1rem;
+      height: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="text-center mb-4">
+          <h1 class="display-5 fw-bold">
+            <i class="bi bi-envelope-paper me-2"></i>Campaign Manager
+          </h1>
+          <p class="text-muted">Upload a CSV to send personalized postcards with unique claim codes</p>
+        </div>
+
+        <div class="card shadow-lg mb-4">
+          <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Campaign Settings</h5>
+          </div>
+          <div class="card-body">
+            <form id="campaignForm">
+              <div class="row g-3 mb-4">
+                <div class="col-12">
+                  <label class="form-label">PassKit Program ID</label>
+                  <input type="text" class="form-control" id="programId" 
+                         placeholder="e.g., 4RhsVhHek0dliVogVznjSQ" required
+                         value="4RhsVhHek0dliVogVznjSQ">
+                  <div class="form-text text-muted">The membership program for claim code enrollment</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Front Template ID</label>
+                  <input type="text" class="form-control" id="frontTemplateId" 
+                         placeholder="template_xxx" required
+                         value="template_wUMgpJdU5Hi7tPxXNTgLwj">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Back Template ID</label>
+                  <input type="text" class="form-control" id="backTemplateId" 
+                         placeholder="template_xxx" required
+                         value="template_rBEJn1PtQepWxnKFb4RezV">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Postcard Size</label>
+                  <select class="form-select" id="size">
+                    <option value="6x4">6x4 - Standard</option>
+                    <option value="9x6" selected>9x6 - Mid-size</option>
+                    <option value="11x6">11x6 - Oversized</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Base Claim URL</label>
+                  <input type="text" class="form-control" id="baseClaimUrl" 
+                         placeholder="https://your-app.replit.app/claim">
+                  <div class="form-text text-muted">Leave empty to use default</div>
+                </div>
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label">Upload CSV File</label>
+                <div class="drop-zone" id="dropZone">
+                  <i class="bi bi-cloud-upload display-4 mb-3 d-block"></i>
+                  <p class="mb-1">Drag & drop your CSV file here</p>
+                  <p class="text-muted small mb-0">or click to browse</p>
+                  <input type="file" id="csvFile" accept=".csv" class="d-none">
+                </div>
+                <div id="fileInfo" class="mt-2 text-success d-none">
+                  <i class="bi bi-file-earmark-check me-1"></i>
+                  <span id="fileName"></span>
+                </div>
+                <div class="form-text text-muted mt-2">
+                  CSV Headers: first_name, last_name, email, address, city, state, zip
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-lg w-100" id="submitBtn">
+                <i class="bi bi-send me-2"></i>Launch Campaign
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card shadow-lg d-none" id="resultsCard">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-clipboard-data me-2"></i>Campaign Results</h5>
+            <span id="resultsSummary" class="badge bg-primary"></span>
+          </div>
+          <div class="card-body">
+            <div class="results-table">
+              <table class="table table-dark table-striped table-hover mb-0">
+                <thead class="sticky-top" style="background: rgba(30, 30, 50, 0.95);">
+                  <tr>
+                    <th>Contact</th>
+                    <th>Claim Code</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const csvFile = document.getElementById('csvFile');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const form = document.getElementById('campaignForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const resultsCard = document.getElementById('resultsCard');
+    const resultsBody = document.getElementById('resultsBody');
+    const resultsSummary = document.getElementById('resultsSummary');
+
+    dropZone.addEventListener('click', () => csvFile.click());
+    
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length && files[0].name.endsWith('.csv')) {
+        csvFile.files = files;
+        showFileSelected(files[0]);
+      }
+    });
+    
+    csvFile.addEventListener('change', (e) => {
+      if (e.target.files.length) {
+        showFileSelected(e.target.files[0]);
+      }
+    });
+    
+    function showFileSelected(file) {
+      dropZone.classList.add('has-file');
+      fileInfo.classList.remove('d-none');
+      fileName.textContent = file.name;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (!csvFile.files.length) {
+        alert('Please select a CSV file');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', csvFile.files[0]);
+      formData.append('program_id', document.getElementById('programId').value);
+      formData.append('front_template_id', document.getElementById('frontTemplateId').value);
+      formData.append('back_template_id', document.getElementById('backTemplateId').value);
+      formData.append('size', document.getElementById('size').value);
+      
+      const baseUrl = document.getElementById('baseClaimUrl').value;
+      if (baseUrl) {
+        formData.append('base_claim_url', baseUrl);
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border me-2"></span>Processing...';
+      resultsCard.classList.add('d-none');
+
+      try {
+        const response = await fetch('/api/campaign/upload-csv', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        
+        if (data.data) {
+          displayResults(data.data);
+        } else if (data.error) {
+          alert(`Error: ${data.error.message}`);
+        }
+      } catch (error) {
+        alert(`Request failed: ${error.message}`);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-send me-2"></i>Launch Campaign';
+      }
+    });
+
+    function displayResults(data) {
+      resultsCard.classList.remove('d-none');
+      resultsSummary.textContent = `${data.summary.success}/${data.summary.total} Successful`;
+      
+      resultsBody.innerHTML = data.results.map(r => `
+        <tr>
+          <td>${r.contact}</td>
+          <td><code>${r.claimCode || '-'}</code></td>
+          <td>
+            ${r.success 
+              ? '<span class="badge badge-success">Sent</span>' 
+              : `<span class="badge badge-error" title="${r.error}">Failed</span>`
+            }
+          </td>
+        </tr>
+      `).join('');
+      
+      resultsCard.scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
