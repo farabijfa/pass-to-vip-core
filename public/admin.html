@@ -250,24 +250,34 @@
     function selectResourceType(type) {
       resourceTypeInput.value = type;
       
+      const frontTemplateEl = document.getElementById('frontTemplateId');
+      const backTemplateEl = document.getElementById('backTemplateId');
+      const letterTemplateEl = document.getElementById('letterTemplateId');
+      
       if (type === 'postcard') {
         postcardOption.classList.add('selected');
         letterOption.classList.remove('selected');
         postcardTemplates.classList.remove('d-none');
         letterTemplates.classList.add('d-none');
         postcardSize.classList.remove('d-none');
-        document.getElementById('frontTemplateId').required = true;
-        document.getElementById('backTemplateId').required = true;
-        document.getElementById('letterTemplateId').required = false;
+        frontTemplateEl.required = true;
+        backTemplateEl.required = true;
+        letterTemplateEl.required = false;
+        letterTemplateEl.disabled = true;
+        frontTemplateEl.disabled = false;
+        backTemplateEl.disabled = false;
       } else {
         letterOption.classList.add('selected');
         postcardOption.classList.remove('selected');
         postcardTemplates.classList.add('d-none');
         letterTemplates.classList.remove('d-none');
         postcardSize.classList.add('d-none');
-        document.getElementById('frontTemplateId').required = false;
-        document.getElementById('backTemplateId').required = false;
-        document.getElementById('letterTemplateId').required = true;
+        frontTemplateEl.required = false;
+        backTemplateEl.required = false;
+        letterTemplateEl.required = true;
+        letterTemplateEl.disabled = false;
+        frontTemplateEl.disabled = true;
+        backTemplateEl.disabled = true;
       }
     }
 
@@ -313,6 +323,21 @@
       }
 
       const resourceType = resourceTypeInput.value;
+      
+      if (resourceType === 'letter') {
+        const letterTemplate = document.getElementById('letterTemplateId').value;
+        if (!letterTemplate) {
+          alert('Please enter a Letter Template ID');
+          return;
+        }
+      } else {
+        const frontTemplate = document.getElementById('frontTemplateId').value;
+        if (!frontTemplate) {
+          alert('Please enter a Front Template ID');
+          return;
+        }
+      }
+
       const formData = new FormData();
       formData.append('file', csvFile.files[0]);
       formData.append('program_id', document.getElementById('programId').value);

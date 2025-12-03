@@ -279,7 +279,7 @@ class CampaignService {
                   });
                   mailResult = {
                     success: letterResult.success,
-                    mailId: letterResult.letterId,
+                    mailId: letterResult.letterId || undefined,
                     error: letterResult.error,
                   };
                 } else {

@@ -196,6 +196,7 @@ POSTGRID_API_KEY=
 - **Authentication:** Basic Auth (default: admin/phygital2024)
 - **Features:**
   - Drag-and-drop CSV file upload
+  - Toggle between Postcards and Letters
   - Configurable program ID, templates, and postcard size
   - Real-time processing status with results table
 
@@ -205,12 +206,19 @@ POST /api/campaign/upload-csv
 Content-Type: multipart/form-data
 Authorization: Basic base64(username:password)
 
+# Common fields
 file: campaign.csv
 program_id: 4RhsVhHek0dliVogVznjSQ
+resource_type: postcard | letter
+base_claim_url: https://your-app.replit.app/claim (optional)
+
+# Postcard-specific fields
 front_template_id: template_wUMgpJdU5Hi7tPxXNTgLwj
 back_template_id: template_rBEJn1PtQepWxnKFb4RezV
-size: 9x6
-base_claim_url: https://your-app.replit.app/claim (optional)
+size: 6x4 | 9x6 | 11x6
+
+# Letter-specific fields
+template_id: template_xxx
 ```
 
 ### CSV Format
@@ -233,6 +241,13 @@ John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
 ```
 
 ## Recent Changes
+
+### 2025-12-03 - Letter Support Added
+- Added `sendLetter()` to PostGrid service with letter-specific options (addressPlacement, doubleSided, color)
+- Updated campaign.service.ts to accept `resourceType` config and route to postcard or letter
+- Updated campaign.controller.ts to accept `resource_type` parameter
+- Updated admin dashboard with Postcard/Letter toggle selector and conditional form fields
+- Added PostGridLetter schema and types to shared/schema.ts
 
 ### 2025-12-03 - Bulk Campaign Manager
 - Added multer for CSV file upload handling
