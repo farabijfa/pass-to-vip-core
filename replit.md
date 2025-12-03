@@ -136,8 +136,16 @@ POST /api/mail/campaign
 
 ### PostGrid Template Variables
 - `{{firstName}}`, `{{lastName}}`, `{{fullName}}`
-- `{{qrCodeUrl}}` - The claim URL for QR code
+- `{{qrCodeUrl}}` - QR code image URL (generated via api.qrserver.com)
 - `{{claimCode}}` - Raw claim code
+
+### QR Code Generation
+The system automatically converts claim URLs to printable QR code images using `api.qrserver.com`:
+```
+Claim URL: https://app.replit.app/claim/ABC123
+QR Image:  https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=https%3A%2F%2Fapp.replit.app%2Fclaim%2FABC123
+```
+This ensures PostGrid templates receive actual image URLs for the `<img src="{{qrCodeUrl}}">` tags.
 
 ## Supabase RPC Functions
 
@@ -241,6 +249,13 @@ John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
 ```
 
 ## Recent Changes
+
+### 2025-12-03 - QR Code Image Generation Fix
+- Fixed PostGrid templates showing blank white box instead of QR code
+- Campaign service now generates actual QR code image URLs using api.qrserver.com
+- `{{qrCodeUrl}}` merge variable now contains PNG image URL, not text link
+- Added route validation middleware for resource_type and postcard size parameters
+- Set APP_URL environment variable for proper claim URL generation
 
 ### 2025-12-03 - Letter Support Added
 - Added `sendLetter()` to PostGrid service with letter-specific options (addressPlacement, doubleSided, color)
