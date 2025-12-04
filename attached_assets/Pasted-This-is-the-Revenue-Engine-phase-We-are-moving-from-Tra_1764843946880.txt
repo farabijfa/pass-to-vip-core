@@ -1,0 +1,87 @@
+This is the "Revenue Engine" phase. We are moving from Transactional (responding to scans) to Engagement (proactive retention).
+
+Here is the Lead Developer Execution Plan. This implementation is designed for scale (batching requests) and auditability (logging every message sent).
+🟢 Phase 1: Database Architecture (Supabase)
+
+We need to track who gets messaged and why. We also need the trigger data (Birthdays).
+
+Action: Go to Supabase SQL Editor and run this script to upgrade your schema.
+SQL
+
+-- 1. Upgrade Users Table for Marketing
+ALTER TABLE users 
+ADD COLUMN birth_date DATE,
+ADD COLUMN marketing_opt_in BOOLEAN DEFAULT TRUE,
+ADD COLUMN phone_number TEXT; -- Useful for SMS fallback later
+
+-- 2. Create the Campaign Audit Log
+-- This ensures you can prove to a client: "Yes, we sent 5,000 messages on Tuesday."
+CREATE TABLE notification_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    program_id UUID REFERENCES programs(id),
+    campaign_name TEXT,              -- e.g., "Flash Sale" or "Birthday Bot"
+    recipient_count INT DEFAULT 0,
+    success_count INT DEFAULT 0,
+    failed_count INT DEFAULT 0,
+    message_content TEXT,
+    target_segment TEXT,             -- 'ALL', 'VIP', 'BIRTHDAY'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Performance Index
+-- Crucial for the Birthday Bot to run instantly, even with 1M users.
+CREATE INDEX idx_users_birthday 
+ON users (EXTRACT(MONTH FROM birth_date), EXTRACT(DAY FROM birth_date));
+
+-- 4. RLS Policies (Security)
+ALTER TABLE notification_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can view their program logs" 
+ON notification_logs FOR SELECT 
+USING (
+  program_id IN (
+    SELECT program_id FROM admin_profiles WHERE id = auth.uid()
+  )
+);
+
+🟢 Phase 2: The Replit Prompt (Instruction Set)
+
+Use this exact prompt in your Replit Agent. It contains specific architectural requirements for batching and error handling that a standard AI prompt might miss.
+
+    Prompt: "I need to implement a High-Scale Notification Service.
+
+    1. Create services/notification.service.ts:
+
+        Imports: supabase, passkitService.
+
+        Batching Logic: When sending broadcasts, process users in chunks of 50 to avoid hitting PassKit API rate limits. Use Promise.all for concurrency within chunks.
+
+        Function sendBroadcast(programId, message, segment?):
+
+            Query passes_master for active passes linked to the program.
+
+            If segment is 'VIP', filter for tier_points > 1000.
+
+            Iterate and call passkitService.pushMessage(passkitId, message).
+
+            Log results to notification_logs.
+
+        Function runBirthdayBot():
+
+            Query users where birth_date matches TODAY.
+
+            Award 50 points using the process_membership_transaction RPC (via Supabase).
+
+            Send push notification: 'Happy Birthday! 🎂 We added 50 points to your card.'
+
+    2. Update services/passkitService.ts:
+
+        Add pushMessage(passkitInternalId, message) function.
+
+        It should hit the PassKit PUT endpoint to update only the changeMessage field without altering points.
+
+    3. Create Controller & Routes:
+
+        POST /api/notify/broadcast (Protected by API Key).
+
+        POST /api/notify/birthday-run (Protected by API Key - for Cron Job)."
