@@ -187,6 +187,54 @@ This ensures PostGrid templates receive actual image URLs for the `<img src="{{q
 | COUPON | ✅ LIVE | Issue and redeem |
 | EVENT_TICKET | ⏳ PLACEHOLDER | Requires Venue + Event setup |
 
+## Tenant Provisioning (Multi-Tenant SaaS)
+
+### Admin API Endpoints
+All admin endpoints require API key authentication via `X-API-Key` header.
+Default API key: `pk_phygital_admin_2024` (configurable via `ADMIN_API_KEY` env var)
+
+- `POST /api/admin/provision` - Create new tenant (auth user + program + admin_profiles)
+- `GET /api/admin/tenants` - List all tenants
+- `GET /api/admin/tenants/:userId` - Get specific tenant
+- `DELETE /api/admin/tenants/:userId` - Delete tenant
+
+### Provision Request
+```bash
+POST /api/admin/provision
+X-API-Key: pk_phygital_admin_2024
+Content-Type: application/json
+
+{
+  "businessName": "Acme Coffee",
+  "email": "admin@acme.com",
+  "password": "securepassword123",
+  "passkitProgramId": "4RhsVhHek0dliVogVznjSQ",
+  "protocol": "MEMBERSHIP"
+}
+```
+
+### Provision Response
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "uuid-here",
+    "programId": "uuid-here",
+    "email": "admin@acme.com",
+    "businessName": "Acme Coffee"
+  },
+  "metadata": {
+    "processingTime": 245
+  }
+}
+```
+
+### Provisioning Flow
+1. Creates Supabase Auth user with email/password
+2. Creates program record linked to PassKit program ID
+3. Creates admin_profiles record linking user to program
+4. Rollback on failure: If any step fails, previous steps are undone
+
 ## Environment Variables
 
 ```
@@ -195,6 +243,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 PASSKIT_API_KEY=
 PASSKIT_API_SECRET=
 POSTGRID_API_KEY=
+ADMIN_API_KEY=pk_phygital_admin_2024
 ```
 
 ## Bulk Campaign Manager
@@ -249,6 +298,13 @@ John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
 ```
 
 ## Recent Changes
+
+### 2025-12-04 - Multi-Tenant SaaS Foundation
+- Created admin.service.ts with createTenant function (auth user + program + admin_profiles)
+- Created admin.controller.ts with provisionTenant handler
+- Created admin.routes.ts with POST /provision protected by API key
+- Added checkApiKey middleware for securing admin endpoints
+- Supports automatic rollback on failure during tenant provisioning
 
 ### 2025-12-03 - QR Code Image Generation Fix
 - Fixed PostGrid templates showing blank white box instead of QR code
