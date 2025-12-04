@@ -263,7 +263,8 @@ class AdminService {
             id,
             name,
             passkit_program_id,
-            protocol
+            protocol,
+            is_suspended
           )
         `)
         .order("created_at", { ascending: false });
