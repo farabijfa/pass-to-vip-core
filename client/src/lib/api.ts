@@ -184,7 +184,7 @@ export const memberApi = {
       return { success: false, error: { code: "NOT_FOUND", message: "Member not found" } };
     }
     return apiCall<{ members: Member[]; count: number }>(`/api/client/members?q=${encodeURIComponent(externalId)}`).then(res => {
-      if (res.success && res.data?.members?.length > 0) {
+      if (res.success && res.data && res.data.members && res.data.members.length > 0) {
         return { success: true, data: res.data.members[0] };
       }
       return { success: false, error: { code: "NOT_FOUND", message: "Member not found" } };

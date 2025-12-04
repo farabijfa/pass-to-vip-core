@@ -51,8 +51,21 @@ The system dynamically routes POS actions based on predefined protocols:
 - `EVENT_TICKET`: Handles one-time check-ins via `process_one_time_use` RPC.
 - `COUPON`: Manages coupon issue/redeem via `process_one_time_use` RPC.
 
+### Client API Endpoints
+The system includes a React client portal with the following authenticated endpoints:
+- **POST /api/client/login** - Authenticates via Supabase and returns JWT token
+- **GET /api/client/me** - Returns user profile and program context
+- **GET /api/client/analytics** - Returns member counts (total, active, churned) by enrollment source
+- **GET /api/client/members** - Returns paginated members list with search support
+
+### Test Data
+The seed script (`scripts/seed-members.ts`) can be used to populate test members for development:
+```bash
+npx tsx scripts/seed-members.ts <program_id>
+```
+
 ### UI/UX Decisions
-The project includes an admin dashboard (located in `public/`) and integrates with external platforms like WeWeb for client and program management. The design emphasizes clear data presentation for customer and program statistics.
+The project includes an admin dashboard (located in `public/`) and a React client portal (`client/`) for program managers. The design emphasizes clear data presentation for customer and program statistics.
 
 ### Security Features
 - **Multi-Tenant Isolation:** Ensures data separation between clients.
