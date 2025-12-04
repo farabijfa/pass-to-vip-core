@@ -123,6 +123,68 @@ class NotificationController {
     }
   }
 
+  async testBirthdayBot(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const { testDate } = req.query;
+      
+      console.log("🧪 Birthday Bot TEST (Dry Run) triggered via API");
+      
+      let validatedTestDate: string | undefined;
+      if (testDate) {
+        const parsed = new Date(testDate as string);
+        if (isNaN(parsed.getTime())) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: "INVALID_DATE",
+              message: "Invalid testDate format. Use YYYY-MM-DD format.",
+            },
+          });
+          return;
+        }
+        validatedTestDate = testDate as string;
+        console.log(`   Using test date: ${validatedTestDate}`);
+      }
+
+      const result = await notificationService.runBirthdayBot({
+        dryRun: true,
+        testDate: validatedTestDate,
+      });
+
+      const processingTime = Date.now() - startTime;
+
+      res.status(200).json({
+        success: true,
+        message: "Dry run completed - no actual changes were made",
+        data: {
+          programsProcessed: result.programsProcessed,
+          processed: result.processed,
+          successCount: result.successCount,
+          failedCount: result.failedCount,
+          alreadyGifted: result.alreadyGifted,
+          details: result.details,
+        },
+        metadata: { 
+          processingTime,
+          dryRun: true,
+          testDate: testDate || new Date().toISOString().split("T")[0],
+        },
+      });
+
+    } catch (error) {
+      console.error("Birthday Bot test error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+    }
+  }
+
   async getCampaignLogs(req: Request, res: Response): Promise<void> {
     try {
       const { programId, limit } = req.query;

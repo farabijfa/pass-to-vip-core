@@ -1,0 +1,100 @@
+Step 3: The "Foolproof" Birthday Bot (Replit)
+
+This is the core logic. It runs daily, checks which Programs are active, finds their specific birthday users, and logs the result.
+
+Replit AI Instruction:
+
+    "Rewrite services/notification.service.ts -> runBirthdayBot.
+
+    Logic Flow:
+
+        Fetch ALL Programs where birthday_bot_enabled is TRUE.
+
+        Loop through each Program.
+
+        For that Program, find active passes (status='INSTALLED') where the linked User's birthday matches TODAY (Month/Day).
+
+        Crucial: Filter out anyone present in birthday_logs for this Year (Idempotency).
+
+        Execution:
+
+            If program.birthday_reward_points > 0: Call process_membership_transaction (RPC) to add points.
+
+            Call passkitService.pushMessage with program.birthday_message.
+
+            Insert record into birthday_logs to mark as done."
+
+The Robust Code:
+TypeScript
+
+/* services/notification.service.ts */
+exports.runBirthdayBot = async () => {
+  console.log("🎂 Starting Daily Birthday Check...");
+  
+  // 1. Get Programs that WANT to send gifts
+  const { data: programs } = await supabase
+    .from('programs')
+    .select('*')
+    .eq('birthday_bot_enabled', true);
+
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const currentDay = today.getDate();
+  const currentYear = today.getFullYear();
+
+  for (const prog of programs) {
+    console.log(`Checking Program: ${prog.name}`);
+
+    // 2. Find Birthday People for THIS Program
+    // We join passes -> users and filter by date
+    const { data: candidates } = await supabase
+      .from('passes_master')
+      .select(`
+        id, passkit_internal_id, external_id,
+        users!inner (birth_date)
+      `)
+      .eq('program_id', prog.id)
+      .eq('status', 'INSTALLED')
+      // Note: In production, use an RPC for date filtering to be faster
+      // For MVP, we filter in code if list is <10k
+      .not('users.birth_date', 'is', null);
+
+    // Filter by Month/Day in JS (Reliable for MVP)
+    const birthdayPasses = candidates.filter(p => {
+        const d = new Date(p.users.birth_date);
+        return d.getMonth() + 1 === currentMonth && d.getDate() === currentDay;
+    });
+
+    for (const pass of birthdayPasses) {
+        try {
+            // 3. Idempotency Check (Did we already gift them this year?)
+            const { error: logError } = await supabase
+                .from('birthday_logs')
+                .insert({ pass_id: pass.id, program_id: prog.id, year: currentYear });
+
+            if (logError) continue; // Skip if already exists (Unique Constraint violation)
+
+            // 4. Give Points (If configured)
+            if (prog.birthday_reward_points > 0) {
+                await supabase.rpc('process_membership_transaction', {
+                    p_external_id: pass.external_id,
+                    p_action: 'MEMBER_EARN',
+                    p_amount: prog.birthday_reward_points
+                });
+            }
+
+            // 5. Send Notification
+            await passkitService.pushMessage(
+                pass.passkit_internal_id, 
+                'MEMBERSHIP', 
+                prog.birthday_message
+            );
+            
+            console.log(`✅ Sent Birthday Gift to ${pass.external_id}`);
+
+        } catch (err) {
+            console.error(`❌ Failed for ${pass.external_id}:`, err.message);
+        }
+    }
+  }
+};

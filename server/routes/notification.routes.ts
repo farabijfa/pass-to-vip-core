@@ -17,6 +17,12 @@ router.post(
 );
 
 router.get(
+  "/birthday-bot/test",
+  checkApiKey,
+  notificationController.testBirthdayBot.bind(notificationController)
+);
+
+router.get(
   "/logs",
   checkApiKey,
   notificationController.getCampaignLogs.bind(notificationController)

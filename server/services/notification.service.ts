@@ -42,6 +42,19 @@ interface BirthdayBotResult {
   programsProcessed: number;
   campaignLogId?: string;
   error?: string;
+  dryRun?: boolean;
+  details?: BirthdayDetail[];
+}
+
+interface BirthdayDetail {
+  passId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  programName: string;
+  pointsAwarded: number;
+  status: "success" | "skipped" | "failed";
+  reason?: string;
 }
 
 interface ProgramConfig {
@@ -220,19 +233,26 @@ class NotificationService {
     }
   }
 
-  async runBirthdayBot(): Promise<BirthdayBotResult> {
-    console.log("🎂 Running Birthday Bot (Configuration-Driven)...");
-    const today = new Date();
+  async runBirthdayBot(options: { dryRun?: boolean; testDate?: string } = {}): Promise<BirthdayBotResult> {
+    const { dryRun = false, testDate } = options;
+    
+    console.log(`🎂 Running Birthday Bot (Configuration-Driven)${dryRun ? " [DRY RUN]" : ""}...`);
+    
+    const today = testDate ? new Date(testDate) : new Date();
     const month = today.getMonth() + 1;
     const day = today.getDate();
     const year = today.getFullYear();
     console.log(`   Looking for birthdays: Month ${month}, Day ${day}, Year ${year}`);
+    if (dryRun) {
+      console.log("   ⚠️ DRY RUN MODE - No actual changes will be made");
+    }
 
     let totalProcessed = 0;
     let totalSuccess = 0;
     let totalFailed = 0;
     let totalAlreadyGifted = 0;
     let programsProcessed = 0;
+    const details: BirthdayDetail[] = [];
 
     try {
       const client = this.getClient();
@@ -324,8 +344,26 @@ class NotificationService {
 
         for (const pass of eligiblePasses as EligiblePass[]) {
           totalProcessed++;
+          const detail: BirthdayDetail = {
+            passId: pass.id,
+            email: pass.email || "unknown",
+            firstName: pass.first_name || "Unknown",
+            lastName: pass.last_name || "",
+            programName: program.name,
+            pointsAwarded: program.birthday_reward_points,
+            status: "failed",
+          };
 
           try {
+            if (dryRun) {
+              console.log(`   🔍 [DRY RUN] Would gift ${pass.first_name} ${pass.last_name} (${pass.email}) - ${program.birthday_reward_points} points`);
+              detail.status = "success";
+              detail.reason = "Dry run - would be processed";
+              details.push(detail);
+              totalSuccess++;
+              continue;
+            }
+
             const { data: logResult, error: logError } = await client
               .from("birthday_logs")
               .upsert(
@@ -342,12 +380,17 @@ class NotificationService {
 
             if (logError && logError.code !== "23505") {
               console.error(`   ❌ Failed to log birthday for ${pass.email}:`, logError.message);
+              detail.reason = `Log error: ${logError.message}`;
+              details.push(detail);
               totalFailed++;
               continue;
             }
 
             if (!logResult) {
               console.log(`   ⏭️ Skipping ${pass.first_name} ${pass.last_name} - already gifted this year`);
+              detail.status = "skipped";
+              detail.reason = "Already gifted this year";
+              details.push(detail);
               totalAlreadyGifted++;
               continue;
             }
@@ -363,6 +406,8 @@ class NotificationService {
             if (rpcError) {
               console.error(`   ❌ Failed to award points to ${pass.email}:`, rpcError.message);
               await client.from("birthday_logs").delete().eq("id", logResult.id);
+              detail.reason = `RPC error: ${rpcError.message}`;
+              details.push(detail);
               totalFailed++;
               continue;
             }
@@ -376,33 +421,43 @@ class NotificationService {
             }
 
             console.log(`   🎁 Awarded ${program.birthday_reward_points} points to ${pass.first_name} ${pass.last_name}`);
+            detail.status = "success";
+            detail.reason = "Points awarded and notification sent";
+            details.push(detail);
             totalSuccess++;
 
           } catch (error) {
             console.error(`   ❌ Error processing ${pass.email}:`, error);
+            detail.reason = `Error: ${error instanceof Error ? error.message : "Unknown"}`;
+            details.push(detail);
             totalFailed++;
           }
         }
       }
 
-      const { data: logData, error: logError } = await client
-        .from("notification_logs")
-        .insert({
-          campaign_name: "Birthday Bot (Multi-Program)",
-          recipient_count: totalProcessed,
-          success_count: totalSuccess,
-          failed_count: totalFailed,
-          message_content: `Processed ${programsProcessed} programs, ${totalAlreadyGifted} already gifted`,
-          target_segment: "BIRTHDAY",
-        })
-        .select("id")
-        .single();
+      let campaignLogId: string | undefined;
+      
+      if (!dryRun) {
+        const { data: logData, error: logError } = await client
+          .from("notification_logs")
+          .insert({
+            campaign_name: "Birthday Bot (Multi-Program)",
+            recipient_count: totalProcessed,
+            success_count: totalSuccess,
+            failed_count: totalFailed,
+            message_content: `Processed ${programsProcessed} programs, ${totalAlreadyGifted} already gifted`,
+            target_segment: "BIRTHDAY",
+          })
+          .select("id")
+          .single();
 
-      if (logError) {
-        console.error("⚠️ Failed to log birthday campaign:", logError.message);
+        if (logError) {
+          console.error("⚠️ Failed to log birthday campaign:", logError.message);
+        }
+        campaignLogId = logData?.id;
       }
 
-      console.log(`\n✅ Birthday Bot complete:`);
+      console.log(`\n✅ Birthday Bot complete${dryRun ? " [DRY RUN]" : ""}:`);
       console.log(`   Programs: ${programsProcessed}`);
       console.log(`   Processed: ${totalProcessed}`);
       console.log(`   Success: ${totalSuccess}`);
@@ -416,7 +471,9 @@ class NotificationService {
         failedCount: totalFailed,
         alreadyGifted: totalAlreadyGifted,
         programsProcessed,
-        campaignLogId: logData?.id,
+        campaignLogId,
+        dryRun,
+        details: dryRun ? details : undefined,
       };
 
     } catch (error) {
@@ -429,6 +486,8 @@ class NotificationService {
         alreadyGifted: totalAlreadyGifted,
         programsProcessed,
         error: error instanceof Error ? error.message : "Unknown error",
+        dryRun,
+        details: dryRun ? details : undefined,
       };
     }
   }
