@@ -1,0 +1,95 @@
+🟢 Step 1: The Replit Agent Prompt
+
+Copy and paste this entire block into your Replit Agent:
+
+    "Act as the Lead QA Engineer. I need a comprehensive scripts/prod-validation.ts file to certify the system is ready for launch.
+
+    Task: Create a script that runs a sequential integration test against http://localhost:5000 (or the local port).
+
+    Requirements:
+
+        Dependencies: Use axios for requests and colors (or standard console logs with emojis) for output.
+
+        Config: Read TEST_API_KEY from process.env. If missing, warn the user.
+
+        The Test Sequence (Must run in this order):
+
+            STEP 1: Onboarding (Agency Role)
+
+                Call POST /api/admin/provision with body { businessName: "Validation Pizza", email: "val_" + Date.now() + "@test.com", password: "test", protocol: "MEMBERSHIP", passkitId: "pk_val_123" }.
+
+                Verify: Returns HTTP 200 and a valid programId. Save this programId for later steps.
+
+            STEP 2: The Campaign (Agency Role)
+
+                Mock a CSV upload to POST /api/campaign/upload-csv.
+
+                Use form-data logic to send a dummy CSV string: first_name,email\nTestUser,test@user.com.
+
+                Params: program_id (from Step 1), resource_type: 'letter'.
+
+                Verify: Returns HTTP 200.
+
+                Crucial: Since we can't scrape the DB easily here, we will manually create a test pass for the next steps using the programId.
+
+            STEP 3: The Bridge (End User Role)
+
+                Create a dummy pass in DB (via a direct helper function or by hitting the POST /api/pos/action endpoint with a new external_id 'VAL-TEST-001' and action 'INSTALL' if supported, OR just manually assume 'VAL-TEST-001' works if your system auto-enrolls).
+
+                Actually, let's use the POS endpoint to 'enroll' if possible, or just skip to POS testing with a known ID.
+
+                Action: Call GET /claim/VAL-TEST-001.
+
+                Verify: It redirects (Status 302 or 200 with HTML) to PassKit.
+
+            STEP 4: POS Transactions (Staff Role)
+
+                Earn: POST /api/pos/action | Body: { external_id: "VAL-TEST-001", action: "MEMBER_EARN", amount: 100 }. Verify new_balance: 100.
+
+                Redeem: POST /api/pos/action | Body: { external_id: "VAL-TEST-001", action: "MEMBER_REDEEM", amount: 50 }. Verify new_balance: 50.
+
+                Fail Check: Redeem 1000 points. Verify HTTP 400 'Insufficient points'.
+
+            STEP 5: Notifications (Marketing Role)
+
+                Dry Run: POST /api/notify/broadcast/test | Body: { programId: [programId], message: "Test", dryRun: true }. Verify success: true.
+
+            STEP 6: The Kill Switch (Super Admin)
+
+                Call PATCH /api/programs/[programId] to set { is_suspended: true }.
+
+                Retry the Earn transaction from Step 4.
+
+                Verify: It FAILS with HTTP 403 or 400 ('Program Suspended').
+
+        Reporting:
+
+            Log [PASS] Step Name in Green for success.
+
+            Log [FAIL] Step Name - Reason in Red for failure.
+
+            Exit with code 1 if any step fails."
+
+🟢 Step 2: How to Run It
+
+Once the Agent creates the file, perform the Final Certification:
+
+    Open Shell: In Replit, open a new Shell tab.
+
+    Install Test Tools:
+    Bash
+
+npm install colors form-data
+
+Run the Validator:
+Bash
+
+    npx ts-node scripts/prod-validation.ts
+
+🟢 Step 3: Interpret Your Scorecard
+
+    If you see 6 Green Checks: ✅ ALL SYSTEMS GO. Your code is handling the full lifecycle correctly.
+
+    If Step 6 (Kill Switch) fails: It means your logic.service.ts isn't checking the is_suspended flag yet. (We discussed adding this).
+
+    If Step 2 (Campaign) fails: It usually means the form-data construction in the test script is tricky. If this happens, don't worry—you manually verified the CSV upload earlier.

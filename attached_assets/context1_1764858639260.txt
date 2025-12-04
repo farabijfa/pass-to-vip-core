@@ -1,0 +1,142 @@
+This is the Final Acceptance Test (FAT). We are going to simulate a "Day in the Life" of your entire platform, covering every single role: The Agency (You), The Client (Business), and The Customer (End User).
+
+We will write a Master Verification Script in Replit that programmatically tests every API endpoint, logic branch, and failure scenario.
+
+🟢 The Strategy: "Trust, but Verify"
+Instead of manually clicking buttons, we will force the code to prove it is ready. We will test 7 Core Workflows in one go.
+
+Onboarding: Can we create a new business securely?
+Campaigns: Can we upload data and generate valid letters?
+The Bridge: Do the QR codes actually redirect to PassKit?
+POS Operations: Do points, coupons, and logic routers work?
+Notifications: Do broadcasts and dry-runs function safely?
+Lifecycle: Does the webhook correctly mark users as "Churned"?
+Security: Does the "Kill Switch" actually stop a suspended client?
+
+📝 The Replit Agent Prompt
+Copy and paste this entire block into your Replit Agent. This will generate the scripts/prod-validation.ts file.
+
+"Act as the Lead QA Engineer. I need a comprehensive, automated production validation script to certify the system is ready for launch.
+
+Task: Create a script scripts/prod-validation.ts that runs a sequence of integration tests against http://localhost:5000.
+
+Requirements:
+
+Setup: Use axios and colors (or standard logging) to output clear PASS/FAIL statuses. Use a hardcoded TEST_API_KEY (I will provide it in secrets).
+Sequential Test Flows:
+
+Flow A: Provisioning (Agency Role)
+
+create a new tenant 'Validation Pizza'.
+Verify it returns a programId.
+Flow B: Campaign Ingestion (Agency Role)
+
+Simulate a CSV upload (construct a FormData request) for 'Validation Pizza'.
+Use resource_type: 'letter' and template_id: 'test-template'.
+Capture the returned external_id (The Claim Code) from the response or by querying the DB (if possible, otherwise mock the response verification).
+Flow C: The Physical Bridge (User Role)
+
+GET /claim/{external_id}.
+Verify it returns HTTP 302 (Redirect) to https://pub2.pskt.io/....
+Flow D: POS Transactions (Staff Role)
+
+Test 1 (Earn): Add 100 points. Verify response new_balance: 100.
+Test 2 (Redeem): Redeem 50 points. Verify response new_balance: 50.
+Test 3 (Error): Redeem 1000 points. Verify HTTP 400 'Insufficient points'.
+Flow E: Notifications (Client Role)
+
+Test 1 (Dry Run): Call /broadcast/test. Verify success: true.
+Test 2 (Validation): Send empty message. Verify HTTP 400.
+Flow F: Churn (System Role)
+
+Simulate PassKit Webhook (POST /api/webhooks/passkit).
+Payload: { event: 'delete', passId: '...' }.
+Verify DB update (via a subsequent GET status check if possible).
+Flow G: The Kill Switch (Super Admin Role)
+
+Suspend the 'Validation Pizza' program (via API or DB mock).
+Try to Add Points.
+Verify HTTP 403/400 'Program Suspended'.
+Reporting:
+
+At the end, print a Scorecard (e.g., 'Passed: 7/7').
+If any step fails, stop and log the exact error response."
+
+🔍 Operational Manual: How to Execute & Verify
+Once the Agent creates the file, here is how you run the final certification.
+
+1. Setup the Test Environment
+In Replit Shell:
+
+Bash 
+# 1. Install dependencies if missing
+npm install axios form-data colors
+
+# 2. Ensure your server is running in a separate tab
+npm run dev
+
+2. Run the Validator
+Bash 
+# 3. Run the script
+npx ts-node scripts/prod-validation.ts
+
+3. Interpret the Results (The Scorecard)
+Scenario
+Expected Output
+What it proves
+Flow A
+✅ Tenant Created: ID xxxx
+You can sell to new clients instantly.
+Flow B
+✅ Campaign Processed
+You can handle bulk CSVs without crashing.
+Flow C
+✅ Claim Redirects to PassKit
+The QR codes on the paper will work.
+Flow D
+✅ Points Added / ✅ Overdraft Blocked
+Your money logic is secure.
+Flow E
+✅ Dry Run Successful
+You won't accidentally spam people.
+Flow G
+✅ Suspended Program Blocked
+You can shut off non-paying clients.
+
+⚠️ Manual Checks (The Things Code Can't See)
+The script proves the logic works. You must physically verify the assets.
+
+1. The "Visual" Letter Check
+
+Action: Go to PostGrid Dashboard.
+Check: Open the latest "Letter" created by the test.
+Verify:
+
+Does the QR code look sharp? (Not blurry/pixelated).
+Does the {{firstName}} variable show "Test User" (or whatever name you used)?
+Crucial: Scan the QR code on your screen with your iPhone. Does it open the Pass?
+2. The "Lock Screen" Check
+
+Action: While the pass is on your phone, run the "Add Points" test manually via curl or the script.
+Verify: Does your phone buzz within 3 seconds?
+If no buzz: Check if "Do Not Disturb" is on, or if the PassKit Project Settings have Push Notifications enabled.
+3. The "WeWeb" Check
+
+Action: Log into WeWeb as the new 'Validation Pizza' admin.
+Verify:
+
+Go to Marketing Center.
+Do you see the "Dry Run" button?
+Click it. Does the Modal pop up?
+
+🚀 Final Verdict
+If the script prints "ALL SYSTEMS GO" and you confirm the 3 manual checks above:
+
+You are Production Ready. 🟢
+
+You have built a platform that is:
+
+Multi-Tenant (Data isolated per client).
+Phygital (Seamless paper-to-mobile bridge).
+Defensive (Rate-limited, Kill-switched, Dry-run protected).
+Are you ready to run the prod-validation.ts script and get your final certification?
