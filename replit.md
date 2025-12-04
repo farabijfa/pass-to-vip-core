@@ -52,3 +52,25 @@ I do not want the agent to make changes to the /admin folder.
     -   **Template Management:** Uses PostGrid templates for dynamic content in physical mail.
 -   **`api.qrserver.com`:**
     -   **QR Code Generation:** Converts claim URLs into QR code image URLs.
+
+## Production Ready Features
+
+### Multi-Tenant Security
+- **Client Isolation:** Invalid/non-existent programId returns empty data (not all data) - prevents cross-tenant leakage
+- **Zero-State Handling:** New clients with no data get clean `{ total: 0, activeRate: 0 }` responses - no crashes or NaN
+
+### WeWeb Integration APIs
+- `GET /api/programs` - List all programs with birthday bot config
+- `GET /api/programs/:id` - Get program by PassKit program ID
+- `PATCH /api/programs/:id` - Update birthday bot settings
+- `GET /api/customers?programId=...` - List customers with pagination
+- `GET /api/customers/stats?programId=...` - Dashboard stats (total, installed, uninstalled, activeRate)
+- `GET /api/customers/:id` - Customer detail with transaction history
+
+### Database Performance
+Run `migrations/001_performance_indexes.sql` in Supabase Studio for production scaling:
+- `idx_passes_master_program_id` - Client filtering
+- `idx_passes_master_status` - Active/Churned charts
+- `idx_passes_master_program_status` - Composite queries
+- `idx_transactions_pass_id` - Transaction history
+- `idx_transactions_created_at` - Date ordering
