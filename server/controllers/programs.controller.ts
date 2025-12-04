@@ -42,7 +42,9 @@ class ProgramsController {
 
       const client = supabaseService.getClient();
       
-      const { data: program, error } = await client
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId);
+
+      let query = client
         .from("programs")
         .select(`
           id,
@@ -52,9 +54,15 @@ class ProgramsController {
           birthday_reward_points,
           birthday_message,
           created_at
-        `)
-        .or(`id.eq.${programId},passkit_program_id.eq.${programId}`)
-        .limit(1);
+        `);
+
+      if (isUuid) {
+        query = query.eq("id", programId);
+      } else {
+        query = query.eq("passkit_program_id", programId);
+      }
+
+      const { data: program, error } = await query.limit(1);
 
       const foundProgram = program?.[0];
 
@@ -65,7 +73,7 @@ class ProgramsController {
             undefined,
             {
               code: "PROGRAM_NOT_FOUND",
-              message: "Program not found",
+              message: error?.message || "Program not found",
             },
             requestId
           )
@@ -148,11 +156,12 @@ class ProgramsController {
       }
 
       const client = supabaseService.getClient();
+      
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId);
 
-      const { data: program, error } = await client
+      let query = client
         .from("programs")
         .update(sanitizedUpdates)
-        .or(`id.eq.${programId},passkit_program_id.eq.${programId}`)
         .select(`
           id,
           name,
@@ -160,8 +169,15 @@ class ProgramsController {
           birthday_bot_enabled,
           birthday_reward_points,
           birthday_message
-        `)
-        .limit(1);
+        `);
+
+      if (isUuid) {
+        query = query.eq("id", programId);
+      } else {
+        query = query.eq("passkit_program_id", programId);
+      }
+
+      const { data: program, error } = await query.limit(1);
 
       const updatedProgram = program?.[0];
 

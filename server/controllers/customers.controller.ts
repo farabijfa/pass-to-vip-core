@@ -28,7 +28,7 @@ class CustomersController {
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
       const offset = parseInt(req.query.offset as string) || 0;
       const status = req.query.status as string;
-      const sortBy = (req.query.sortBy as string) || "created_at";
+      const sortBy = (req.query.sortBy as string) || "last_updated";
       const sortOrder = (req.query.sortOrder as string) === "asc" ? true : false;
 
       const client = supabaseService.getClient();
@@ -42,7 +42,6 @@ class CustomersController {
           status,
           is_active,
           install_url,
-          created_at,
           last_updated,
           users:user_id (
             id,
@@ -56,11 +55,6 @@ class CustomersController {
             id,
             name,
             passkit_program_id
-          ),
-          protocol_membership:id (
-            points_balance,
-            tier_points,
-            tier_name
           )
         `, { count: "exact" });
 
@@ -101,39 +95,34 @@ class CustomersController {
         );
       }
 
-      const formattedCustomers = (customers || []).map((c: any) => ({
-        id: c.id,
-        externalId: c.external_id,
-        passkitId: c.passkit_internal_id,
-        status: c.status,
-        isActive: c.is_active,
-        installUrl: c.install_url,
-        createdAt: c.created_at,
-        lastUpdated: c.last_updated,
-        user: c.users ? {
-          id: c.users.id,
-          email: c.users.email,
-          firstName: c.users.first_name,
-          lastName: c.users.last_name,
-          fullName: [c.users.first_name, c.users.last_name].filter(Boolean).join(" ") || "Unknown",
-          phoneNumber: c.users.phone_number,
-          birthDate: c.users.birth_date,
-        } : null,
-        program: c.programs ? {
-          id: c.programs.id,
-          name: c.programs.name,
-          passkitProgramId: c.programs.passkit_program_id,
-        } : null,
-        membership: c.protocol_membership?.[0] ? {
-          pointsBalance: c.protocol_membership[0].points_balance || 0,
-          tierPoints: c.protocol_membership[0].tier_points || 0,
-          tierName: c.protocol_membership[0].tier_name || "Member",
-        } : {
-          pointsBalance: 0,
-          tierPoints: 0,
-          tierName: "Member",
-        },
-      }));
+      const formattedCustomers = (customers || []).map((c: any) => {
+        const user = Array.isArray(c.users) ? c.users[0] : c.users;
+        const program = Array.isArray(c.programs) ? c.programs[0] : c.programs;
+        
+        return {
+          id: c.id,
+          externalId: c.external_id,
+          passkitId: c.passkit_internal_id,
+          status: c.status,
+          isActive: c.is_active,
+          installUrl: c.install_url,
+          lastUpdated: c.last_updated,
+          user: user ? {
+            id: user.id,
+            email: user.email,
+            firstName: user.first_name,
+            lastName: user.last_name,
+            fullName: [user.first_name, user.last_name].filter(Boolean).join(" ") || "Unknown",
+            phoneNumber: user.phone_number,
+            birthDate: user.birth_date,
+          } : null,
+          program: program ? {
+            id: program.id,
+            name: program.name,
+            passkitProgramId: program.passkit_program_id,
+          } : null,
+        };
+      });
 
       return res.status(200).json(
         createResponse(
@@ -189,7 +178,9 @@ class CustomersController {
 
       const client = supabaseService.getClient();
 
-      const { data: customer, error } = await client
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
+
+      let query = client
         .from("passes_master")
         .select(`
           id,
@@ -198,7 +189,6 @@ class CustomersController {
           status,
           is_active,
           install_url,
-          created_at,
           last_updated,
           users:user_id (
             id,
@@ -212,15 +202,16 @@ class CustomersController {
             id,
             name,
             passkit_program_id
-          ),
-          protocol_membership:id (
-            points_balance,
-            tier_points,
-            tier_name
           )
-        `)
-        .or(`id.eq.${customerId},external_id.eq.${customerId},passkit_internal_id.eq.${customerId}`)
-        .limit(1);
+        `);
+
+      if (isUuid) {
+        query = query.eq("id", customerId);
+      } else {
+        query = query.or(`external_id.eq.${customerId},passkit_internal_id.eq.${customerId}`);
+      }
+
+      const { data: customer, error } = await query.limit(1);
 
       const c: any = customer?.[0];
 
@@ -247,7 +238,6 @@ class CustomersController {
 
       const user = Array.isArray(c.users) ? c.users[0] : c.users;
       const program = Array.isArray(c.programs) ? c.programs[0] : c.programs;
-      const membership = Array.isArray(c.protocol_membership) ? c.protocol_membership[0] : c.protocol_membership;
 
       return res.status(200).json(
         createResponse(
@@ -260,7 +250,6 @@ class CustomersController {
               status: c.status,
               isActive: c.is_active,
               installUrl: c.install_url,
-              createdAt: c.created_at,
               lastUpdated: c.last_updated,
               user: user ? {
                 id: user.id,
@@ -276,15 +265,6 @@ class CustomersController {
                 name: program.name,
                 passkitProgramId: program.passkit_program_id,
               } : null,
-              membership: membership ? {
-                pointsBalance: membership.points_balance || 0,
-                tierPoints: membership.tier_points || 0,
-                tierName: membership.tier_name || "Member",
-              } : {
-                pointsBalance: 0,
-                tierPoints: 0,
-                tierName: "Member",
-              },
             },
             recentTransactions: transactions || [],
           },
