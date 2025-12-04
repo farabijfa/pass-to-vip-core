@@ -1,0 +1,83 @@
+This is the final piece of backend logic to unlock your High-Volume EDDM Campaigns.
+
+We are upgrading the Webhook Handler to be a "Universal Listener." Whether a user joins via a Salon QR, an EDDM Postcard, or a Facebook Ad, this code will handle the influx, create their identity in Supabase, and link them to the correct program automatically.
+
+🟢 The Replit Agent Prompt
+Copy and paste this entire block into your Replit Agent.
+
+"I need to upgrade controllers/webhook.controller.ts to support High-Volume EDDM Campaigns (Vertical C).
+
+Task: Refactor handlePassKitEnrollment to be generic, robust, and concurrency-safe.
+
+1. Program ID Lookup (Critical):
+
+The Webhook payload provides the passkit_program_id (e.g., program_freddys_eddm).
+You MUST query the programs table in Supabase to find the matching internal UUID id.
+If the program is not found in our DB, log a warning and return 200 (ignore it).
+2. Generic ID Generation:
+
+Remove any hardcoded SALON- prefixes.
+Use a generic prefix PUB- followed by a short-uuid (e.g., PUB-mYv5...) for the external_id.
+3. Enrollment Source Logic:
+
+When inserting into passes_master, set enrollment_source to 'SMARTPASS'.
+Ensure protocol defaults to 'MEMBERSHIP' (or derive it if possible).
+4. Concurrency & Idempotency:
+
+Wrap the users upsert and passes_master upsert in try/catch blocks.
+Handle 'Duplicate Key' errors gracefully (if PassKit sends the same webhook twice, don't crash, just ensure the record exists).
+Use onConflict: 'passkit_internal_id' for the pass insert to prevent duplicates.
+5. Data Mapping:
+
+Map payload.data.person.email -> users.email.
+Map payload.data.person.forename -> users.first_name.
+Map payload.data.person.surname -> users.last_name.
+Map payload.data.meta.birthday -> users.birth_date (Validate it is a valid date string first).
+6. Response:
+
+Always return HTTP 200 quickly to PassKit so they don't retry."
+
+🔍 How to Test "Vertical C" (Once deployed)
+Since you cannot physically mail 5,000 cards today, we will simulate the "Flood" of scans.
+
+1. Set up the EDDM Program:
+
+Go to your WeWeb Admin.
+Create a new Program: "Freddy's EDDM Test".
+Link it to a PassKit Project ID (enable SmartPass in PassKit first).
+2. Simulate the Traffic (Curl):
+
+Run this command in your Replit Shell to mimic 3 people scanning the QR code at the same time.
+
+Bash 
+# User 1
+curl -X POST https://[YOUR-REPLIT-URL]/api/webhooks/passkit/enrollment \
+-H "Content-Type: application/json" \
+-d '{
+"event": "member.created",
+"data": {
+"id": "MEM-EDDM-01",
+"programId": "[YOUR_PASSKIT_PROGRAM_ID]",
+"person": { "forename": "Neighbor", "surname": "One", "email": "neighbor1@test.com" },
+"meta": { "birthday": "1985-05-20" }
+}
+}'
+
+# User 2
+curl -X POST https://[YOUR-REPLIT-URL]/api/webhooks/passkit/enrollment \
+-H "Content-Type: application/json" \
+-d '{
+"event": "member.created",
+"data": {
+"id": "MEM-EDDM-02",
+"programId": "[YOUR_PASSKIT_PROGRAM_ID]",
+"person": { "forename": "Neighbor", "surname": "Two", "email": "neighbor2@test.com" }
+}
+}'
+
+3. Verify in Supabase:
+
+Go to passes_master.
+Filter by the new Program ID.
+You should see 2 new rows with external_id starting with PUB-.
+Success: You are ready to print this QR code on 5,000 postcards.

@@ -1,0 +1,105 @@
+This is Vertical C: The "Neighborhood Blanket" Strategy.
+
+In Vertical A, we targeted specific people (Direct Mail).
+
+In Vertical B, we targeted walk-ins (Reception QR).
+
+In Vertical C (EDDM), we target entire neighborhoods using a Single Static QR Code printed on thousands of cards.
+
+Since you are sending the same QR code to 5,000 strangers, the workflow relies entirely on the "Pull" mechanics we built for the Salon, but it requires Scale and Source Tracking.
+
+Here is the strategy to make this "Foolproof" and "Secure" using your existing setup.
+
+1. The Configuration Check (Audit)
+Goal: Ensure your backend can distinguish between a "Salon Walk-in" and an "EDDM Neighbor" so your analytics aren't messy.
+
+Database Schema (current schema.txt): ✅ Ready.
+
+programs table: Has enrollment_url (Stores the PassKit SmartPass link).
+passes_master table: Has enrollment_source. We will use this to tag users as EDDM.
+Webhook Logic: ⚠️ Needs Adjustment.
+
+Currently, your webhook generates IDs starting with SALON-. We need to generalize this to handle any public source (like EDDM- or PUB-).
+We need to ensure that when 50 people scan per minute (after the mailman arrives), the database doesn't lock up.
+
+2. The Strategy: "Dedicated Program Instances"
+To keep your analytics ("ROI of EDDM" vs "ROI of Salon") foolproof, you should create a Dedicated Program in Supabase for the EDDM campaign, even if it points to the same business.
+
+Program A: "Freddy's Food (In-Store)" -> QR sits at reception.
+Program B: "Freddy's Food (EDDM - April)" -> QR is printed on postcards.
+Why?
+
+Tracking: You instantly know which campaign worked better by filtering program_id.
+Safety: If the EDDM link gets spammed, you can "Suspend" just the EDDM program without killing the In-Store QR.
+Simplicity: You don't need complex UTM parameters. Different Program = Different QR = Clean Data.
+
+3. Implementation Plan (Replit AI)
+We will update the Webhook Handler to be generic and robust for high-volume EDDM scans.
+
+A. Backend Logic Update
+Paste this into your Replit Agent:
+
+"Refactor controllers/webhook.controller.ts to support high-volume EDDM campaigns (Vertical C).
+
+1. Generalize ID Generation:
+
+Instead of hardcoding SALON- for the external_id, use a generic prefix PUB- (Public) followed by the short UUID.
+Or, if possible, check if the program_id relates to a specific source (for now, PUB- is safe).
+2. Set Enrollment Source:
+
+When inserting into passes_master, explicitly set enrollment_source to 'SMARTPASS'.
+3. Concurrency Safety (EDDM Spike Protection):
+
+Ensure the users upsert and passes_master upsert are handled in a try/catch block that absorbs 'Duplicate Key' errors gracefully (idempotency).
+If a webhook fires twice for the same person, just update the timestamp, don't crash.
+4. Analytics Prep:
+
+Ensure the program_id from the PassKit payload is correctly mapped to our internal Supabase program_id. This is critical for the 'Dedicated Program' strategy."
+B. The API & UI Endpoints
+You already have the endpoints needed to execute this. You just need to use them in a specific order.
+
+1. Generate the Asset (The Single QR)
+
+Endpoint: GET /api/programs/:id/qr
+Action: Returns the high-res QR code for the SmartPass URL.
+Usage: Download this PNG and paste it onto your PostGrid EDDM Artwork.
+2. Launch the Logic (PassKit + Supabase)
+
+Endpoint: PATCH /api/programs/:id/enrollment-url
+Action: Link the PassKit SmartPass URL (e.g., https://pub2.pskt.io/c/freddy-eddm) to your Supabase Program.
+
+4. Operational Workflow (How you execute)
+Here is your step-by-step guide to launching Vertical C for "Freddy's Food".
+
+Step 1: Configure PassKit (The Destination)
+Log in to PassKit.
+Duplicate Freddy's existing project or create a new one: "Freddy's EDDM".
+Enable Public Distribution (SmartPass).
+Copy the SmartPass URL (e.g., https://pub2.pskt.io/c/freddys-eddm).
+Step 2: Configure Supabase (The Brain)
+Go to your WeWeb Admin.
+Provision New Tenant (or add Program):
+
+Name: "Freddy's EDDM Campaign"
+PassKit ID: (The ID from Step 1)
+Protocol: MEMBERSHIP
+Link URL: Use your Admin Dashboard (or PATCH endpoint) to paste the SmartPass URL into this new Program.
+Step 3: Get the Asset (The QR)
+In WeWeb, select "Freddy's EDDM Campaign".
+Click "Download QR" (uses the /api/programs/:id/qr endpoint).
+Result: You now have a static PNG file.
+Step 4: Launch PostGrid (The Physical)
+Log in to PostGrid.
+Create an EDDM Campaign.
+Upload your Artwork. Paste the PNG from Step 3 onto the design.
+Select Neighborhoods/Routes.
+Launch.
+
+5. The User Experience (The Loop)
+Home: 5,000 people in a neighborhood get the card.
+Scan: They scan the QR.
+Register: They see "Freddy's VIP Club" (PassKit Page) and enter Name/Email.
+Install: They get the pass.
+Sync: PassKit fires Webhook -> Replit creates user in "Freddy's EDDM" program.
+Analytics: In WeWeb, you filter by "Freddy's EDDM" and see exactly 142 installs. ROI Calculated.
+Do you want me to write the Replit Prompt to finalize the generic webhook handler?
