@@ -60,9 +60,12 @@ export class HealthController {
           supabase: {
             status: supabaseHealth.status,
             latency: supabaseHealth.latency,
+            ...(supabaseHealth.message && { message: supabaseHealth.message }),
           },
           passKit: {
             status: passKitHealth.status,
+            ...(passKitHealth.reason && { reason: passKitHealth.reason }),
+            ...(passKitHealth.details && { details: passKitHealth.details }),
           },
           postGrid: {
             status: postGridHealth.status,

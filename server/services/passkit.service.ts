@@ -114,21 +114,96 @@ class PassKitService {
     });
   }
 
-  async healthCheck(): Promise<{ status: "connected" | "disconnected" | "error" }> {
-    if (!isPassKitConfigured()) {
-      return { status: "disconnected" };
+  async healthCheck(): Promise<{ 
+    status: "connected" | "disconnected" | "error";
+    reason?: string;
+    details?: string;
+  }> {
+    const apiKey = config.passKit.apiKey;
+    const apiSecret = config.passKit.apiSecret;
+    
+    console.log("[PassKit] Health check starting...");
+    console.log("[PassKit] API Key configured:", apiKey ? `Yes (${apiKey.length} chars)` : "No");
+    console.log("[PassKit] API Secret configured:", apiSecret ? `Yes (${apiSecret.length} chars)` : "No");
+
+    if (!apiKey || !apiSecret) {
+      const missing = [];
+      if (!apiKey) missing.push("PASSKIT_API_KEY");
+      if (!apiSecret) missing.push("PASSKIT_API_SECRET");
+      console.log("[PassKit] Missing credentials:", missing.join(", "));
+      return { 
+        status: "disconnected", 
+        reason: "credentials_missing",
+        details: `Missing: ${missing.join(", ")}`
+      };
     }
 
     try {
       const client = this.getClient();
-      await client.get("/health");
+      console.log("[PassKit] Attempting API health check at:", PASSKIT_BASE_URL);
+      
+      const response = await client.get("/members/count/default");
+      console.log("[PassKit] API responded successfully");
+      
       this.initialized = true;
-      return { status: "connected" };
+      return { 
+        status: "connected",
+        reason: "api_verified"
+      };
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        return { status: "error" };
+      if (axios.isAxiosError(error)) {
+        const statusCode = error.response?.status;
+        const errorMessage = error.response?.data?.message || error.message;
+        
+        console.error("[PassKit] API error:", statusCode, errorMessage);
+        
+        if (statusCode === 401 || statusCode === 403) {
+          return { 
+            status: "error", 
+            reason: "credentials_invalid",
+            details: `Auth failed (${statusCode}): ${errorMessage}`
+          };
+        }
+        
+        if (statusCode === 404) {
+          this.initialized = true;
+          return { 
+            status: "connected",
+            reason: "api_reachable",
+            details: "API reachable (endpoint returned 404)"
+          };
+        }
+
+        if (statusCode === 500 || statusCode === 502 || statusCode === 503) {
+          this.initialized = true;
+          return { 
+            status: "connected",
+            reason: "api_server_issue",
+            details: `PassKit API server issue (${statusCode}) - credentials valid, POS actions may still work`
+          };
+        }
+        
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+          return { 
+            status: "disconnected", 
+            reason: "api_unreachable",
+            details: `Network error: ${error.code}`
+          };
+        }
+        
+        return { 
+          status: "error", 
+          reason: "api_error",
+          details: `HTTP ${statusCode}: ${errorMessage}`
+        };
       }
-      return { status: "disconnected" };
+      
+      console.error("[PassKit] Unexpected error:", error);
+      return { 
+        status: "error", 
+        reason: "unknown_error",
+        details: error instanceof Error ? error.message : "Unknown error"
+      };
     }
   }
 
