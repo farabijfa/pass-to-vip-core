@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Viewer - Phygital Loyalty Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .card-header {
+      background: rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .form-control, .form-select {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+    .form-control:focus, .form-select:focus {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #0d6efd;
+      color: #fff;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .form-select option {
+      background: #1a1a2e;
+      color: #fff;
+    }
+    .back-link {
+      color: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+    }
+    .back-link:hover {
+      color: #fff;
+    }
+    .qr-container {
+      background: #fff;
+      border-radius: 20px;
+      padding: 30px;
+      display: inline-block;
+    }
+    .qr-container img {
+      max-width: 300px;
+      height: auto;
+    }
+    .instructions {
+      background: rgba(13, 110, 253, 0.1);
+      border: 1px solid rgba(13, 110, 253, 0.2);
+      border-radius: 10px;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-10">
+        <div class="mb-4">
+          <a href="/admin" class="back-link">
+            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+          </a>
+          <h1 class="display-6 fw-bold mt-2">
+            <i class="bi bi-qr-code me-2"></i>Reception QR Code Viewer
+          </h1>
+          <p class="text-muted">Generate and display walk-in enrollment QR codes (Vertical B)</p>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-md-5">
+            <div class="card shadow-lg">
+              <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-sliders me-2"></i>Select Program</h5>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label class="form-label">Client / Program</label>
+                  <select class="form-select" id="programSelect">
+                    <option value="">Loading programs...</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary w-100" id="generateBtn" onclick="generateQR()">
+                  <i class="bi bi-qr-code me-2"></i>Generate QR Code
+                </button>
+              </div>
+            </div>
+
+            <div class="instructions mt-4">
+              <h6><i class="bi bi-info-circle me-2"></i>How to Use</h6>
+              <ol class="mb-0 ps-3">
+                <li class="mb-2">Select the client's program from the dropdown</li>
+                <li class="mb-2">Click "Generate QR Code"</li>
+                <li class="mb-2">Display or print for reception desk</li>
+                <li>Walk-in customers scan to enroll instantly</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="col-md-7">
+            <div class="card shadow-lg">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-image me-2"></i>QR Code</h5>
+                <div class="btn-group d-none" id="downloadBtns">
+                  <button class="btn btn-outline-light btn-sm" onclick="downloadQR()">
+                    <i class="bi bi-download me-2"></i>Download
+                  </button>
+                  <button class="btn btn-outline-light btn-sm" onclick="printQR()">
+                    <i class="bi bi-printer me-2"></i>Print
+                  </button>
+                </div>
+              </div>
+              <div class="card-body text-center py-5" id="qrDisplay">
+                <div class="text-muted">
+                  <i class="bi bi-qr-code display-1 mb-3 d-block" style="opacity: 0.3;"></i>
+                  <p>Select a program and click Generate to view the QR code</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card mt-4 d-none" id="urlCard">
+              <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-link-45deg me-2"></i>Enrollment URL</h6>
+              </div>
+              <div class="card-body">
+                <div class="input-group">
+                  <input type="text" class="form-control" id="enrollmentUrl" readonly>
+                  <button class="btn btn-outline-light" onclick="copyUrl()">
+                    <i class="bi bi-clipboard"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let apiKey = localStorage.getItem('adminApiKey') || '';
+    let currentQrUrl = '';
+    let currentProgramName = '';
+
+    async function loadPrograms() {
+      try {
+        const response = await fetch('/api/admin/tenants', {
+          headers: {
+            'x-api-key': apiKey
+          }
+        });
+        
+        if (response.status === 401 || response.status === 403) {
+          const newKey = prompt('Enter your Admin API Key:');
+          if (newKey) {
+            apiKey = newKey;
+            localStorage.setItem('adminApiKey', newKey);
+            loadPrograms();
+          }
+          return;
+        }
+        
+        const data = await response.json();
+        const select = document.getElementById('programSelect');
+        
+        if (data.success && data.data.tenants) {
+          const tenants = data.data.tenants.filter(t => t.programs);
+          
+          if (tenants.length === 0) {
+            select.innerHTML = '<option value="">No programs found</option>';
+            return;
+          }
+          
+          select.innerHTML = '<option value="">Select a program...</option>' +
+            tenants.map(t => `
+              <option value="${t.programs.id}" data-name="${t.programs.name}" data-passkit="${t.programs.passkit_program_id}">
+                ${t.programs.name}
+              </option>
+            `).join('');
+
+          const urlParams = new URLSearchParams(window.location.search);
+          const programId = urlParams.get('program');
+          if (programId) {
+            select.value = programId;
+            generateQR();
+          }
+        } else {
+          select.innerHTML = '<option value="">Error loading programs</option>';
+        }
+      } catch (error) {
+        console.error('Failed to load programs:', error);
+        document.getElementById('programSelect').innerHTML = 
+          '<option value="">Error: ' + error.message + '</option>';
+      }
+    }
+
+    async function generateQR() {
+      const select = document.getElementById('programSelect');
+      const programId = select.value;
+      
+      if (!programId) {
+        alert('Please select a program first');
+        return;
+      }
+
+      const selectedOption = select.options[select.selectedIndex];
+      currentProgramName = selectedOption.dataset.name;
+      
+      const generateBtn = document.getElementById('generateBtn');
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+
+      try {
+        const response = await fetch(`/api/programs/${programId}/qr`, {
+          headers: {
+            'x-api-key': apiKey
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        currentQrUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('qrDisplay').innerHTML = `
+          <div class="qr-container">
+            <img src="${currentQrUrl}" alt="QR Code for ${currentProgramName}" id="qrImage">
+          </div>
+          <div class="mt-3">
+            <h5>${currentProgramName}</h5>
+            <small class="text-muted">Scan to enroll in loyalty program</small>
+          </div>
+        `;
+        
+        document.getElementById('downloadBtns').classList.remove('d-none');
+        
+        const enrollUrl = await getEnrollmentUrl(programId);
+        if (enrollUrl) {
+          document.getElementById('enrollmentUrl').value = enrollUrl;
+          document.getElementById('urlCard').classList.remove('d-none');
+        }
+        
+      } catch (error) {
+        document.getElementById('qrDisplay').innerHTML = `
+          <div class="text-danger">
+            <i class="bi bi-exclamation-triangle display-4 mb-3 d-block"></i>
+            <p>Failed to generate QR: ${error.message}</p>
+            <small class="text-muted">Make sure the program has a valid PassKit enrollment URL</small>
+          </div>
+        `;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<i class="bi bi-qr-code me-2"></i>Generate QR Code';
+      }
+    }
+
+    async function getEnrollmentUrl(programId) {
+      try {
+        const response = await fetch(`/api/programs/${programId}`, {
+          headers: {
+            'x-api-key': apiKey
+          }
+        });
+        const data = await response.json();
+        return data.data?.enrollmentUrl || data.data?.passkit_enrollment_url || '';
+      } catch {
+        return '';
+      }
+    }
+
+    function downloadQR() {
+      if (!currentQrUrl) return;
+      
+      const a = document.createElement('a');
+      a.href = currentQrUrl;
+      a.download = `qr-${currentProgramName.replace(/\s+/g, '-').toLowerCase()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function printQR() {
+      const qrImage = document.getElementById('qrImage');
+      if (!qrImage) return;
+      
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>QR Code - ${currentProgramName}</title>
+          <style>
+            body { 
+              display: flex; 
+              flex-direction: column; 
+              align-items: center; 
+              justify-content: center; 
+              height: 100vh; 
+              margin: 0;
+              font-family: Arial, sans-serif;
+            }
+            img { max-width: 400px; }
+            h2 { margin-top: 20px; }
+            p { color: #666; }
+          </style>
+        </head>
+        <body>
+          <img src="${qrImage.src}" alt="QR Code">
+          <h2>${currentProgramName}</h2>
+          <p>Scan to join our loyalty program</p>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
+
+    function copyUrl() {
+      const urlInput = document.getElementById('enrollmentUrl');
+      urlInput.select();
+      document.execCommand('copy');
+      
+      const btn = urlInput.nextElementSibling;
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check"></i>';
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+      }, 2000);
+    }
+
+    loadPrograms();
+  </script>
+</body>
+</html>

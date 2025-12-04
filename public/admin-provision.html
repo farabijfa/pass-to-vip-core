@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Provision New Client - Phygital Loyalty Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .card-header {
+      background: rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .form-control, .form-select {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+    .form-control:focus, .form-select:focus {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #0d6efd;
+      color: #fff;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .form-control::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .form-select option {
+      background: #1a1a2e;
+      color: #fff;
+    }
+    .back-link {
+      color: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+    }
+    .back-link:hover {
+      color: #fff;
+    }
+    .result-card {
+      background: rgba(25, 135, 84, 0.2);
+      border: 1px solid rgba(25, 135, 84, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="mb-4">
+          <a href="/admin" class="back-link">
+            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+          </a>
+          <h1 class="display-6 fw-bold mt-2">
+            <i class="bi bi-plus-circle me-2"></i>Provision New Client
+          </h1>
+          <p class="text-muted">Create a new tenant with Supabase Auth + PassKit program</p>
+        </div>
+
+        <div class="card shadow-lg">
+          <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-person-plus me-2"></i>Client Details</h5>
+          </div>
+          <div class="card-body">
+            <form id="provisionForm">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label">Business Name</label>
+                  <input type="text" class="form-control" id="businessName" 
+                         placeholder="e.g., Joe's Pizza" required>
+                  <div class="form-text text-muted">Unique name for this client</div>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Admin Email</label>
+                  <input type="email" class="form-control" id="email" 
+                         placeholder="admin@business.com" required>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Admin Password</label>
+                  <input type="password" class="form-control" id="password" 
+                         placeholder="Minimum 8 characters" required minlength="8">
+                </div>
+
+                <div class="col-md-8">
+                  <label class="form-label">PassKit Program ID</label>
+                  <input type="text" class="form-control" id="passkitProgramId" 
+                         placeholder="e.g., 4RhsVhHek0dliVogVznjSQ" required>
+                  <div class="form-text text-muted">From PassKit dashboard</div>
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Protocol</label>
+                  <select class="form-select" id="protocol">
+                    <option value="MEMBERSHIP" selected>Membership</option>
+                    <option value="COUPON">Coupon</option>
+                    <option value="EVENT_TICKET">Event Ticket</option>
+                  </select>
+                </div>
+              </div>
+
+              <hr class="my-4" style="border-color: rgba(255,255,255,0.2);">
+
+              <button type="submit" class="btn btn-primary btn-lg w-100" id="submitBtn">
+                <i class="bi bi-rocket me-2"></i>Create Client
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card result-card mt-4 d-none" id="resultCard">
+          <div class="card-header">
+            <h5 class="mb-0 text-success"><i class="bi bi-check-circle me-2"></i>Client Created Successfully</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label text-muted">User ID</label>
+                <div><code id="resultUserId">-</code></div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted">Program ID</label>
+                <div><code id="resultProgramId">-</code></div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted">Business</label>
+                <div id="resultBusiness">-</div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted">Email</label>
+                <div id="resultEmail">-</div>
+              </div>
+            </div>
+            <hr style="border-color: rgba(255,255,255,0.2);">
+            <div class="d-flex gap-2">
+              <a href="/admin/tenants" class="btn btn-outline-light">
+                <i class="bi bi-list me-2"></i>View All Tenants
+              </a>
+              <a href="/admin/qr" class="btn btn-outline-light" id="qrLink">
+                <i class="bi bi-qr-code me-2"></i>Generate QR
+              </a>
+              <button class="btn btn-primary" onclick="resetForm()">
+                <i class="bi bi-plus me-2"></i>Create Another
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let apiKey = localStorage.getItem('adminApiKey') || '';
+
+    document.getElementById('provisionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (!apiKey) {
+        apiKey = prompt('Enter your Admin API Key:');
+        if (!apiKey) return;
+        localStorage.setItem('adminApiKey', apiKey);
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+
+      const payload = {
+        businessName: document.getElementById('businessName').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        passkitProgramId: document.getElementById('passkitProgramId').value,
+        protocol: document.getElementById('protocol').value
+      };
+
+      try {
+        const response = await fetch('/api/admin/provision', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showResult(data.data);
+        } else {
+          alert(`Error: ${data.error?.message || 'Failed to create client'}`);
+        }
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-rocket me-2"></i>Create Client';
+      }
+    });
+
+    function showResult(data) {
+      document.getElementById('resultUserId').textContent = data.userId;
+      document.getElementById('resultProgramId').textContent = data.programId;
+      document.getElementById('resultBusiness').textContent = data.businessName;
+      document.getElementById('resultEmail').textContent = data.email;
+      document.getElementById('qrLink').href = `/admin/qr?program=${data.programId}`;
+      document.getElementById('resultCard').classList.remove('d-none');
+      document.getElementById('provisionForm').reset();
+    }
+
+    function resetForm() {
+      document.getElementById('resultCard').classList.add('d-none');
+      document.getElementById('businessName').focus();
+    }
+  </script>
+</body>
+</html>

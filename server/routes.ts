@@ -73,6 +73,51 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/admin.html", basicAuth, (_req, res) => {
+    const adminPath = path.join(process.cwd(), "public", "admin.html");
+    if (fs.existsSync(adminPath)) {
+      res.sendFile(adminPath);
+    } else {
+      res.status(404).send("Admin page not found");
+    }
+  });
+
+  app.get("/admin", basicAuth, (_req, res) => {
+    const indexPath = path.join(process.cwd(), "public", "admin-index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send("Admin dashboard not found");
+    }
+  });
+
+  app.get("/admin/tenants", basicAuth, (_req, res) => {
+    const tenantsPath = path.join(process.cwd(), "public", "admin-tenants.html");
+    if (fs.existsSync(tenantsPath)) {
+      res.sendFile(tenantsPath);
+    } else {
+      res.status(404).send("Tenants page not found");
+    }
+  });
+
+  app.get("/admin/provision", basicAuth, (_req, res) => {
+    const provisionPath = path.join(process.cwd(), "public", "admin-provision.html");
+    if (fs.existsSync(provisionPath)) {
+      res.sendFile(provisionPath);
+    } else {
+      res.status(404).send("Provision page not found");
+    }
+  });
+
+  app.get("/admin/qr", basicAuth, (_req, res) => {
+    const qrPath = path.join(process.cwd(), "public", "admin-qr.html");
+    if (fs.existsSync(qrPath)) {
+      res.sendFile(qrPath);
+    } else {
+      res.status(404).send("QR viewer page not found");
+    }
+  });
+
   app.use("/api/*", notFoundHandler);
 
   app.use(errorHandler);
