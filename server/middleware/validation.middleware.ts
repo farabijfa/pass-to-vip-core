@@ -358,3 +358,43 @@ export const validateClaimCode = [
     .withMessage("Claim code must be a string"),
   handleValidationErrors,
 ];
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const validateProgramIdParam = [
+  param("programId")
+    .notEmpty()
+    .withMessage("Program ID is required")
+    .custom((value) => {
+      if (!UUID_REGEX.test(value)) {
+        throw new Error("Program ID must be a valid UUID format");
+      }
+      return true;
+    }),
+  handleValidationErrors,
+];
+
+export const validateProgramIdQuery = [
+  query("programId")
+    .notEmpty()
+    .withMessage("programId query parameter is required")
+    .custom((value) => {
+      if (!UUID_REGEX.test(value)) {
+        throw new Error("programId must be a valid UUID format");
+      }
+      return true;
+    }),
+  handleValidationErrors,
+];
+
+export const validateOptionalProgramIdQuery = [
+  query("programId")
+    .optional()
+    .custom((value) => {
+      if (value && !UUID_REGEX.test(value)) {
+        throw new Error("programId must be a valid UUID format");
+      }
+      return true;
+    }),
+  handleValidationErrors,
+];

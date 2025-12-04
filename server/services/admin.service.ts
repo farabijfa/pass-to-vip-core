@@ -59,6 +59,40 @@ class AdminService {
     try {
       const client = this.getClient();
 
+      // Step 0: Check for duplicate business name or PassKit Program ID
+      console.log("🔍 Step 0: Checking for duplicates...");
+      const { data: existingPrograms, error: duplicateError } = await client
+        .from("programs")
+        .select("id, name, passkit_program_id")
+        .or(`name.eq.${businessName},passkit_program_id.eq.${passkitProgramId}`);
+
+      if (duplicateError) {
+        console.error("❌ Duplicate check failed:", duplicateError.message);
+        return {
+          success: false,
+          error: `Duplicate check error: ${duplicateError.message}`,
+        };
+      }
+
+      if (existingPrograms && existingPrograms.length > 0) {
+        const duplicate = existingPrograms[0];
+        if (duplicate.name === businessName) {
+          console.error(`❌ Business name "${businessName}" already exists`);
+          return {
+            success: false,
+            error: `A program with the name "${businessName}" already exists`,
+          };
+        }
+        if (duplicate.passkit_program_id === passkitProgramId) {
+          console.error(`❌ PassKit Program ID "${passkitProgramId}" already exists`);
+          return {
+            success: false,
+            error: `A program with PassKit ID "${passkitProgramId}" already exists`,
+          };
+        }
+      }
+      console.log("✅ No duplicates found");
+
       // Step 1: Create Auth User
       console.log("📧 Step 1: Creating auth user...");
       const { data: authData, error: authError } = await client.auth.admin.createUser({

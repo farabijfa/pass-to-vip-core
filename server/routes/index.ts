@@ -11,10 +11,11 @@ import claimRoutes from "./claim.routes";
 import webhookRoutes from "./webhook.routes";
 import programsRoutes from "./programs.routes";
 import customersRoutes from "./customers.routes";
+import { posRateLimiter, notifyRateLimiter } from "../middleware";
 
 const router = Router();
 
-router.use("/pos", posRoutes);
+router.use("/pos", posRateLimiter, posRoutes);
 
 router.use("/loyalty", loyaltyRoutes);
 
@@ -28,7 +29,7 @@ router.use("/campaign", campaignRoutes);
 
 router.use("/admin", adminRoutes);
 
-router.use("/notify", notificationRoutes);
+router.use("/notify", notifyRateLimiter, notificationRoutes);
 
 router.use("/claim", claimRoutes);
 

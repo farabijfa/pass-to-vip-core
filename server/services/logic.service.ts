@@ -50,6 +50,33 @@ class LogicService {
 
     console.log(`\n[Logic] Processing Action: ${actionType} for ID: ${externalId}`);
 
+    const supabase = getSupabaseClient();
+
+    // Check if program is suspended before processing any action
+    const { data: passData, error: passError } = await supabase
+      .from("passes_master")
+      .select(`
+        id,
+        program:programs!inner (
+          id,
+          name,
+          is_suspended
+        )
+      `)
+      .eq("external_id", externalId)
+      .single();
+
+    if (passError) {
+      console.error("[Logic] Pass lookup error:", passError.message);
+      throw new Error(`Pass not found: ${passError.message}`);
+    }
+
+    const program = passData?.program as unknown as { id: string; name: string; is_suspended: boolean } | null;
+    if (program?.is_suspended) {
+      console.error(`[Logic] Program "${program.name}" is SUSPENDED - blocking action`);
+      throw new Error("Program Suspended. Contact Admin.");
+    }
+
     let rpcName: string;
     let rpcParams: Record<string, any> = {
       p_external_id: externalId,
@@ -64,8 +91,6 @@ class LogicService {
     } else {
       throw new Error(`Unknown Action Type: ${actionType}`);
     }
-
-    const supabase = getSupabaseClient();
     const { data: rpcResult, error } = await supabase.rpc(rpcName, rpcParams);
 
     if (error) {
