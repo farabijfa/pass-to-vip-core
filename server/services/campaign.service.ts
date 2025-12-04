@@ -16,6 +16,8 @@ interface NormalizedContact {
   city: string;
   state: string;
   postalCode: string;
+  birthDate: string | null;
+  phoneNumber: string | null;
 }
 
 interface CampaignResult {
@@ -51,6 +53,8 @@ const COLUMN_MAPPINGS: Record<string, string[]> = {
   city: ["city", "town", "locality"],
   state: ["state", "province", "region", "st"],
   postalCode: ["zip", "zipcode", "zip_code", "postal_code", "postalcode", "postal"],
+  birthDate: ["birth_date", "birthdate", "birthday", "dob", "date_of_birth", "dateofbirth", "bday"],
+  phoneNumber: ["phone", "phone_number", "phonenumber", "mobile", "cell", "telephone", "tel"],
 };
 
 class CampaignService {
@@ -75,7 +79,46 @@ class CampaignService {
     return "";
   }
 
+  private parseBirthDate(dateStr: string): string | null {
+    if (!dateStr || dateStr.toLowerCase() === "n/a" || dateStr.toLowerCase() === "unknown") {
+      return null;
+    }
+    
+    const trimmed = dateStr.trim();
+    
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const parsed = new Date(trimmed);
+      if (!isNaN(parsed.getTime())) {
+        return trimmed;
+      }
+    }
+    
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+      const [month, day, year] = trimmed.split("/");
+      const isoDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      const parsed = new Date(isoDate);
+      if (!isNaN(parsed.getTime())) {
+        return isoDate;
+      }
+    }
+    
+    if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(trimmed)) {
+      const [month, day, year] = trimmed.split("/");
+      const fullYear = parseInt(year) > 50 ? `19${year}` : `20${year}`;
+      const isoDate = `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      const parsed = new Date(isoDate);
+      if (!isNaN(parsed.getTime())) {
+        return isoDate;
+      }
+    }
+    
+    console.warn(`⚠️ Could not parse birth date: "${dateStr}"`);
+    return null;
+  }
+
   private normalizeContact(row: CampaignContact): NormalizedContact {
+    const birthDateRaw = this.findColumnValue(row, "birthDate");
+    
     return {
       firstName: this.findColumnValue(row, "firstName"),
       lastName: this.findColumnValue(row, "lastName"),
@@ -84,6 +127,8 @@ class CampaignService {
       city: this.findColumnValue(row, "city"),
       state: this.findColumnValue(row, "state"),
       postalCode: this.findColumnValue(row, "postalCode"),
+      birthDate: this.parseBirthDate(birthDateRaw),
+      phoneNumber: this.findColumnValue(row, "phoneNumber") || null,
     };
   }
 
@@ -246,6 +291,24 @@ class CampaignService {
 
                 const claimCode = claimResult.claimCode;
                 const claimUrl = `${baseClaimUrl}/${claimCode}`;
+                
+                // Upsert user with birth_date and phone_number if email is provided
+                if (contact.email) {
+                  try {
+                    await supabaseService.upsertUser({
+                      email: contact.email,
+                      firstName: contact.firstName,
+                      lastName: contact.lastName,
+                      birthDate: contact.birthDate,
+                      phoneNumber: contact.phoneNumber,
+                    });
+                    if (contact.birthDate) {
+                      console.log(`   📅 Saved birth date for ${contactName}`);
+                    }
+                  } catch (upsertError) {
+                    console.warn(`   ⚠️ Could not upsert user: ${upsertError}`);
+                  }
+                }
                 
                 // Generate QR code image URL (PostGrid needs an image, not a text link)
                 const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=${encodeURIComponent(claimUrl)}`;

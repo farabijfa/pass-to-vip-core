@@ -323,6 +323,52 @@ class SupabaseService {
     }
   }
 
+  async upsertUser(params: {
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    birthDate?: string | null;
+    phoneNumber?: string | null;
+  }): Promise<{ success: boolean; userId?: string; error?: string }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("users")
+        .upsert(
+          {
+            email: params.email,
+            first_name: params.firstName || null,
+            last_name: params.lastName || null,
+            birth_date: params.birthDate || null,
+            phone_number: params.phoneNumber || null,
+          },
+          { onConflict: "email" }
+        )
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Upsert user error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to upsert user",
+        };
+      }
+
+      return {
+        success: true,
+        userId: data?.id,
+      };
+    } catch (error) {
+      console.error("Upsert user error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
   isInitialized(): boolean {
     return this.initialized && isSupabaseConfigured();
   }
