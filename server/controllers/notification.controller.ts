@@ -101,9 +101,11 @@ class NotificationController {
       res.status(200).json({
         success: true,
         data: {
+          programsProcessed: result.programsProcessed,
           processed: result.processed,
           successCount: result.successCount,
           failedCount: result.failedCount,
+          alreadyGifted: result.alreadyGifted,
           campaignLogId: result.campaignLogId,
         },
         metadata: { processingTime },

@@ -38,8 +38,30 @@ interface BirthdayBotResult {
   processed: number;
   successCount: number;
   failedCount: number;
+  alreadyGifted: number;
+  programsProcessed: number;
   campaignLogId?: string;
   error?: string;
+}
+
+interface ProgramConfig {
+  id: string;
+  name: string;
+  passkit_program_id: string;
+  birthday_bot_enabled: boolean;
+  birthday_reward_points: number;
+  birthday_message: string;
+}
+
+interface EligiblePass {
+  id: string;
+  passkit_internal_id: string;
+  passkit_program_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  user_id: string;
+  birth_date: string;
 }
 
 class NotificationService {
@@ -199,103 +221,178 @@ class NotificationService {
   }
 
   async runBirthdayBot(): Promise<BirthdayBotResult> {
-    console.log("🎂 Running Birthday Bot...");
+    console.log("🎂 Running Birthday Bot (Configuration-Driven)...");
     const today = new Date();
     const month = today.getMonth() + 1;
     const day = today.getDate();
-    console.log(`   Looking for birthdays: Month ${month}, Day ${day}`);
+    const year = today.getFullYear();
+    console.log(`   Looking for birthdays: Month ${month}, Day ${day}, Year ${year}`);
+
+    let totalProcessed = 0;
+    let totalSuccess = 0;
+    let totalFailed = 0;
+    let totalAlreadyGifted = 0;
+    let programsProcessed = 0;
 
     try {
       const client = this.getClient();
 
-      const { data: birthdayUsers, error: queryError } = await client
-        .from("users")
-        .select(`
-          id,
-          email,
-          first_name,
-          last_name,
-          birth_date
-        `)
-        .not("birth_date", "is", null)
-        .eq("marketing_opt_in", true);
+      const { data: programs, error: programError } = await client
+        .from("programs")
+        .select("id, name, passkit_program_id, birthday_bot_enabled, birthday_reward_points, birthday_message")
+        .eq("birthday_bot_enabled", true);
 
-      if (queryError) {
-        console.error("❌ Failed to query birthday users:", queryError.message);
+      if (programError) {
+        console.error("❌ Failed to query programs:", programError.message);
         return {
           success: false,
           processed: 0,
           successCount: 0,
           failedCount: 0,
-          error: queryError.message,
+          alreadyGifted: 0,
+          programsProcessed: 0,
+          error: programError.message,
         };
       }
 
-      const todaysBirthdays = (birthdayUsers || []).filter((user: any) => {
-        if (!user.birth_date) return false;
-        const birthDate = new Date(user.birth_date);
-        return birthDate.getMonth() + 1 === month && birthDate.getDate() === day;
-      });
-
-      if (todaysBirthdays.length === 0) {
-        console.log("🎈 No birthdays today");
+      if (!programs || programs.length === 0) {
+        console.log("⚠️ No programs have birthday bot enabled");
         return {
           success: true,
           processed: 0,
           successCount: 0,
           failedCount: 0,
+          alreadyGifted: 0,
+          programsProcessed: 0,
         };
       }
 
-      console.log(`🎉 Found ${todaysBirthdays.length} birthdays today!`);
+      console.log(`📋 Found ${programs.length} programs with birthday bot enabled`);
 
-      const birthdayMessage = "Happy Birthday! 🎂 We added 50 points to your card.";
-      const birthdayPoints = 50;
+      for (const program of programs as ProgramConfig[]) {
+        console.log(`\n🏢 Processing program: ${program.name} (${program.passkit_program_id})`);
+        console.log(`   Reward: ${program.birthday_reward_points} points`);
+        console.log(`   Message: "${program.birthday_message}"`);
 
-      const { successCount, failedCount } = await this.processBatch(
-        todaysBirthdays,
-        async (user: any) => {
-          const { error: rpcError } = await client.rpc("process_membership_transaction", {
-            p_member_id: user.id,
-            p_transaction_type: "EARN",
-            p_points: birthdayPoints,
-            p_description: "Birthday Bonus",
-            p_metadata: { source: "birthday_bot" },
-          });
+        const { data: passes, error: passError } = await client
+          .from("passes_master")
+          .select(`
+            id,
+            passkit_internal_id,
+            passkit_program_id,
+            email,
+            first_name,
+            last_name,
+            user_id,
+            users!inner (
+              id,
+              birth_date
+            )
+          `)
+          .eq("passkit_program_id", program.passkit_program_id)
+          .eq("status", "ACTIVE")
+          .not("users.birth_date", "is", null);
 
-          if (rpcError) {
-            console.error(`❌ Failed to award points to ${user.email}:`, rpcError.message);
-            throw new Error(rpcError.message);
-          }
-
-          const { data: userPass } = await client
-            .from("passes_master")
-            .select("passkit_internal_id, passkit_program_id")
-            .eq("email", user.email)
-            .eq("status", "ACTIVE")
-            .single();
-
-          if (userPass?.passkit_internal_id && userPass?.passkit_program_id) {
-            await passKitService.pushMessage(
-              userPass.passkit_internal_id,
-              userPass.passkit_program_id,
-              birthdayMessage
-            );
-          }
-
-          console.log(`🎁 Awarded ${birthdayPoints} points to ${user.first_name} ${user.last_name}`);
-          return { userId: user.id, success: true };
+        if (passError) {
+          console.error(`   ❌ Failed to query passes for ${program.name}:`, passError.message);
+          continue;
         }
-      );
+
+        if (!passes || passes.length === 0) {
+          console.log(`   ⚠️ No passes with birth dates found for ${program.name}`);
+          continue;
+        }
+
+        const eligiblePasses = passes.filter((pass: any) => {
+          const user = pass.users;
+          if (!user?.birth_date) return false;
+          const birthDate = new Date(user.birth_date);
+          return birthDate.getMonth() + 1 === month && birthDate.getDate() === day;
+        }).map((pass: any) => ({
+          ...pass,
+          birth_date: pass.users.birth_date,
+          user_id: pass.users.id,
+        }));
+
+        if (eligiblePasses.length === 0) {
+          console.log(`   🎈 No birthdays today for ${program.name}`);
+          continue;
+        }
+
+        console.log(`   🎉 Found ${eligiblePasses.length} birthdays today!`);
+        programsProcessed++;
+
+        for (const pass of eligiblePasses as EligiblePass[]) {
+          totalProcessed++;
+
+          try {
+            const { data: logResult, error: logError } = await client
+              .from("birthday_logs")
+              .upsert(
+                {
+                  pass_id: pass.id,
+                  program_id: program.id,
+                  year,
+                  points_awarded: program.birthday_reward_points,
+                },
+                { onConflict: "pass_id,year", ignoreDuplicates: true }
+              )
+              .select("id")
+              .single();
+
+            if (logError && logError.code !== "23505") {
+              console.error(`   ❌ Failed to log birthday for ${pass.email}:`, logError.message);
+              totalFailed++;
+              continue;
+            }
+
+            if (!logResult) {
+              console.log(`   ⏭️ Skipping ${pass.first_name} ${pass.last_name} - already gifted this year`);
+              totalAlreadyGifted++;
+              continue;
+            }
+
+            const { error: rpcError } = await client.rpc("process_membership_transaction", {
+              p_member_id: pass.user_id || pass.id,
+              p_transaction_type: "EARN",
+              p_points: program.birthday_reward_points,
+              p_description: "Birthday Bonus",
+              p_metadata: { source: "birthday_bot", program_id: program.id },
+            });
+
+            if (rpcError) {
+              console.error(`   ❌ Failed to award points to ${pass.email}:`, rpcError.message);
+              await client.from("birthday_logs").delete().eq("id", logResult.id);
+              totalFailed++;
+              continue;
+            }
+
+            if (pass.passkit_internal_id && pass.passkit_program_id) {
+              await passKitService.pushMessage(
+                pass.passkit_internal_id,
+                pass.passkit_program_id,
+                program.birthday_message
+              );
+            }
+
+            console.log(`   🎁 Awarded ${program.birthday_reward_points} points to ${pass.first_name} ${pass.last_name}`);
+            totalSuccess++;
+
+          } catch (error) {
+            console.error(`   ❌ Error processing ${pass.email}:`, error);
+            totalFailed++;
+          }
+        }
+      }
 
       const { data: logData, error: logError } = await client
         .from("notification_logs")
         .insert({
-          campaign_name: "Birthday Bot",
-          recipient_count: todaysBirthdays.length,
-          success_count: successCount,
-          failed_count: failedCount,
-          message_content: birthdayMessage,
+          campaign_name: "Birthday Bot (Multi-Program)",
+          recipient_count: totalProcessed,
+          success_count: totalSuccess,
+          failed_count: totalFailed,
+          message_content: `Processed ${programsProcessed} programs, ${totalAlreadyGifted} already gifted`,
           target_segment: "BIRTHDAY",
         })
         .select("id")
@@ -305,13 +402,20 @@ class NotificationService {
         console.error("⚠️ Failed to log birthday campaign:", logError.message);
       }
 
-      console.log(`✅ Birthday Bot complete: ${successCount} success, ${failedCount} failed`);
+      console.log(`\n✅ Birthday Bot complete:`);
+      console.log(`   Programs: ${programsProcessed}`);
+      console.log(`   Processed: ${totalProcessed}`);
+      console.log(`   Success: ${totalSuccess}`);
+      console.log(`   Failed: ${totalFailed}`);
+      console.log(`   Already gifted: ${totalAlreadyGifted}`);
 
       return {
         success: true,
-        processed: todaysBirthdays.length,
-        successCount,
-        failedCount,
+        processed: totalProcessed,
+        successCount: totalSuccess,
+        failedCount: totalFailed,
+        alreadyGifted: totalAlreadyGifted,
+        programsProcessed,
         campaignLogId: logData?.id,
       };
 
@@ -319,9 +423,11 @@ class NotificationService {
       console.error("❌ Birthday Bot error:", error);
       return {
         success: false,
-        processed: 0,
-        successCount: 0,
-        failedCount: 0,
+        processed: totalProcessed,
+        successCount: totalSuccess,
+        failedCount: totalFailed,
+        alreadyGifted: totalAlreadyGifted,
+        programsProcessed,
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
