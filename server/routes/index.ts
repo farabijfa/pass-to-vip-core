@@ -7,6 +7,7 @@ import posRoutes from "./pos.routes";
 import campaignRoutes from "./campaign.routes";
 import adminRoutes from "./admin.routes";
 import notificationRoutes from "./notification.routes";
+import claimRoutes from "./claim.routes";
 
 const router = Router();
 
@@ -25,5 +26,7 @@ router.use("/campaign", campaignRoutes);
 router.use("/admin", adminRoutes);
 
 router.use("/notify", notificationRoutes);
+
+router.use("/claim", claimRoutes);
 
 export default router;
