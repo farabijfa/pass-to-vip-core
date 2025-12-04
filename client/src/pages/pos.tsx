@@ -151,8 +151,8 @@ export default function POSPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-white" data-testid="text-pos-title">POS Simulator</h1>
-          <p className="text-slate-400">Test earn and redeem transactions</p>
+          <h1 className="text-2xl font-bold text-foreground" data-testid="text-pos-title">POS Simulator</h1>
+          <p className="text-muted-foreground">Test earn and redeem transactions</p>
         </div>
         {mockMode && (
           <Badge variant="secondary" data-testid="badge-mock-mode">Mock Mode</Badge>
@@ -160,19 +160,19 @@ export default function POSPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-slate-700 bg-slate-800/50">
+        <Card className="border-border bg-card/80">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
+            <CardTitle className="text-foreground flex items-center gap-2">
               <Search className="h-5 w-5 text-primary" />
               Member Lookup
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-muted-foreground">
               Enter member ID to start a transaction
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="externalId" className="text-slate-200">External ID</Label>
+              <Label htmlFor="externalId" className="text-foreground">External ID</Label>
               <div className="flex gap-2">
                 <Input
                   id="externalId"
@@ -180,7 +180,7 @@ export default function POSPage() {
                   value={externalId}
                   onChange={(e) => setExternalId(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-                  className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+                  className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
                   data-testid="input-external-id"
                 />
                 <Button 
@@ -198,31 +198,31 @@ export default function POSPage() {
             </div>
 
             {member && (
-              <div className="p-4 rounded-lg bg-slate-700/30 border border-slate-600" data-testid="card-member-info">
+              <div className="p-4 rounded-lg bg-muted/30 border border-border" data-testid="card-member-info">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
                     <User className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium text-white text-lg" data-testid="text-member-name">
+                    <p className="font-medium text-foreground text-lg" data-testid="text-member-name">
                       {member.first_name} {member.last_name}
                     </p>
-                    <p className="text-sm text-slate-400">{member.email}</p>
+                    <p className="text-sm text-muted-foreground">{member.email}</p>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 rounded bg-slate-800/50">
-                    <p className="text-sm text-slate-400">Current Balance</p>
+                  <div className="p-3 rounded bg-card">
+                    <p className="text-sm text-muted-foreground">Current Balance</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <Coins className="h-5 w-5 text-yellow-500" />
-                      <span className="text-2xl font-bold text-white" data-testid="text-points-balance">
+                      <Coins className="h-5 w-5 text-secondary" />
+                      <span className="text-2xl font-bold text-foreground" data-testid="text-points-balance">
                         {member.points_balance.toLocaleString()}
                       </span>
                     </div>
                   </div>
-                  <div className="p-3 rounded bg-slate-800/50">
-                    <p className="text-sm text-slate-400">Tier</p>
+                  <div className="p-3 rounded bg-card">
+                    <p className="text-sm text-muted-foreground">Tier</p>
                     <Badge variant="outline" className="mt-2" data-testid="badge-tier">
                       {member.tier_name}
                     </Badge>
@@ -233,30 +233,30 @@ export default function POSPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-700 bg-slate-800/50">
+        <Card className="border-border bg-card/80">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
+            <CardTitle className="text-foreground flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-primary" />
               Transaction
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-muted-foreground">
               Process earn or redeem actions
             </CardDescription>
           </CardHeader>
           <CardContent>
             {!member ? (
               <div className="text-center py-12">
-                <CreditCard className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400">Look up a member to process transactions</p>
+                <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Look up a member to process transactions</p>
               </div>
             ) : (
               <Tabs defaultValue="earn" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-slate-700/50">
-                  <TabsTrigger value="earn" className="data-[state=active]:bg-green-600" data-testid="tab-earn">
+                <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+                  <TabsTrigger value="earn" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid="tab-earn">
                     <Plus className="h-4 w-4 mr-2" />
                     Earn
                   </TabsTrigger>
-                  <TabsTrigger value="redeem" className="data-[state=active]:bg-red-600" data-testid="tab-redeem">
+                  <TabsTrigger value="redeem" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground" data-testid="tab-redeem">
                     <Minus className="h-4 w-4 mr-2" />
                     Redeem
                   </TabsTrigger>
@@ -264,19 +264,19 @@ export default function POSPage() {
                 
                 <TabsContent value="earn" className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="earnPoints" className="text-slate-200">Points to Add</Label>
+                    <Label htmlFor="earnPoints" className="text-foreground">Points to Add</Label>
                     <Input
                       id="earnPoints"
                       type="number"
                       placeholder="100"
                       value={points}
                       onChange={(e) => setPoints(e.target.value)}
-                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 text-xl"
+                      className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-xl"
                       data-testid="input-earn-points"
                     />
                   </div>
                   <Button 
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    className="w-full bg-primary hover:bg-primary/90"
                     onClick={handleEarn}
                     disabled={isProcessing || !points}
                     data-testid="button-earn"
@@ -292,22 +292,22 @@ export default function POSPage() {
                 
                 <TabsContent value="redeem" className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="redeemPoints" className="text-slate-200">Points to Redeem</Label>
+                    <Label htmlFor="redeemPoints" className="text-foreground">Points to Redeem</Label>
                     <Input
                       id="redeemPoints"
                       type="number"
                       placeholder="50"
                       value={points}
                       onChange={(e) => setPoints(e.target.value)}
-                      className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 text-xl"
+                      className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-xl"
                       data-testid="input-redeem-points"
                     />
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-muted-foreground">
                       Available: {member.points_balance.toLocaleString()} points
                     </p>
                   </div>
                   <Button 
-                    className="w-full bg-red-600 hover:bg-red-700"
+                    className="w-full bg-secondary hover:bg-secondary/90"
                     onClick={handleRedeem}
                     disabled={isProcessing || !points}
                     data-testid="button-redeem"
@@ -327,13 +327,13 @@ export default function POSPage() {
       </div>
 
       {lastTransaction && (
-        <Card className="border-slate-700 bg-slate-800/50" data-testid="card-transaction-result">
+        <Card className="border-border bg-card/80" data-testid="card-transaction-result">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
+            <CardTitle className="text-foreground flex items-center gap-2">
               {lastTransaction.success ? (
-                <CheckCircle className="h-5 w-5 text-green-500" />
+                <CheckCircle className="h-5 w-5 text-primary" />
               ) : (
-                <XCircle className="h-5 w-5 text-red-500" />
+                <XCircle className="h-5 w-5 text-secondary" />
               )}
               Last Transaction
             </CardTitle>
@@ -341,31 +341,31 @@ export default function POSPage() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <p className="text-sm text-slate-400">Action</p>
+                <p className="text-sm text-muted-foreground">Action</p>
                 <Badge 
-                  className={lastTransaction.action === "EARN" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}
+                  className={lastTransaction.action === "EARN" ? "bg-primary/20 text-primary" : "bg-secondary/20 text-secondary"}
                 >
                   {lastTransaction.action}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Previous Balance</p>
-                <p className="text-lg font-medium text-slate-300">{lastTransaction.previousBalance.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Previous Balance</p>
+                <p className="text-lg font-medium text-muted-foreground">{lastTransaction.previousBalance.toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">New Balance</p>
-                <p className="text-lg font-medium text-white">{lastTransaction.newBalance.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">New Balance</p>
+                <p className="text-lg font-medium text-foreground">{lastTransaction.newBalance.toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Transaction ID</p>
-                <code className="text-sm text-slate-300">{lastTransaction.transactionId}</code>
+                <p className="text-sm text-muted-foreground">Transaction ID</p>
+                <code className="text-sm text-muted-foreground">{lastTransaction.transactionId}</code>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-slate-700 flex justify-between items-center">
-              <p className="text-sm text-slate-400">
+            <div className="mt-4 pt-4 border-t border-border flex flex-wrap justify-between items-center gap-2">
+              <p className="text-sm text-muted-foreground">
                 {new Date(lastTransaction.timestamp).toLocaleString()}
               </p>
-              <Button variant="outline" onClick={resetTransaction} className="border-slate-600" data-testid="button-new-transaction">
+              <Button variant="outline" onClick={resetTransaction} data-testid="button-new-transaction">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 New Transaction
               </Button>
@@ -375,12 +375,12 @@ export default function POSPage() {
       )}
 
       {mockMode && (
-        <Card className="border-blue-500/30 bg-blue-500/10">
+        <Card className="border-primary/30 bg-primary/10">
           <CardContent className="py-4">
-            <p className="text-sm text-blue-300">
-              <strong>Mock Mode:</strong> Try these member IDs: <code className="bg-blue-900/30 px-1 rounded">PUB-abc123</code>, 
-              <code className="bg-blue-900/30 px-1 rounded ml-1">CLM-def456</code>, 
-              <code className="bg-blue-900/30 px-1 rounded ml-1">PUB-ghi789</code>
+            <p className="text-sm text-primary">
+              <strong>Mock Mode:</strong> Try these member IDs: <code className="bg-primary/20 px-1 rounded">PUB-abc123</code>, 
+              <code className="bg-primary/20 px-1 rounded ml-1">CLM-def456</code>, 
+              <code className="bg-primary/20 px-1 rounded ml-1">PUB-ghi789</code>
             </p>
           </CardContent>
         </Card>

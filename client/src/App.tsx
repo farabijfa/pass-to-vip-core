@@ -29,7 +29,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -52,13 +52,13 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-slate-900">
+      <div className="flex h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center justify-between gap-2 p-3 border-b border-slate-700 bg-slate-800/50">
-            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-slate-300" />
+          <header className="flex items-center justify-between gap-2 p-3 border-b border-border bg-card/50">
+            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-foreground" />
             {mockMode && (
-              <Badge variant="outline" className="text-xs text-yellow-400 border-yellow-400/50">
+              <Badge variant="outline" className="text-xs text-secondary border-secondary/50">
                 Mock Data Active
               </Badge>
             )}
@@ -109,8 +109,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Toaster />
-          <Router />
+          <div className="dark">
+            <Toaster />
+            <Router />
+          </div>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

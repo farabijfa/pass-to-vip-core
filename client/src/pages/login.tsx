@@ -39,14 +39,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-      <Card className="w-full max-w-md border-slate-700 bg-slate-800/50 backdrop-blur">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+      <Card className="w-full max-w-md border-border bg-card/80 backdrop-blur">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Sparkles className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl text-white">Client Portal</CardTitle>
-          <CardDescription className="text-slate-400">
+          <CardTitle className="text-2xl text-foreground">Client Portal</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Sign in to access your loyalty program dashboard
           </CardDescription>
           {mockMode && (
@@ -58,7 +58,7 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-200">Email</Label>
+              <Label htmlFor="email" className="text-foreground">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -66,12 +66,12 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
                 data-testid="input-email"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-200">Password</Label>
+              <Label htmlFor="password" className="text-foreground">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -79,13 +79,13 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
                 data-testid="input-password"
               />
             </div>
             
             {error && (
-              <div className="text-sm text-red-400 bg-red-900/20 p-3 rounded-md" data-testid="text-error">
+              <div className="text-sm text-destructive-foreground bg-destructive/20 p-3 rounded-md" data-testid="text-error">
                 {error}
               </div>
             )}
@@ -111,13 +111,13 @@ export default function LoginPage() {
           </form>
 
           {mockMode && (
-            <div className="mt-6 pt-6 border-t border-slate-700">
-              <p className="text-sm text-slate-400 text-center mb-3">
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-sm text-muted-foreground text-center mb-3">
                 Quick access with demo account
               </p>
               <Button 
                 variant="outline" 
-                className="w-full border-slate-600 hover:bg-slate-700"
+                className="w-full"
                 onClick={handleMockLogin}
                 disabled={isLoading}
                 data-testid="button-mock-login"
