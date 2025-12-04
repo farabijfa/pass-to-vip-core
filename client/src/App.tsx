@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -20,6 +21,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const { isLoading, isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
 
+  useEffect(() => {
+    if (!isLoading && !isLoggedIn) {
+      setLocation("/login");
+    }
+  }, [isLoading, isLoggedIn, setLocation]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -29,7 +36,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!isLoggedIn) {
-    setLocation("/login");
     return null;
   }
 
