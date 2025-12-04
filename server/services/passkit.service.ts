@@ -615,6 +615,57 @@ class PassKitService {
       error: 'EVENT_TICKET protocol in placeholder mode. See TODO in passkit.service.ts',
     };
   }
+
+  async pushMessage(
+    passkitInternalId: string, 
+    programId: string,
+    message: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode for push message.');
+      console.log(`[Mock Push] Member: ${passkitInternalId}, Message: ${message}`);
+      return { success: true };
+    }
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/member`;
+      
+      const payload = {
+        externalId: passkitInternalId,
+        programId: programId,
+        changeMessage: message,
+      };
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      await axios.put(url, payload, authConfig);
+      
+      console.log(`📨 Push message sent to ${passkitInternalId}: "${message}"`);
+      return { success: true };
+
+    } catch (error) {
+      let errorMessage = 'PassKit Push Message Failed';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit Push Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
 }
 
 export const passKitService = new PassKitService();

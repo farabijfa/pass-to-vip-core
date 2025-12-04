@@ -6,6 +6,7 @@ import healthRoutes from "./health.routes";
 import posRoutes from "./pos.routes";
 import campaignRoutes from "./campaign.routes";
 import adminRoutes from "./admin.routes";
+import notificationRoutes from "./notification.routes";
 
 const router = Router();
 
@@ -22,5 +23,7 @@ router.use("/health", healthRoutes);
 router.use("/campaign", campaignRoutes);
 
 router.use("/admin", adminRoutes);
+
+router.use("/notify", notificationRoutes);
 
 export default router;
