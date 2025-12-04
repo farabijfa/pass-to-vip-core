@@ -1,435 +1,58 @@
 # Phygital Loyalty Ecosystem - Backend API
 
 ## Overview
-This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem. It integrates digital wallets with physical rewards processing to create a seamless experience between physical interactions and digital loyalty programs. Key capabilities include membership point management, one-time offer redemptions, digital pass creation and updates, and a "Physical Bridge" to convert physical mail recipients into digital wallet users.
+This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem. It seamlessly integrates digital wallets with physical rewards processing, bridging physical interactions and digital loyalty programs. Key capabilities include comprehensive membership point management, one-time offer redemptions, dynamic digital pass creation and updates, and a "Physical Bridge" designed to convert physical mail recipients into active digital wallet users. The business vision is to provide a robust, scalable platform that enhances customer engagement through a unified loyalty experience across physical and digital touchpoints, unlocking significant market potential in retail, hospitality, and event management. The project aims to be the leading backend solution for phygital loyalty programs.
+
+## User Preferences
+I want iterative development.
+I prefer to be asked before you make any major changes to the codebase.
+I prefer detailed explanations when new features or complex logic are introduced.
+I do not want the agent to make changes to the /admin folder.
 
 ## System Architecture
 
 ### Core Design
-- **Controllers:** Handle incoming requests and delegate to services
-- **Services:** Business logic and external system integration (Supabase, PassKit, PostGrid)
-- **Logic Service:** Main orchestrator for POS actions, routing to Supabase RPC and PassKit sync
+- **Controllers:** Manage incoming API requests and delegate tasks to appropriate services.
+- **Services:** Encapsulate business logic and handle integrations with external systems (Supabase, PassKit, PostGrid).
+- **Logic Service:** Acts as the central orchestrator for Point-of-Sale (POS) actions, routing requests to Supabase RPC for data operations and PassKit for wallet synchronization.
 
 ### Data Flow
-1. Request → Controller → logic.service.ts
-2. Logic Service → Supabase RPC (stored procedure)
-3. Supabase executes transaction
-4. Logic Service → passkit.service.ts (wallet sync if needed)
-
-## API Endpoints
-
-### POS Actions (Softr Integration)
-- `POST /api/pos/action` - Process POS action
-- `GET /api/pos/actions` - List available action types
-
-### Loyalty Operations
-- `POST /api/loyalty/membership` - Process membership transaction
-- `POST /api/loyalty/one-time-use` - Process one-time offer
-- `GET /api/loyalty/members/:memberId/balance` - Get points balance
-- `GET /api/loyalty/members/:memberId/transactions` - Get transaction history
-
-### Digital Wallet (PassKit)
-- `POST /api/wallet/enroll` - Enroll new member
-- `POST /api/wallet/coupons` - Issue single-use coupon
-- `POST /api/wallet/passes` - Create pass
-- `PATCH /api/wallet/passes/:serialNumber` - Update pass
-- `DELETE /api/wallet/passes/:serialNumber` - Delete pass
-- `POST /api/wallet/passes/:serialNumber/push` - Send push notification
-
-### Direct Mail (PostGrid)
-- `POST /api/mail/mail` - Send direct mail
-- `GET /api/mail/mail/:mailId` - Get mail status
-- `DELETE /api/mail/mail/:mailId` - Cancel mail
-- `GET /api/mail/templates` - List templates
-- `POST /api/mail/campaign` - Send batch campaign (postcards)
-
-### Physical Bridge (Claim Route)
-- `GET /claim/:id` - Process claim code and redirect to PassKit
-- `GET /claim/:id/status` - Check claim code status
-
-### Notification Service (High-Scale)
-- `POST /api/notify/broadcast` - Send push notification to all members (batched)
-- `POST /api/notify/birthday-run` - Run birthday bot (awards points + notification)
-- `GET /api/notify/logs` - Get campaign notification logs
-
-### Health Checks
-- `GET /api/health` - Full health check
-- `GET /api/health/ready` - Readiness probe
-- `GET /api/health/live` - Liveness probe
-
-## POS Actions
-
-```bash
-POST /api/pos/action
-{
-  "external_id": "QR_CODE_OR_PIN",
-  "action": "MEMBER_EARN",
-  "amount": 100
-}
-```
-
-### Action Types
-- `MEMBER_EARN` / `MEMBER_REDEEM` / `MEMBER_ADJUST` - Membership points
-- `COUPON_ISSUE` / `COUPON_REDEEM` - Coupon operations
-- `TICKET_CHECKIN` - Event tickets (placeholder)
-- `INSTALL` / `UNINSTALL` - Pass lifecycle
-
-### Supabase RPC Return Fields
-
-**MEMBERSHIP actions:**
-```json
-{
-  "passkit_internal_id": "member_id",
-  "passkit_program_id": "4RhsVhHek0dliVogVznjSQ",
-  "new_balance": 1100
-}
-```
-
-**COUPON_ISSUE action:**
-```json
-{
-  "passkit_campaign_id": "YOUR_CAMPAIGN_ID",
-  "passkit_offer_id": "YOUR_OFFER_ID"
-}
-```
-
-## Physical Bridge
-
-Closes the Phygital loop: Physical Mail → QR Scan → Digital Wallet
-
-### Flow
-1. **Batch Campaign** → Generate claim codes in Supabase → Send postcards via PostGrid
-2. **User Scans QR** → Hits `/claim/{code}` → Lookup in Supabase → Redirect to PassKit
-3. **Pass Installed** → User is now a digital loyalty member
-
-### Batch Campaign
-
-```bash
-POST /api/mail/campaign
-{
-  "frontTemplateId": "template_wUMgpJdU5Hi7tPxXNTgLwj",
-  "backTemplateId": "template_rBEJn1PtQepWxnKFb4RezV",
-  "size": "9x6",
-  "programId": "4RhsVhHek0dliVogVznjSQ",
-  "baseClaimUrl": "https://your-app.replit.app/claim",
-  "contacts": [
-    {
-      "firstName": "John",
-      "lastName": "Doe",
-      "email": "john@example.com",
-      "addressLine1": "123 Main St",
-      "city": "San Francisco",
-      "state": "CA",
-      "postalCode": "94102",
-      "country": "US"
-    }
-  ]
-}
-```
-
-**PostGrid Size Values** (width x height):
-- `6x4` - Standard postcard (default)
-- `9x6` - Mid-size postcard
-- `11x6` - Oversized postcard
-
-### Claim Route Flow
-1. Looks up claim code (`lookup_claim_code` RPC)
-2. Validates status is `ISSUED`
-3. Enrolls user in PassKit (`enrollMember`)
-4. Updates status to `INSTALLED`
-5. Redirects to PassKit install URL
-
-### PostGrid Template Variables
-- `{{firstName}}`, `{{lastName}}`, `{{fullName}}`
-- `{{qrCodeUrl}}` - QR code image URL (generated via api.qrserver.com)
-- `{{claimCode}}` - Raw claim code
-
-### QR Code Generation
-The system automatically converts claim URLs to printable QR code images using `api.qrserver.com`:
-```
-Claim URL: https://app.replit.app/claim/ABC123
-QR Image:  https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=https%3A%2F%2Fapp.replit.app%2Fclaim%2FABC123
-```
-This ensures PostGrid templates receive actual image URLs for the `<img src="{{qrCodeUrl}}">` tags.
-
-## Supabase RPC Functions
-
-### process_membership_transaction
-```sql
--- Parameters: p_external_id, p_action, p_amount
--- Returns: transaction_id, new_balance, passkit_internal_id, passkit_program_id
-```
-
-### process_one_time_use
-```sql
--- Parameters: p_external_id, p_action
--- Returns: passkit_internal_id, passkit_campaign_id, passkit_offer_id
-```
-
-### generate_claim_code
-```sql
--- Parameters: p_passkit_program_id, p_first_name, p_last_name, p_email, p_address_*
--- Returns: { claim_code }
-```
-
-### lookup_claim_code
-```sql
--- Parameters: p_claim_code
--- Returns: claim_code, status, passkit_program_id, passkit_install_url, first_name, etc.
--- Status: ISSUED, INSTALLED, EXPIRED, CANCELLED
-```
-
-### update_claim_code_status
-```sql
--- Parameters: p_claim_code, p_status, p_passkit_install_url
-```
-
-## PassKit Protocol Status
-
-| Protocol | Status | Notes |
-|----------|--------|-------|
-| MEMBERSHIP | ✅ LIVE | Push notifications working |
-| COUPON | ✅ LIVE | Issue and redeem |
-| EVENT_TICKET | ⏳ PLACEHOLDER | Requires Venue + Event setup |
-
-## Tenant Provisioning (Multi-Tenant SaaS)
-
-### Admin API Endpoints
-All admin endpoints require API key authentication via `X-API-Key` header.
-Default API key: `pk_phygital_admin_2024` (configurable via `ADMIN_API_KEY` env var)
-
-- `POST /api/admin/provision` - Create new tenant (auth user + program + admin_profiles)
-- `GET /api/admin/tenants` - List all tenants
-- `GET /api/admin/tenants/:userId` - Get specific tenant
-- `DELETE /api/admin/tenants/:userId` - Delete tenant
-
-### Provision Request
-```bash
-POST /api/admin/provision
-X-API-Key: pk_phygital_admin_2024
-Content-Type: application/json
-
-{
-  "businessName": "Acme Coffee",
-  "email": "admin@acme.com",
-  "password": "securepassword123",
-  "passkitProgramId": "4RhsVhHek0dliVogVznjSQ",
-  "protocol": "MEMBERSHIP"
-}
-```
-
-### Provision Response
-```json
-{
-  "success": true,
-  "data": {
-    "userId": "uuid-here",
-    "programId": "uuid-here",
-    "email": "admin@acme.com",
-    "businessName": "Acme Coffee"
-  },
-  "metadata": {
-    "processingTime": 245
-  }
-}
-```
-
-### Provisioning Flow
-1. Creates Supabase Auth user with email/password
-2. Creates program record linked to PassKit program ID
-3. Creates admin_profiles record linking user to program
-4. Rollback on failure: If any step fails, previous steps are undone
-
-## Environment Variables
-
-```
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-PASSKIT_API_KEY=
-PASSKIT_API_SECRET=
-POSTGRID_API_KEY=
-ADMIN_API_KEY=pk_phygital_admin_2024
-```
-
-## Bulk Campaign Manager
-
-### Admin Dashboard
-- **URL:** `/admin/campaign`
-- **Authentication:** Basic Auth (default: admin/phygital2024)
-- **Features:**
-  - Drag-and-drop CSV file upload
-  - Toggle between Postcards and Letters
-  - Configurable program ID, templates, and postcard size
-  - Real-time processing status with results table
-
-### CSV Upload Endpoint
-```bash
-POST /api/campaign/upload-csv
-Content-Type: multipart/form-data
-Authorization: Basic base64(username:password)
-
-# Common fields
-file: campaign.csv
-program_id: 4RhsVhHek0dliVogVznjSQ
-resource_type: postcard | letter
-base_claim_url: https://your-app.replit.app/claim (optional)
-
-# Postcard-specific fields
-front_template_id: template_wUMgpJdU5Hi7tPxXNTgLwj
-back_template_id: template_rBEJn1PtQepWxnKFb4RezV
-size: 6x4 | 9x6 | 11x6
-
-# Letter-specific fields
-template_id: template_xxx
-```
-
-### CSV Format
-```csv
-first_name,last_name,email,address,city,state,zip
-John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
-```
-
-### Response
-```json
-{
-  "success": true,
-  "data": {
-    "summary": { "total": 10, "success": 9, "failed": 1 },
-    "results": [
-      { "contact": "John Doe", "success": true, "claimCode": "ABC12345", "postcardId": "postcard_xxx" }
-    ]
-  }
-}
-```
-
-## High-Scale Notification Service
-
-### Architecture
-- **Batch Processing:** Messages sent in chunks of 50 to respect PassKit rate limits
-- **Parallel Execution:** Promise.all within each batch for optimal throughput
-- **Logging:** All campaigns logged to `notification_logs` table
-
-### Broadcast Endpoint
-
-```bash
-POST /api/notify/broadcast
-X-API-Key: pk_phygital_admin_2024
-Content-Type: application/json
-
-{
-  "programId": "4RhsVhHek0dliVogVznjSQ",
-  "message": "Flash Sale! 2x points today only!",
-  "segment": "ALL",
-  "campaignName": "December Flash Sale"
-}
-```
-
-**Segment Options:**
-- `ALL` - All active members (default)
-- `VIP` - Members with tier_points > 1000
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "totalRecipients": 150,
-    "successCount": 148,
-    "failedCount": 2,
-    "campaignLogId": "uuid-here"
-  },
-  "metadata": { "processingTime": 1245 }
-}
-```
-
-### Birthday Bot
-
-```bash
-POST /api/notify/birthday-run
-X-API-Key: pk_phygital_admin_2024
-```
-
-**Flow:**
-1. Query users with `birth_date` matching today and `marketing_opt_in = true`
-2. Award 50 points via `process_membership_transaction` RPC
-3. Look up user's pass in `passes_master` by email
-4. Send push notification via PassKit changeMessage
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "processed": 5,
-    "successCount": 5,
-    "failedCount": 0,
-    "campaignLogId": "uuid-here"
-  }
-}
-```
-
-### Campaign Logs
-
-```bash
-GET /api/notify/logs?programId=xxx&limit=50
-X-API-Key: pk_phygital_admin_2024
-```
-
-## Recent Changes
-
-### 2025-12-04 - High-Scale Notification Service
-- Created notification.service.ts with batch processing (50 users per batch)
-- Added pushMessage() function to PassKit service for changeMessage-only updates
-- Created POST /api/notify/broadcast for mass push notifications
-- Created POST /api/notify/birthday-run for automated birthday rewards
-- Created GET /api/notify/logs for campaign history
-- All endpoints protected by API key middleware
-
-### 2025-12-04 - Multi-Tenant SaaS Foundation
-- Created admin.service.ts with createTenant function (auth user + program + admin_profiles)
-- Created admin.controller.ts with provisionTenant handler
-- Created admin.routes.ts with POST /provision protected by API key
-- Added checkApiKey middleware for securing admin endpoints
-- Supports automatic rollback on failure during tenant provisioning
-
-### 2025-12-03 - QR Code Image Generation Fix
-- Fixed PostGrid templates showing blank white box instead of QR code
-- Campaign service now generates actual QR code image URLs using api.qrserver.com
-- `{{qrCodeUrl}}` merge variable now contains PNG image URL, not text link
-- Added route validation middleware for resource_type and postcard size parameters
-- Set APP_URL environment variable for proper claim URL generation
-
-### 2025-12-03 - Letter Support Added
-- Added `sendLetter()` to PostGrid service with letter-specific options (addressPlacement, doubleSided, color)
-- Updated campaign.service.ts to accept `resourceType` config and route to postcard or letter
-- Updated campaign.controller.ts to accept `resource_type` parameter
-- Updated admin dashboard with Postcard/Letter toggle selector and conditional form fields
-- Added PostGridLetter schema and types to shared/schema.ts
-
-### 2025-12-03 - Bulk Campaign Manager
-- Added multer for CSV file upload handling
-- Created campaign.service.ts with CSV stream processing
-- Created campaign.controller.ts and POST /api/campaign/upload-csv endpoint
-- Built admin dashboard at /admin/campaign with Bootstrap UI
-- Added basic auth middleware for admin routes
-- End-to-end tested: CSV upload → claim codes generated → postcards sent
-
-### 2025-12-03 - Physical Bridge Complete
-- Added `sendPostcard()` to PostGrid service with front/back template support
-- Added claim code RPC functions to Supabase service
-- Created `POST /api/mail/campaign` batch endpoint
-- Created `GET /claim/:id` redirect route with PassKit enrollment
-- Created `GET /claim/:id/status` endpoint for claim status lookup
-- Fixed PostGrid size format (width x height: `6x4`, `9x6`, `11x6`)
-- Fixed PassKit enrollment to include required `tierId` parameter
-- Full Phygital loop verified working: Postcard → QR Scan → PassKit Enrollment
-
-### 2025-12-03 - Coupon Protocol
-- Added `issueCoupon()` function
-- Added `POST /api/wallet/coupons` endpoint
-
-### 2025-12-03 - PassKit Production
-- Live pass updates with push notifications
-- JWT authentication via passkitJWT.ts
-- US region: `https://api.pub2.passkit.io`
-- Pass install URL format: `https://pub2.pskt.io/{memberId}`
+1. Client Request → Controller → `logic.service.ts`
+2. `logic.service.ts` → Supabase RPC (executes stored procedures)
+3. Supabase performs transactional database operations.
+4. `logic.service.ts` → `passkit.service.ts` (triggers digital wallet updates if required).
+
+### UI/UX Decisions
+- **Admin Dashboard:** Features a Bootstrap-based UI for managing bulk campaigns, including drag-and-drop CSV upload, toggles for postcards/letters, configurable program IDs, templates, and real-time processing status.
+
+### Technical Implementations
+- **API Endpoints:** A comprehensive set of RESTful APIs for POS actions, loyalty operations, digital wallet management, direct mail, physical bridge, and high-scale notifications.
+- **Supabase RPC:** Utilizes Supabase Remote Procedure Calls for secure and efficient execution of complex database logic, such as `process_membership_transaction`, `process_one_time_use`, `generate_claim_code`, `lookup_claim_code`, and `update_claim_code_status`.
+- **Physical Bridge:** Implements a full "Phygital" loop where physical mail (postcards via PostGrid) with QR codes leads to digital wallet enrollment via a claim route (`/claim/:id`), integrating claim code generation, lookup, and PassKit enrollment.
+- **Multi-Tenant SaaS:** Supports tenant provisioning through an admin API, allowing the creation of new tenants with associated Supabase Auth users, programs, and admin profiles, with automatic rollback on failure.
+- **High-Scale Notification Service:** Designed for efficient broadcast and targeted notifications (e.g., birthday runs) using batch processing (50 users/batch) and parallel execution to manage PassKit rate limits, logging all campaigns.
+- **QR Code Generation:** Automatically generates printable QR code image URLs using `api.qrserver.com` for integration into PostGrid templates.
+- **Security:** Admin API endpoints are protected by API key authentication (`X-API-Key` header) and admin routes use Basic Auth.
+
+### Feature Specifications
+- **POS Actions:** Supports various action types including `MEMBER_EARN`, `MEMBER_REDEEM`, `COUPON_ISSUE`, and `COUPON_REDEEM`.
+- **Digital Wallet:** Manages enrollment, coupon issuance, pass creation, updates, deletion, and push notifications through PassKit.
+- **Direct Mail:** Integrates with PostGrid for sending postcards and letters, supporting various sizes and template variables.
+- **Bulk Campaign Manager:** Facilitates batch campaigns via CSV upload, allowing for sending postcards or letters with dynamically generated claim codes.
+- **Birthday Bot:** Automated process to identify members with birthdays, award points, and send personalized push notifications.
+
+## External Dependencies
+
+-   **Supabase:**
+    -   **Database:** PostgreSQL database for storing all loyalty program data, member information, transactions, and claim codes.
+    -   **Authentication:** Handles user authentication for tenants and admin users.
+    -   **Edge Functions/RPC:** Executes stored procedures for core loyalty logic (`process_membership_transaction`, `generate_claim_code`, etc.).
+-   **PassKit (via PassKit API):**
+    -   **Digital Wallet Management:** Core service for creating, updating, and managing digital passes (memberships, coupons, event tickets).
+    -   **Push Notifications:** Delivers real-time updates and messages to digital wallet holders.
+    -   **Pass Install URLs:** Provides unique URLs for users to install digital passes.
+-   **PostGrid (via PostGrid API):**
+    -   **Direct Mail:** Used for sending physical postcards and letters as part of loyalty campaigns and the "Physical Bridge."
+    -   **Template Management:** Utilizes PostGrid templates for dynamic content generation in physical mail.
+-   **`api.qrserver.com`:**
+    -   **QR Code Generation:** An external service used to convert claim URLs into QR code image URLs for printing on physical mail.
