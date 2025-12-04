@@ -1,0 +1,113 @@
+This is the "Operational Workflow." You are asking how to act as the **Agency Admin** to onboard a new paying client.
+
+[cite_start]Because we built a **Headless Architecture** [cite: 18-19, 48], you do **not** need to touch the code for every new client. Instead, you act as the "Bridge," connecting the visual design tools (PassKit/PostGrid) to your logic engine (Replit/Supabase) via ID pasting.
+
+Here is your step-by-step Standard Operating Procedure (SOP) for going live with a new customer.
+
+---
+
+### The Workflow Diagram
+
+1.  **Design (External Tools):** Create the Visual Assets (Wallet Pass & Postcard).
+2.  **Configuration (External Tools):** Define the Data Fields (Variables).
+3.  **Linkage (Your Admin Dashboard):** Paste the IDs into your System.
+4.  **Launch (Your Admin Dashboard):** Upload CSV / Start Campaign.
+
+---
+
+### Step 1: PassKit (Digital Asset)
+**Goal:** Create the digital card that lives in the phone.
+
+1.  **Create Project:** Log in to PassKit. Create a new "Membership" project (e.g., "Joe's Pizza Loyalty").
+2.  **Design:** Upload Joe's logo, choose his brand colors (Red/White), and set the strip image.
+3.  **Configure Fields (Crucial):**
+    * You must tell PassKit where to display the data your API sends.
+    * **Points Field:** Create a field with the key `points`. Place it on the "Header" or "Primary" section.
+    * **Tier Field:** Create a field `tierLabel` (e.g., "Gold Member").
+    * *Note:* Your backend sends `{ points: 100 }`. If you name the field `balance` in PassKit, it won't update. **Stick to standard keys.**
+4.  **Get the Credential:**
+    * Go to **Settings** -> **Program Settings**.
+    * Copy the **Program ID** (e.g., `program_joes_pizza_123`).
+    * Copy the **Tier ID** (usually `base` or `tier_bronze`).
+
+### Step 2: PostGrid (Physical Asset)
+**Goal:** Create the physical mailer that bridges the gap.
+
+1.  **Create Template:** Log in to PostGrid. Create a new "4x6 Postcard".
+2.  **Design:** Upload the artwork (Front/Back).
+3.  **Insert Variables (Crucial):**
+    * **Name:** Add a text box: `Hi {{firstName}}!`
+    * **The Bridge:** Drag the **QR Code Element** onto the canvas.
+    * **QR Value:** Set the value to `{{qrCodeUrl}}`.
+    * *Why:* Your Replit backend generates this unique URL for every single person.
+4.  **Get the Credential:**
+    * Save the template.
+    * Copy the **Template ID** (e.g., `template_joes_mailer_456`).
+
+### Step 3: The "Handshake" (Your Super Admin Dashboard)
+**Goal:** Tell your "Brain" (Supabase) that these two external assets belong to "Joe's Pizza".
+
+1.  Log in to your **WeWeb Super Admin** page.
+2.  Click **"Provision New Tenant"**.
+3.  Fill in the Form:
+    * **Business Name:** "Joe's Pizza"
+    * **Admin Email:** "owner@joespizza.com" (This creates their login).
+    * **Protocol:** `MEMBERSHIP`
+    * **PassKit Program ID:** `program_joes_pizza_123` (From Step 1).
+    * **PostGrid Template ID:** `template_joes_mailer_456` (From Step 2).
+4.  Click **Create**.
+    * [cite_start]*System Action:* Replit creates a row in the `programs` table linking these IDs together [cite: 90-100].
+
+### Step 4: The Launch (Data Ingestion)
+**Goal:** Turn Joe's CSV list into live passes.
+
+1.  Go to the **Campaign Manager** (or run the Replit Admin tool).
+2.  **Select Client:** "Joe's Pizza".
+3.  **Upload CSV:** Joe's customer list (`name, address, zip`).
+4.  **Execute:**
+    * Replit loops through the CSV.
+    * Generates a unique ID (`MAIL-888`).
+    * Sends a request to PostGrid using `template_joes_mailer_456` + `qrCodeUrl=.../claim/MAIL-888`.
+    * Saves the record in Supabase linked to `program_joes_pizza_123`.
+
+---
+
+### Use Case Examples
+
+#### Scenario A: The Local Coffee Shop (Simple Loyalty)
+* **Goal:** Buy 10 coffees, get 1 free.
+* **PassKit:** Design a simple card. Field `points` label is "Stars".
+* **PostGrid:** "We miss you! Scan for 5 free stars."
+* **Flow:** User scans letter -> Installs Pass (0 Stars) -> POS Scan (Add 5 Points) -> Pass updates to 5 Stars.
+* **Gap to Watch:** Ensure the `points_balance` in Supabase is synced. [cite_start](Your `process_membership_transaction` RPC handles this [cite: 165-171]).
+
+#### Scenario B: The VIP Concert Access (Event Ticket)
+* **Goal:** One-time entry QR code.
+* **PassKit:** Design an "Event Ticket" style pass. Field `eventDate`.
+* **PostGrid:** "Your VIP Ticket is enclosed."
+* **Flow:** User scans letter -> Installs Pass.
+* [cite_start]**At Event:** Bouncer scans pass -> Selects "Check In" on POS -> System runs `process_one_time_use` RPC [cite: 172-179] -> Pass updates to "VOID / USED".
+* **Gap to Watch:** Ensure `protocol` is set to `EVENT_TICKET` in Step 3 so the logic router knows to use the "One Time Use" RPC instead of adding points.
+
+---
+
+### Gap Analysis & Fixes
+
+**1. Variable Mismatch Risk**
+* *Risk:* PostGrid expects `{{name}}` but your CSV has `first_name`.
+* [cite_start]*Fix:* In your Replit `campaign.service.ts`, we standardized the merge variables [cite: 236-250]. Always map your CSV columns to the standard keys: `firstName`, `qrCodeUrl`.
+
+**2. The "Base" Tier ID**
+* *Risk:* You paste the Program ID but forget the Tier ID. PassKit fails to enroll.
+* *Fix:* In your `programs` table, we should add a column `passkit_tier_id`.
+* *Action:* I recommend adding this column to Supabase now (`ALTER TABLE programs ADD COLUMN passkit_tier_id TEXT DEFAULT 'base';`) and updating your Provisioning Form to accept it.
+
+**3. Logo/Branding Consistency**
+* *Risk:* The User installs the pass, but the "Join" page looks generic.
+* *Fix:* PassKit handles the landing page automatically based on the design you did in Step 1. Since we redirect to the **PassKit Public URL**, the branding is always perfect.
+
+**4. Wrong QR Link**
+* *Risk:* You print 5,000 cards but the QR code leads to `localhost`.
+* *Fix:* Ensure your `process.env.APP_URL` in Replit is set to your **Live Production URL** (`https://passtovip.replit.app`), not your testing URL.
+
+This flow allows you to scale. You focus on **Sales & Design** (Steps 1 & 2). The **System** handles the complexity (Step 4).
