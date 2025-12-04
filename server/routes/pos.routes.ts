@@ -132,6 +132,210 @@ router.post("/action", async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
+router.get("/lookup/:externalId", async (req: Request, res: Response) => {
+  const requestId = (req.headers["x-request-id"] as string) || generate();
+  const startTime = Date.now();
+
+  try {
+    const { externalId } = req.params;
+
+    if (!externalId) {
+      return res.status(400).json(
+        createResponse(
+          false,
+          undefined,
+          undefined,
+          {
+            code: "VALIDATION_ERROR",
+            message: "External ID is required",
+          },
+          requestId,
+          Date.now() - startTime
+        )
+      );
+    }
+
+    const result = await logicService.lookupMember(externalId);
+    const processingTime = Date.now() - startTime;
+
+    if (!result.success) {
+      return res.status(404).json(
+        createResponse(
+          false,
+          undefined,
+          undefined,
+          {
+            code: "NOT_FOUND",
+            message: result.error || "Member not found",
+          },
+          requestId,
+          processingTime
+        )
+      );
+    }
+
+    return res.status(200).json(
+      createResponse(
+        true,
+        result.data,
+        "Member found",
+        undefined,
+        requestId,
+        processingTime
+      )
+    );
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    console.error(`[POS] Error looking up member:`, error);
+
+    return res.status(500).json(
+      createResponse(
+        false,
+        undefined,
+        undefined,
+        {
+          code: "PROCESSING_ERROR",
+          message: error instanceof Error ? error.message : "Internal Server Error",
+        },
+        requestId,
+        processingTime
+      )
+    );
+  }
+});
+
+router.post("/earn", async (req: Request, res: Response) => {
+  const requestId = (req.headers["x-request-id"] as string) || generate();
+  const startTime = Date.now();
+
+  try {
+    const { externalId, points } = req.body;
+
+    if (!externalId || points === undefined) {
+      return res.status(400).json(
+        createResponse(
+          false,
+          undefined,
+          undefined,
+          {
+            code: "VALIDATION_ERROR",
+            message: "External ID and points are required",
+          },
+          requestId,
+          Date.now() - startTime
+        )
+      );
+    }
+
+    const result = await logicService.handlePosAction(externalId, "MEMBER_EARN", points);
+    const processingTime = Date.now() - startTime;
+
+    const responseData = {
+      success: true,
+      action: "EARN",
+      memberId: externalId,
+      previousBalance: result.data?.previous_balance || 0,
+      newBalance: result.data?.new_balance || points,
+      transactionId: result.data?.transaction_id || `txn_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.status(200).json(
+      createResponse(
+        true,
+        responseData,
+        result.message,
+        undefined,
+        requestId,
+        processingTime
+      )
+    );
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    console.error(`[POS] Error earning points:`, error);
+
+    return res.status(500).json(
+      createResponse(
+        false,
+        undefined,
+        undefined,
+        {
+          code: "PROCESSING_ERROR",
+          message: error instanceof Error ? error.message : "Internal Server Error",
+        },
+        requestId,
+        processingTime
+      )
+    );
+  }
+});
+
+router.post("/redeem", async (req: Request, res: Response) => {
+  const requestId = (req.headers["x-request-id"] as string) || generate();
+  const startTime = Date.now();
+
+  try {
+    const { externalId, points } = req.body;
+
+    if (!externalId || points === undefined) {
+      return res.status(400).json(
+        createResponse(
+          false,
+          undefined,
+          undefined,
+          {
+            code: "VALIDATION_ERROR",
+            message: "External ID and points are required",
+          },
+          requestId,
+          Date.now() - startTime
+        )
+      );
+    }
+
+    const result = await logicService.handlePosAction(externalId, "MEMBER_REDEEM", points);
+    const processingTime = Date.now() - startTime;
+
+    const responseData = {
+      success: true,
+      action: "REDEEM",
+      memberId: externalId,
+      previousBalance: result.data?.previous_balance || 0,
+      newBalance: result.data?.new_balance || 0,
+      transactionId: result.data?.transaction_id || `txn_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    };
+
+    return res.status(200).json(
+      createResponse(
+        true,
+        responseData,
+        result.message,
+        undefined,
+        requestId,
+        processingTime
+      )
+    );
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    console.error(`[POS] Error redeeming points:`, error);
+
+    return res.status(500).json(
+      createResponse(
+        false,
+        undefined,
+        undefined,
+        {
+          code: "PROCESSING_ERROR",
+          message: error instanceof Error ? error.message : "Internal Server Error",
+        },
+        requestId,
+        processingTime
+      )
+    );
+  }
+});
+
 router.get("/actions", (_req: Request, res: Response) => {
   const requestId = generate();
 

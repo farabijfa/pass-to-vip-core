@@ -166,6 +166,58 @@ class LogicService {
     };
   }
 
+  async lookupMember(externalId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: "Supabase is not configured" };
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+
+      const { data: passData, error: passError } = await supabase
+        .from("passes_master")
+        .select(`
+          id,
+          external_id,
+          status,
+          is_active,
+          enrollment_source,
+          protocol,
+          passkit_internal_id
+        `)
+        .eq("external_id", externalId)
+        .single();
+
+      if (passError) {
+        console.error("[Logic] Member lookup error:", passError.message);
+        return { success: false, error: "Member not found" };
+      }
+
+      return {
+        success: true,
+        data: {
+          member: {
+            id: passData.id,
+            external_id: passData.external_id,
+            first_name: "Member",
+            last_name: "",
+            email: "",
+            phone: null,
+            points_balance: 0,
+            tier_name: "Standard",
+            status: passData.status || "UNKNOWN",
+            enrollment_source: passData.enrollment_source || "UNKNOWN",
+            created_at: new Date().toISOString(),
+          },
+          balance: 0,
+        },
+      };
+    } catch (error) {
+      console.error("[Logic] Member lookup error:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Lookup failed" };
+    }
+  }
+
   isValidAction(action: string): action is ActionType {
     return [...MEMBERSHIP_ACTIONS, ...ONE_TIME_ACTIONS].includes(action as ActionType);
   }
