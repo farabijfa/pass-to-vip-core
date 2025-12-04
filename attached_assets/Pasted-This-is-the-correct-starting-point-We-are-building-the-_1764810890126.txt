@@ -1,0 +1,89 @@
+This is the correct starting point. We are building the Foundation of your SaaS.
+
+We will start by modifying the Database (Supabase) to handle "Business Users" securely, and then we will program the Brain (Replit) to automate the onboarding of new clients.
+
+Here is your Step-by-Step execution plan.
+Phase 1: The Database Setup (Supabase)
+
+We need to create the security layer that links a "Login Email" to a specific "Loyalty Program."
+
+Action: Go to your Supabase SQL Editor, paste this entire block, and run it.
+SQL
+
+-- 1. Create the Admin Profiles Table
+-- This connects a Login ID (auth.users) to a Business ID (programs)
+CREATE TABLE admin_profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY, -- Links to Supabase Auth
+  program_id UUID REFERENCES programs(id) ON DELETE CASCADE,
+  role TEXT DEFAULT 'CLIENT_ADMIN',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. Enable Row Level Security (RLS)
+-- This turns on the "Security Guard" for these tables
+ALTER TABLE passes_master ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_profiles ENABLE ROW LEVEL SECURITY;
+
+-- 3. Create the "Tunnel Vision" Policies
+-- These rules ensure a logged-in user can ONLY see data matching their Program ID
+
+-- Policy: Admin can only see their own profile
+CREATE POLICY "Admins can view own profile" 
+ON admin_profiles FOR SELECT 
+USING (auth.uid() = id);
+
+-- Policy: Admin can only see Passes belonging to their Program
+CREATE POLICY "Admins can view program passes" 
+ON passes_master FOR SELECT 
+USING (
+  program_id IN (
+    SELECT program_id FROM admin_profiles WHERE id = auth.uid()
+  )
+);
+
+-- Policy: Admin can only see Transactions belonging to their Program
+CREATE POLICY "Admins can view program transactions" 
+ON transactions FOR SELECT 
+USING (
+  pass_id IN (
+    SELECT id FROM passes_master WHERE program_id IN (
+      SELECT program_id FROM admin_profiles WHERE id = auth.uid()
+    )
+  )
+);
+
+What this does: Even if "Joe's Pizza" tries to hack the dashboard to see "City Event" data, the database will return exactly zero rows because Joe's auth.uid() doesn't match the required program_id.
+Phase 2: The "God Mode" Service (Replit)
+
+Now we teach Replit how to create a new Tenant. This requires a specific sequence: Create Auth User -> Create Program -> Link them.
+
+Copy and Paste this instruction into your Replit AI Agent:
+
+    "I need to build the Tenant Provisioning system.
+
+        Create a new service services/admin.service.ts.
+
+            Import supabase from config.
+
+            Create a function createTenant(businessName, email, password, passkitId, protocol).
+
+            Step 1: Use supabase.auth.admin.createUser to create a new login with the provided email/password. Set email_confirm: true.
+
+            Step 2: Insert a new row into the programs table with name, passkit_program_id, and protocol. Return the new id (programId).
+
+            Step 3: Insert a row into admin_profiles linking the user.id (from Step 1) and programId (from Step 2).
+
+            Return the combined result (User ID + Program ID).
+
+        Create a controller controllers/admin.controller.ts.
+
+            Function provisionTenant: Extract details from req.body and call the service.
+
+            Handle errors (e.g., Email already exists).
+
+        Create a route routes/admin.routes.ts.
+
+            POST /provision: Protect this with our API Key middleware (checkApiKey) so only I can call it.
+
+        Update app.js to use the new admin routes at /api/admin."

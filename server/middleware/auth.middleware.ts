@@ -2,6 +2,33 @@ import type { Request, Response, NextFunction } from "express";
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "phygital2024";
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "pk_phygital_admin_2024";
+
+export function checkApiKey(req: Request, res: Response, next: NextFunction) {
+  const apiKey = req.headers["x-api-key"] as string;
+
+  if (!apiKey) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: "MISSING_API_KEY",
+        message: "API key is required. Provide it via x-api-key header.",
+      },
+    });
+  }
+
+  if (apiKey !== ADMIN_API_KEY) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: "INVALID_API_KEY",
+        message: "Invalid API key",
+      },
+    });
+  }
+
+  return next();
+}
 
 export function basicAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;

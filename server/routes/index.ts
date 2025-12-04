@@ -5,6 +5,7 @@ import postGridRoutes from "./postgrid.routes";
 import healthRoutes from "./health.routes";
 import posRoutes from "./pos.routes";
 import campaignRoutes from "./campaign.routes";
+import adminRoutes from "./admin.routes";
 
 const router = Router();
 
@@ -19,5 +20,7 @@ router.use("/mail", postGridRoutes);
 router.use("/health", healthRoutes);
 
 router.use("/campaign", campaignRoutes);
+
+router.use("/admin", adminRoutes);
 
 export default router;
