@@ -267,7 +267,7 @@ async function main() {
   logSection("PHASE 4: VERTICAL C - EDDM High Volume");
 
   await runTest("EDDM Spike Test: 5 concurrent webhooks", async () => {
-    const promises = [];
+    const promises: Promise<any>[] = [];
     const emails: string[] = [];
     
     for (let i = 0; i < 5; i++) {
