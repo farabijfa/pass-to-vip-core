@@ -59,14 +59,47 @@ class CustomersController {
         `, { count: "exact" });
 
       if (programId) {
-        const { data: program } = await client
-          .from("programs")
-          .select("id")
-          .or(`id.eq.${programId},passkit_program_id.eq.${programId}`)
-          .limit(1);
+        let programInternalId: string | null = null;
         
-        if (program?.[0]) {
-          query = query.eq("program_id", program[0].id);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId as string);
+        
+        if (isUuid) {
+          const { data: program } = await client
+            .from("programs")
+            .select("id")
+            .eq("id", programId)
+            .limit(1);
+          programInternalId = program?.[0]?.id || null;
+        }
+        
+        if (!programInternalId) {
+          const { data: program } = await client
+            .from("programs")
+            .select("id")
+            .eq("passkit_program_id", programId)
+            .limit(1);
+          programInternalId = program?.[0]?.id || null;
+        }
+        
+        if (programInternalId) {
+          query = query.eq("program_id", programInternalId);
+        } else {
+          return res.status(200).json(
+            createResponse(
+              true,
+              {
+                customers: [],
+                pagination: {
+                  total: 0,
+                  limit,
+                  offset,
+                  hasMore: false,
+                },
+              },
+              undefined,
+              requestId
+            )
+          );
         }
       }
 
@@ -298,13 +331,43 @@ class CustomersController {
       let programInternalId: string | null = null;
 
       if (programId) {
-        const { data: program } = await client
-          .from("programs")
-          .select("id")
-          .or(`id.eq.${programId},passkit_program_id.eq.${programId}`)
-          .limit(1);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId as string);
         
-        programInternalId = program?.[0]?.id || null;
+        if (isUuid) {
+          const { data: program } = await client
+            .from("programs")
+            .select("id")
+            .eq("id", programId)
+            .limit(1);
+          programInternalId = program?.[0]?.id || null;
+        }
+        
+        if (!programInternalId) {
+          const { data: program } = await client
+            .from("programs")
+            .select("id")
+            .eq("passkit_program_id", programId)
+            .limit(1);
+          programInternalId = program?.[0]?.id || null;
+        }
+        
+        if (!programInternalId) {
+          return res.status(200).json(
+            createResponse(
+              true,
+              {
+                stats: {
+                  total: 0,
+                  installed: 0,
+                  uninstalled: 0,
+                  activeRate: 0,
+                },
+              },
+              undefined,
+              requestId
+            )
+          );
+        }
       }
 
       let query = client.from("passes_master").select("status", { count: "exact" });
