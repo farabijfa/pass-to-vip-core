@@ -181,11 +181,14 @@ class NotificationService {
       const client = this.getClient();
 
       // First, lookup the program by passkit_program_id to get internal ID
-      const { data: program, error: programError } = await client
+      // Use .limit(1) instead of .single() to handle multiple programs with same passkit_program_id
+      const { data: programs, error: programError } = await client
         .from("programs")
         .select("id, passkit_program_id")
         .eq("passkit_program_id", programId)
-        .single();
+        .limit(1);
+
+      const program = programs?.[0];
 
       if (programError || !program) {
         console.error("❌ Program not found:", programError?.message || "No program with this ID");
@@ -201,25 +204,30 @@ class NotificationService {
       console.log(`   Found program: ${program.id} (PassKit: ${program.passkit_program_id})`);
 
       // Query passes_master using program_id (internal ID) and join to get passkit_program_id
+      // Status should be "INSTALLED" (not "ACTIVE") and is_active should be true
+      // Note: tier_points is in protocol_membership, not passes_master - VIP filtering removed for now
       let query = client
         .from("passes_master")
         .select(`
           id,
           passkit_internal_id,
-          tier_points,
-          email,
-          first_name,
-          last_name,
+          external_id,
           programs:program_id (
             passkit_program_id
+          ),
+          users:user_id (
+            email,
+            first_name,
+            last_name
           )
         `)
         .eq("program_id", program.id)
-        .eq("status", "ACTIVE");
+        .eq("status", "INSTALLED")
+        .eq("is_active", true);
 
+      // TODO: VIP segment filtering needs to join protocol_membership table
       if (segment === "VIP") {
-        query = query.gt("tier_points", 1000);
-        console.log("   Filtering for VIP members (tier_points > 1000)");
+        console.log("   ⚠️ VIP filtering not implemented - processing all members");
       }
 
       const { data: passes, error: queryError } = await query;
@@ -253,13 +261,14 @@ class NotificationService {
       if (dryRun) {
         const sampleRecipients = passes.slice(0, 5).map((pass: any) => ({
           id: pass.id,
-          email: pass.email || "unknown",
-          firstName: pass.first_name || "Unknown",
-          lastName: pass.last_name || "",
+          externalId: pass.external_id,
+          email: pass.users?.email || "unknown",
+          firstName: pass.users?.first_name || "Unknown",
+          lastName: pass.users?.last_name || "",
         }));
 
         console.log(`✅ Dry run complete - ${passes.length} would receive the message`);
-        console.log(`   Sample recipients: ${sampleRecipients.map(r => r.email).join(", ")}`);
+        console.log(`   Sample recipients: ${sampleRecipients.map(r => r.externalId || r.email).join(", ")}`);
 
         return {
           success: true,
@@ -412,12 +421,14 @@ class NotificationService {
         console.log(`   Reward: ${program.birthday_reward_points} points`);
         console.log(`   Message: "${program.birthday_message}"`);
 
+        // Query passes using program_id FK, not passkit_program_id
+        // Also use status "INSTALLED" and is_active = true
         const { data: passes, error: passError } = await client
           .from("passes_master")
           .select(`
             id,
             passkit_internal_id,
-            passkit_program_id,
+            program_id,
             email,
             first_name,
             last_name,
@@ -427,8 +438,9 @@ class NotificationService {
               birth_date
             )
           `)
-          .eq("passkit_program_id", program.passkit_program_id)
-          .eq("status", "ACTIVE")
+          .eq("program_id", program.id)
+          .eq("status", "INSTALLED")
+          .eq("is_active", true)
           .not("users.birth_date", "is", null);
 
         if (passError) {
