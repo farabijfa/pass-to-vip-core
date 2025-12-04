@@ -47,6 +47,11 @@ This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem
 - `GET /claim/:id` - Process claim code and redirect to PassKit
 - `GET /claim/:id/status` - Check claim code status
 
+### Notification Service (High-Scale)
+- `POST /api/notify/broadcast` - Send push notification to all members (batched)
+- `POST /api/notify/birthday-run` - Run birthday bot (awards points + notification)
+- `GET /api/notify/logs` - Get campaign notification logs
+
 ### Health Checks
 - `GET /api/health` - Full health check
 - `GET /api/health/ready` - Readiness probe
@@ -297,7 +302,88 @@ John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
 }
 ```
 
+## High-Scale Notification Service
+
+### Architecture
+- **Batch Processing:** Messages sent in chunks of 50 to respect PassKit rate limits
+- **Parallel Execution:** Promise.all within each batch for optimal throughput
+- **Logging:** All campaigns logged to `notification_logs` table
+
+### Broadcast Endpoint
+
+```bash
+POST /api/notify/broadcast
+X-API-Key: pk_phygital_admin_2024
+Content-Type: application/json
+
+{
+  "programId": "4RhsVhHek0dliVogVznjSQ",
+  "message": "Flash Sale! 2x points today only!",
+  "segment": "ALL",
+  "campaignName": "December Flash Sale"
+}
+```
+
+**Segment Options:**
+- `ALL` - All active members (default)
+- `VIP` - Members with tier_points > 1000
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalRecipients": 150,
+    "successCount": 148,
+    "failedCount": 2,
+    "campaignLogId": "uuid-here"
+  },
+  "metadata": { "processingTime": 1245 }
+}
+```
+
+### Birthday Bot
+
+```bash
+POST /api/notify/birthday-run
+X-API-Key: pk_phygital_admin_2024
+```
+
+**Flow:**
+1. Query users with `birth_date` matching today and `marketing_opt_in = true`
+2. Award 50 points via `process_membership_transaction` RPC
+3. Look up user's pass in `passes_master` by email
+4. Send push notification via PassKit changeMessage
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "processed": 5,
+    "successCount": 5,
+    "failedCount": 0,
+    "campaignLogId": "uuid-here"
+  }
+}
+```
+
+### Campaign Logs
+
+```bash
+GET /api/notify/logs?programId=xxx&limit=50
+X-API-Key: pk_phygital_admin_2024
+```
+
 ## Recent Changes
+
+### 2025-12-04 - High-Scale Notification Service
+- Created notification.service.ts with batch processing (50 users per batch)
+- Added pushMessage() function to PassKit service for changeMessage-only updates
+- Created POST /api/notify/broadcast for mass push notifications
+- Created POST /api/notify/birthday-run for automated birthday rewards
+- Created GET /api/notify/logs for campaign history
+- All endpoints protected by API key middleware
 
 ### 2025-12-04 - Multi-Tenant SaaS Foundation
 - Created admin.service.ts with createTenant function (auth user + program + admin_profiles)
