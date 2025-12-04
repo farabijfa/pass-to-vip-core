@@ -8,6 +8,10 @@ This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem
 - One-time offer redemptions
 - Dynamic digital pass creation and updates
 - "Physical Bridge" to convert physical mail recipients into digital wallet users
+- **Three Enrollment Verticals:**
+  - **Vertical A (Push):** Direct mail campaigns with claim codes
+  - **Vertical B (Pull):** Reception QR codes for walk-in enrollment
+  - **Vertical C (EDDM):** High-volume neighborhood blanket campaigns
 
 **Target Industries:** Retail, Hospitality, Event Management.
 
@@ -56,6 +60,15 @@ The project includes an admin dashboard (located in `public/`) and integrates wi
 - **Input Validation:** Prevents common vulnerabilities like SQL injection.
 - **Duplicate Prevention:** Ensures unique program and business name creation.
 - **Kill Switch:** Allows suspension of programs for immediate halting of POS transactions.
+
+### Webhook Architecture (Vertical B/C)
+The PassKit enrollment webhook (`/api/webhooks/passkit/enrollment`) handles high-volume EDDM campaigns:
+- **Idempotency:** Duplicate webhooks (e.g., PassKit retries) are absorbed gracefully
+- **External ID Format:** `PUB-{short-uuid}` prefix for all public enrollments
+- **Enrollment Source:** Set to `SMARTPASS` for all public enrollment paths
+- **Program Lookup:** Maps `passkit_program_id` → internal Supabase UUID
+- **Birthday Validation:** Validates and formats dates before storing
+- **Spike Protection:** Always returns HTTP 200 to prevent webhook retries
 
 ## External Dependencies
 
