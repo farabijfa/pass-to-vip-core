@@ -389,16 +389,20 @@ class SupabaseService {
     try {
       const client = this.getClient();
 
-      const { data: pass, error: findError } = await client
+      // Use limit(1) instead of single() to gracefully handle no results
+      // Only select columns that exist in passes_master
+      const { data: passes, error: findError } = await client
         .from("passes_master")
         .update({ 
           status: "UNINSTALLED", 
           is_active: false,
-          updated_at: new Date().toISOString()
+          last_updated: new Date().toISOString()
         })
         .eq("passkit_internal_id", passKitInternalId)
-        .select("id, email, first_name, last_name")
-        .single();
+        .select("id, external_id")
+        .limit(1);
+
+      const pass = passes?.[0];
 
       if (findError || !pass) {
         console.warn(`Pass ${passKitInternalId} not found in database`);
