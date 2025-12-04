@@ -25,4 +25,39 @@ router.patch(
   programsController.updateProgram.bind(programsController)
 );
 
+router.get(
+  "/:programId/qr",
+  checkApiKey,
+  validateProgramIdParam,
+  programsController.generateQRCode.bind(programsController)
+);
+
+router.get(
+  "/:programId/members",
+  checkApiKey,
+  validateProgramIdParam,
+  programsController.getMembers.bind(programsController)
+);
+
+router.patch(
+  "/:programId/enrollment-url",
+  checkApiKey,
+  validateProgramIdParam,
+  programsController.updateEnrollmentUrl.bind(programsController)
+);
+
+router.patch(
+  "/:programId/suspend",
+  checkApiKey,
+  validateProgramIdParam,
+  programsController.toggleSuspension.bind(programsController)
+);
+
+router.get(
+  "/:programId/stats",
+  checkApiKey,
+  validateProgramIdParam,
+  programsController.getStats.bind(programsController)
+);
+
 export default router;

@@ -548,6 +548,170 @@ Update program settings.
 }
 ```
 
+#### GET /api/programs/:programId/stats
+Get program dashboard statistics with enrollment breakdown.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "program": {
+      "id": "uuid",
+      "name": "Pizza Palace",
+      "protocol": "MEMBERSHIP",
+      "isSuspended": false,
+      "hasEnrollmentUrl": true
+    },
+    "stats": {
+      "totalMembers": 1250,
+      "activeMembers": 980,
+      "activeRate": 78,
+      "churnedMembers": 270,
+      "churnRate": 22,
+      "recentEnrollments": 45
+    },
+    "enrollmentBreakdown": {
+      "qrScan": 450,
+      "claimCode": 800,
+      "qrPercentage": 36
+    }
+  }
+}
+```
+
+#### GET /api/programs/:programId/members
+List enrolled members with pagination and filtering.
+
+**Query Parameters:**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `page` | 1 | Page number |
+| `limit` | 20 | Items per page (max 100) |
+| `search` | - | Search by email, name, or external ID |
+| `source` | all | Filter: QR_SCAN, CLAIM_CODE |
+| `status` | all | Filter: INSTALLED, UNINSTALLED |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "members": [
+      {
+        "id": "uuid",
+        "external_id": "QR-abc123",
+        "member_email": "john@example.com",
+        "member_first_name": "John",
+        "member_last_name": "Doe",
+        "points_balance": 500,
+        "enrollment_source": "QR_SCAN",
+        "status": "INSTALLED",
+        "is_active": true,
+        "users": {
+          "birth_date": "1990-05-15",
+          "phone_number": "+1234567890"
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1250,
+      "totalPages": 63,
+      "hasMore": true
+    }
+  }
+}
+```
+
+#### GET /api/programs/:programId/qr
+Generate QR code for the program's enrollment URL.
+
+**Query Parameters:**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `format` | png | Output: png, svg, dataurl |
+| `size` | 300 | Image size (100-1000px) |
+
+**Responses:**
+- `png`: Returns binary PNG image
+- `svg`: Returns SVG XML
+- `dataurl`: Returns JSON with base64 data URL
+
+**Example (dataurl):**
+```json
+{
+  "success": true,
+  "data": {
+    "qrCode": "data:image/png;base64,iVBORw0K...",
+    "enrollmentUrl": "https://pub1.pskt.io/c/abc123",
+    "programName": "Pizza Palace",
+    "format": "dataurl",
+    "size": 300
+  }
+}
+```
+
+**Error Cases:**
+- `NO_ENROLLMENT_URL`: Program doesn't have an enrollment URL set
+- `PROGRAM_SUSPENDED`: QR generation blocked for suspended programs
+
+#### PATCH /api/programs/:programId/enrollment-url
+Update the enrollment URL with HTTPS validation.
+
+**Request:**
+```json
+{
+  "enrollment_url": "https://pub1.pskt.io/c/your_smartpass_id"
+}
+```
+
+**Validation:**
+- URL must be valid format
+- Must use HTTPS protocol (HTTP rejected)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "program": {
+      "id": "uuid",
+      "name": "Pizza Palace",
+      "enrollment_url": "https://pub1.pskt.io/c/your_smartpass_id"
+    },
+    "message": "Enrollment URL updated successfully"
+  }
+}
+```
+
+#### PATCH /api/programs/:programId/suspend
+Toggle program suspension (kill switch).
+
+**Request:**
+```json
+{
+  "is_suspended": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "program": {
+      "id": "uuid",
+      "name": "Pizza Palace",
+      "is_suspended": true
+    },
+    "action": "SUSPENDED",
+    "message": "Program suspended. All POS transactions blocked."
+  }
+}
+```
+
 ---
 
 ### Customer Endpoints
