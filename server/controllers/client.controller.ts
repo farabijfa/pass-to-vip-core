@@ -3,6 +3,83 @@ import { createClient } from "@supabase/supabase-js";
 import { config, isSupabaseConfigured } from "../config";
 
 class ClientController {
+  async login(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      if (!isSupabaseConfigured()) {
+        res.status(503).json({
+          success: false,
+          error: {
+            code: "SERVICE_UNAVAILABLE",
+            message: "Database service not configured",
+          },
+        });
+        return;
+      }
+
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_CREDENTIALS",
+            message: "Email and password are required",
+          },
+        });
+        return;
+      }
+
+      const supabase = createClient(
+        config.supabase.url,
+        config.supabase.anonKey || config.supabase.serviceRoleKey
+      );
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError || !authData.session) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "INVALID_CREDENTIALS",
+            message: authError?.message || "Invalid email or password",
+          },
+        });
+        return;
+      }
+
+      const processingTime = Date.now() - startTime;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          token: authData.session.access_token,
+          user: {
+            id: authData.user.id,
+            email: authData.user.email,
+          },
+        },
+        metadata: {
+          processingTime,
+        },
+      });
+
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
   async getMe(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
 
@@ -377,23 +454,16 @@ class ClientController {
           external_id,
           status,
           is_active,
-          points_balance,
-          tier_name,
           enrollment_source,
-          member_email,
-          member_first_name,
-          member_last_name,
-          member_phone,
-          created_at,
           last_updated
         `, { count: "exact" })
         .eq("program_id", profile.program_id);
 
       if (searchQuery) {
-        query = query.or(`external_id.ilike.%${searchQuery}%,member_email.ilike.%${searchQuery}%,member_first_name.ilike.%${searchQuery}%,member_last_name.ilike.%${searchQuery}%`);
+        query = query.or(`external_id.ilike.%${searchQuery}%`);
       }
 
-      query = query.order("last_updated", { ascending: false }).range(offset, offset + limit - 1);
+      query = query.range(offset, offset + limit - 1);
 
       const { data: passes, error: queryError, count } = await query;
 
@@ -412,15 +482,15 @@ class ClientController {
       const members = (passes || []).map((p: any) => ({
         id: p.id,
         external_id: p.external_id,
-        first_name: p.member_first_name || "Unknown",
-        last_name: p.member_last_name || "",
-        email: p.member_email || "",
-        phone: p.member_phone || null,
-        points_balance: p.points_balance || 0,
-        tier_name: p.tier_name || "Standard",
+        first_name: "Member",
+        last_name: "",
+        email: "",
+        phone: null,
+        points_balance: 0,
+        tier_name: "Standard",
         status: p.status || "UNKNOWN",
         enrollment_source: p.enrollment_source || "UNKNOWN",
-        created_at: p.created_at,
+        created_at: p.last_updated || new Date().toISOString(),
       }));
 
       const processingTime = Date.now() - startTime;

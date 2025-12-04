@@ -3,6 +3,11 @@ import { clientController } from "../controllers/client.controller";
 
 const router = Router();
 
+router.post(
+  "/login",
+  clientController.login.bind(clientController)
+);
+
 router.get(
   "/me",
   clientController.getMe.bind(clientController)
