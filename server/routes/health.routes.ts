@@ -10,6 +10,11 @@ router.get(
 );
 
 router.get(
+  "/deep",
+  asyncHandler(healthController.getHealth.bind(healthController))
+);
+
+router.get(
   "/ready",
   asyncHandler(healthController.getReadiness.bind(healthController))
 );
