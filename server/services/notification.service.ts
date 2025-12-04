@@ -180,10 +180,41 @@ class NotificationService {
 
       const client = this.getClient();
 
+      // First, lookup the program by passkit_program_id to get internal ID
+      const { data: program, error: programError } = await client
+        .from("programs")
+        .select("id, passkit_program_id")
+        .eq("passkit_program_id", programId)
+        .single();
+
+      if (programError || !program) {
+        console.error("❌ Program not found:", programError?.message || "No program with this ID");
+        return {
+          success: false,
+          totalRecipients: 0,
+          successCount: 0,
+          failedCount: 0,
+          error: `Program not found: ${programId}`,
+        };
+      }
+
+      console.log(`   Found program: ${program.id} (PassKit: ${program.passkit_program_id})`);
+
+      // Query passes_master using program_id (internal ID) and join to get passkit_program_id
       let query = client
         .from("passes_master")
-        .select("id, passkit_internal_id, passkit_program_id, tier_points, email, first_name, last_name")
-        .eq("passkit_program_id", programId)
+        .select(`
+          id,
+          passkit_internal_id,
+          tier_points,
+          email,
+          first_name,
+          last_name,
+          programs:program_id (
+            passkit_program_id
+          )
+        `)
+        .eq("program_id", program.id)
         .eq("status", "ACTIVE");
 
       if (segment === "VIP") {
@@ -254,9 +285,10 @@ class NotificationService {
         const results = await Promise.all(
           batch.map(async (pass: any) => {
             try {
+              const passkitProgramId = pass.programs?.passkit_program_id || program.passkit_program_id;
               const result = await passKitService.pushMessage(
                 pass.passkit_internal_id,
-                pass.passkit_program_id,
+                passkitProgramId,
                 message
               );
               return result.success;
@@ -278,7 +310,7 @@ class NotificationService {
       const { data: logData, error: logError } = await client
         .from("notification_logs")
         .insert({
-          program_id: programId,
+          program_id: program.id,
           campaign_name: campaignName || "Manual Broadcast",
           recipient_count: passes.length,
           success_count: successCount,
