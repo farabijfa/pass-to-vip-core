@@ -1,94 +1,246 @@
 # Phygital Loyalty Ecosystem - Backend API
 
 ## Overview
-This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem that integrates digital wallets with physical rewards processing. It aims to bridge physical interactions and digital loyalty programs through membership point management, one-time offer redemptions, dynamic digital pass creation and updates, and a "Physical Bridge" to convert physical mail recipients into digital wallet users. The platform seeks to enhance customer engagement across unified loyalty experiences in retail, hospitality, and event management.
+This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem that integrates digital wallets with physical rewards processing. Built for **PassToVIP** (passtovip.com / scantovip.com) under OakMontLogic.
+
+The platform bridges physical interactions and digital loyalty programs through:
+- Membership point management
+- One-time offer redemptions
+- Dynamic digital pass creation and updates
+- "Physical Bridge" to convert physical mail recipients into digital wallet users
+
+Target industries: Retail, Hospitality, Event Management.
+
+---
+
+## Required Setup
+
+### 1. Environment Secrets (Required)
+
+These secrets MUST be configured in Replit Secrets for the application to work:
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `SUPABASE_URL` | Your Supabase project URL | `https://xxxx.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (not anon key) | `eyJhbGciOi...` |
+| `ADMIN_USERNAME` | Admin dashboard login username | `admin_passtovip` |
+| `ADMIN_PASSWORD` | Admin dashboard login password | `Ptv$2024!Secure#Key` |
+| `ADMIN_API_KEY` | API key for WeWeb/external calls | `pk_live_passtovip_8f3k9m2x7q` |
+| `SESSION_SECRET` | Express session encryption key | Random 32+ char string |
+
+### 2. Optional Secrets (For Full Features)
+
+| Secret | Description | Required For |
+|--------|-------------|--------------|
+| `PASSKIT_API_KEY` | PassKit API credentials | Digital wallet sync |
+| `PASSKIT_API_SECRET` | PassKit API secret | Digital wallet sync |
+| `POSTGRID_API_KEY` | PostGrid API key | Physical mail campaigns |
+
+### 3. Database Migrations (Run in Supabase Studio)
+
+Run these SQL files in **Supabase Studio > SQL Editor** in order:
+
+**Migration 1: Performance Indexes**
+```
+migrations/001_performance_indexes.sql
+```
+Adds indexes for high-frequency queries (program filtering, status charts, transaction history).
+
+**Migration 2: Program Suspension (Kill Switch)**
+```
+migrations/002_program_suspension.sql
+```
+Adds `is_suspended` column to programs table for instant client shutoff.
+
+---
 
 ## User Preferences
-I want iterative development.
-I prefer to be asked before you make any major changes to the codebase.
-I prefer detailed explanations when new features or complex logic are introduced.
-I do not want the agent to make changes to the /admin folder.
+
+- Iterative development preferred
+- Ask before making major changes to the codebase
+- Detailed explanations for new features or complex logic
+- Do NOT modify the `/admin` folder
+
+---
 
 ## System Architecture
 
 ### Core Design
-- **Controllers:** Manage API requests and delegate to services.
-- **Services:** Encapsulate business logic and handle integrations with external systems (Supabase, PassKit, PostGrid).
-- **Logic Service:** Orchestrates Point-of-Sale (POS) actions, routing requests to Supabase RPC for data operations and PassKit for wallet synchronization.
-- **Data Flow:** Client Request → Controller → `logic.service.ts` → Supabase RPC (for database operations) and `passkit.service.ts` (for digital wallet updates).
+- **Controllers:** Manage API requests and delegate to services
+- **Services:** Encapsulate business logic and handle integrations (Supabase, PassKit, PostGrid)
+- **Logic Service:** Orchestrates POS actions, routing to Supabase RPC + PassKit sync
+- **Data Flow:** Client Request → Controller → `logic.service.ts` → Supabase RPC + `passkit.service.ts`
 
-### UI/UX Decisions
-- **Admin Dashboard:** Bootstrap-based UI for managing bulk campaigns, including CSV upload, configurable program IDs, templates, and real-time processing status.
+### File Structure
+```
+server/
+├── controllers/       # API request handlers
+├── services/          # Business logic & integrations
+├── middleware/        # Auth, validation, rate limiting
+├── routes/            # Express route definitions
+├── config/            # Configuration & environment
+└── index.ts           # Server entry point
 
-### Technical Implementations
-- **API Endpoints:** RESTful APIs for POS actions, loyalty, digital wallet management, direct mail, physical bridge, and high-scale notifications.
-- **Supabase RPC:** Utilizes Supabase Remote Procedure Calls for secure execution of complex database logic.
-- **Physical Bridge:** A full "Phygital" loop where physical mail with QR codes leads to digital wallet enrollment via a claim route.
-- **Multi-Tenant SaaS:** Supports tenant provisioning through an admin API.
-- **High-Scale Notification Service:** Designed for efficient broadcast and targeted notifications using batch processing and parallel execution to manage PassKit rate limits.
-- **QR Code Generation:** Automatically generates printable QR code image URLs using `api.qrserver.com`.
-- **Security:** Admin API endpoints are protected by API key authentication; admin routes use Basic Auth.
+migrations/            # SQL migrations for Supabase
+public/                # Static files (admin dashboard)
+```
 
-### Feature Specifications
-- **POS Actions:** Supports `MEMBER_EARN`, `MEMBER_REDEEM`, `COUPON_ISSUE`, `COUPON_REDEEM`.
-- **Digital Wallet:** Manages enrollment, coupon issuance, pass creation, updates, deletion, and push notifications via PassKit.
-- **Direct Mail:** Integrates with PostGrid for sending postcards and letters.
-- **Bulk Campaign Manager:** Facilitates batch campaigns via CSV upload, sending physical mail with dynamically generated claim codes.
-- **Broadcast Notifications:** Sends push notifications to all active passes in a program.
-- **Birthday Bot:** Configuration-driven automated process for awarding points and sending personalized push notifications on birthdays.
-- **CSV Campaign Upload:** Supports `birth_date` and `phone_number` columns with flexible header mapping, automatically upserting users by email.
+---
+
+## API Endpoints
+
+### Authentication
+All API endpoints require the `x-api-key` header:
+```
+x-api-key: pk_live_passtovip_8f3k9m2x7q
+```
+
+### POS Actions
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pos/action` | POST | Process POS transaction (earn, redeem, coupon) |
+
+Supported actions: `MEMBER_EARN`, `MEMBER_REDEEM`, `MEMBER_ADJUST`, `COUPON_ISSUE`, `COUPON_REDEEM`, `TICKET_CHECKIN`
+
+### WeWeb Integration APIs
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/programs` | GET | List all programs with birthday bot config |
+| `/api/programs/:programId` | GET | Get single program by UUID |
+| `/api/programs/:programId` | PATCH | Update birthday bot settings |
+| `/api/customers?programId=...` | GET | List customers with pagination |
+| `/api/customers/stats?programId=...` | GET | Dashboard stats (total, active rate) |
+| `/api/customers/:customerId` | GET | Customer detail with transaction history |
+
+### Notifications
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/notify/broadcast` | POST | Send push to all active passes in a program |
+| `/api/notify/targeted` | POST | Send push to specific passes |
+
+### Admin Dashboard
+| Endpoint | Method | Auth |
+|----------|--------|------|
+| `/admin/campaign` | GET | Basic Auth (username/password) |
+
+---
 
 ## External Dependencies
 
--   **Supabase:**
-    -   **Database:** PostgreSQL for loyalty program data, member information, transactions, and claim codes.
-    -   **Authentication:** Handles user authentication.
-    -   **Edge Functions/RPC:** Executes stored procedures for core loyalty logic.
--   **PassKit (via PassKit API):**
-    -   **Digital Wallet Management:** Creates, updates, and manages digital passes (memberships, coupons, event tickets).
-    -   **Push Notifications:** Delivers real-time updates and messages to digital wallet holders.
--   **PostGrid (via PostGrid API):**
-    -   **Direct Mail:** Sends physical postcards and letters for loyalty campaigns and the "Physical Bridge."
-    -   **Template Management:** Uses PostGrid templates for dynamic content in physical mail.
--   **`api.qrserver.com`:**
-    -   **QR Code Generation:** Converts claim URLs into QR code image URLs.
+### Supabase (Required)
+- **Database:** PostgreSQL for loyalty data, members, transactions, claim codes
+- **Authentication:** User authentication for client dashboards
+- **RPC Functions:** Stored procedures for core loyalty logic
 
-## Production Ready Features
+### PassKit (Optional)
+- **Digital Wallet Management:** Creates/updates Apple & Google Wallet passes
+- **Push Notifications:** Real-time updates to wallet holders
 
-### Multi-Tenant Security
-- **Client Isolation:** Invalid/non-existent programId returns empty data (not all data) - prevents cross-tenant leakage
-- **Zero-State Handling:** New clients with no data get clean `{ total: 0, activeRate: 0 }` responses - no crashes or NaN
+### PostGrid (Optional)
+- **Direct Mail:** Sends physical postcards and letters
+- **Template Management:** Dynamic content in physical mail
 
-### WeWeb Integration APIs
-- `GET /api/programs` - List all programs with birthday bot config
-- `GET /api/programs/:id` - Get program by PassKit program ID
-- `PATCH /api/programs/:id` - Update birthday bot settings
-- `GET /api/customers?programId=...` - List customers with pagination
-- `GET /api/customers/stats?programId=...` - Dashboard stats (total, installed, uninstalled, activeRate)
-- `GET /api/customers/:id` - Customer detail with transaction history
+---
 
-### Database Performance
-Run `migrations/001_performance_indexes.sql` in Supabase Studio for production scaling:
+## Production Security Features
+
+### Multi-Tenant Isolation
+- Invalid/non-existent `programId` returns empty data (not cross-tenant data)
+- Zero-state handling: New clients get clean `{ total: 0, activeRate: 0 }` responses
+
+### Rate Limiting
+| Route | Limit | Purpose |
+|-------|-------|---------|
+| `/api/pos/*` | 60/min | Prevent brute-force scanning |
+| `/api/notify/*` | 10/min | Prevent notification spam |
+
+### Input Validation
+- All `programId` params/queries validated as UUID format
+- Malformed inputs return 400 Bad Request
+- Prevents SQL injection attempts
+
+### Duplicate Prevention
+- `createTenant` validates unique business name + PassKit program ID
+- Prevents accidental duplicate program creation
+
+### Kill Switch (Program Suspension)
+- Set `is_suspended = true` in programs table
+- Blocks ALL POS transactions for that client immediately
+- Error: "Program Suspended. Contact Admin."
+
+---
+
+## Database Schema (Key Tables)
+
+| Table | Purpose |
+|-------|---------|
+| `programs` | Client programs with PassKit IDs, birthday bot config, suspension status |
+| `passes_master` | All digital passes with status, points, member info |
+| `transactions` | Point earn/redeem history |
+| `admin_profiles` | Links Supabase users to programs (multi-tenant) |
+| `claim_codes` | Physical bridge claim codes for mail campaigns |
+
+### Performance Indexes
+After running `migrations/001_performance_indexes.sql`:
 - `idx_passes_master_program_id` - Client filtering
 - `idx_passes_master_status` - Active/Churned charts
 - `idx_passes_master_program_status` - Composite queries
 - `idx_transactions_pass_id` - Transaction history
 - `idx_transactions_created_at` - Date ordering
 
-### Security & Rate Limiting
-- **Rate Limiting:** `/api/pos/*` (60/min), `/api/notify/*` (10/min) - prevents abuse and spam
-- **UUID Validation:** All `programId` params/queries validated - blocks SQL injection attempts
-- **Duplicate Tenant Check:** `createTenant` validates unique business name + PassKit program ID
-- **Input Sanitization:** Returns 400 Bad Request for malformed programId values
+---
 
-### Kill Switch (Program Suspension)
-Run `migrations/002_program_suspension.sql` in Supabase Studio to enable:
-- Adds `is_suspended` column to `programs` table (default: false)
-- When TRUE, all POS transactions for that client are blocked immediately
-- Error message: "Program Suspended. Contact Admin."
+## Running the Application
 
-### Security Note
-The following credentials in `server/middleware/auth.middleware.ts` should be moved to environment variables for production:
-- `ADMIN_USERNAME` (default: admin)
-- `ADMIN_PASSWORD` (default: phygital2024)
-- `ADMIN_API_KEY` (default: pk_phygital_admin_2024)
+### Development
+The workflow `Start application` runs:
+```bash
+npm run dev
+```
+This starts Express server + Vite frontend on port 5000.
+
+### Health Check
+```bash
+curl http://localhost:5000/api
+```
+Returns: `{ "status": "UP", "service": "Phygital Loyalty Orchestrator" }`
+
+### Test API Key
+```bash
+curl -H "x-api-key: pk_live_passtovip_8f3k9m2x7q" http://localhost:5000/api/programs
+```
+
+---
+
+## Deployment Checklist
+
+Before deploying to production:
+
+- [ ] All required secrets configured in Replit Secrets
+- [ ] Run `migrations/001_performance_indexes.sql` in Supabase
+- [ ] Run `migrations/002_program_suspension.sql` in Supabase
+- [ ] Test API endpoints with production API key
+- [ ] Verify WeWeb dashboard connects successfully
+- [ ] Configure PassKit credentials (if using digital wallets)
+- [ ] Configure PostGrid credentials (if using physical mail)
+
+---
+
+## Troubleshooting
+
+### "Supabase is not configured"
+Missing `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` secrets.
+
+### "Invalid API key"
+Check `x-api-key` header matches `ADMIN_API_KEY` secret.
+
+### "programId must be a valid UUID format"
+The programId parameter must be a valid UUID (e.g., `941f4975-6e0a-4ae0-9c47-de4b96404139`).
+
+### "Program Suspended. Contact Admin."
+The program has `is_suspended = true`. Update in Supabase to re-enable.
+
+### Dashboard returns empty data
+1. Verify `programId` exists in `programs` table
+2. Check that passes exist in `passes_master` with matching `program_id`
+3. Ensure indexes are created for performance
