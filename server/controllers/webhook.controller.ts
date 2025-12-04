@@ -2,14 +2,22 @@ import type { Request, Response } from "express";
 import { supabaseService } from "../services";
 import { generate } from "short-uuid";
 
+interface PassKitPersonDetails {
+  displayName?: string;
+  forename?: string;
+  surname?: string;
+  emailAddress?: string;
+  mobileNumber?: string;
+}
+
 interface PassKitPassData {
   id?: string;
   classId?: string;
+  programId?: string;
   protocol?: number;
-  personDetails?: {
-    displayName?: string;
-    emailAddress?: string;
-  };
+  externalId?: string;
+  personDetails?: PassKitPersonDetails;
+  person?: PassKitPersonDetails;
   metadata?: {
     status?: number;
     lifecycleEvents?: number[];
@@ -18,7 +26,9 @@ interface PassKitPassData {
     installIpAddress?: string;
     firstUninstalledAt?: { seconds: number; nanos: number };
     lastUninstalledAt?: { seconds: number; nanos: number };
+    birthday?: string;
   };
+  meta?: Record<string, string>;
   recordData?: Record<string, string>;
 }
 
@@ -31,6 +41,11 @@ interface PassKitWebhookPayload {
   eventType?: string;
   programId?: string;
   timestamp?: string;
+  meta?: Record<string, string>;
+  metadata?: {
+    birthday?: string;
+    [key: string]: any;
+  };
 }
 
 const PASSKIT_EVENTS = {
@@ -213,6 +228,11 @@ class WebhookController {
         return this.handlePassKitUninstall(req, res);
       }
 
+      if (eventType === PASSKIT_EVENTS.RECORD_CREATED) {
+        console.log(`   🔄 Routing to enrollment handler...`);
+        return this.handlePassKitEnrollment(req, res);
+      }
+
       return res.status(200).json(
         createResponse(true, { 
           acknowledged: true, 
@@ -225,6 +245,161 @@ class WebhookController {
       console.error("❌ [Webhook] Error:", error);
       return res.status(200).json(
         createResponse(true, { acknowledged: true, action: "error" }, undefined, requestId)
+      );
+    }
+  }
+
+  async handlePassKitEnrollment(req: Request, res: Response) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+    
+    try {
+      const payload: PassKitWebhookPayload = req.body;
+      
+      const passKitId = extractPassId(payload);
+      const passkitProgramId = payload.pass?.classId || payload.pass?.programId || payload.programId;
+      const protocol = payload.pass?.protocol;
+      const protocolName = getProtocolName(protocol);
+      
+      const person = payload.pass?.personDetails || payload.pass?.person || {};
+      const passMeta = payload.pass?.meta || {};
+      const passMetadata = payload.pass?.metadata || {};
+      const payloadMeta = payload.meta || {};
+      const payloadMetadata = payload.metadata || {};
+      const recordData = payload.pass?.recordData || {};
+      
+      const email = person.emailAddress;
+      const firstName = person.forename || (person.displayName ? person.displayName.split(' ')[0] : undefined);
+      const lastName = person.surname || (person.displayName ? person.displayName.split(' ').slice(1).join(' ') : undefined);
+      
+      const birthday = (passMeta as Record<string, string>).birthday 
+        || (passMetadata as Record<string, any>).birthday 
+        || payloadMeta.birthday 
+        || payloadMetadata.birthday
+        || recordData.birthday 
+        || null;
+
+      console.log(`\n🎫 [Webhook] PassKit Enrollment Event (Vertical B)`);
+      console.log(`   Pass ID: ${passKitId}`);
+      console.log(`   Program ID: ${passkitProgramId || 'N/A'}`);
+      console.log(`   Protocol: ${protocolName}`);
+      console.log(`   Email: ${email || 'N/A'}`);
+      console.log(`   Name: ${firstName || ''} ${lastName || ''}`);
+      console.log(`   Birthday: ${birthday || 'Not provided'}`);
+
+      if (!passKitId) {
+        console.warn("   ⚠️ Missing pass ID in enrollment webhook");
+        return res.status(200).json(
+          createResponse(true, { 
+            acknowledged: true, 
+            action: "ignored", 
+            reason: "missing_pass_id" 
+          }, undefined, requestId)
+        );
+      }
+
+      if (!email) {
+        console.warn("   ⚠️ Missing email in enrollment webhook");
+        return res.status(200).json(
+          createResponse(true, { 
+            acknowledged: true, 
+            action: "ignored", 
+            reason: "missing_email" 
+          }, undefined, requestId)
+        );
+      }
+
+      let programId: string | null = null;
+      let programProtocol = protocolName;
+
+      if (passkitProgramId) {
+        const programResult = await supabaseService.getProgramByPasskitId(passkitProgramId);
+        if (programResult.success && programResult.program) {
+          programId = programResult.program.id;
+          programProtocol = programResult.program.protocol;
+          console.log(`   📋 Found program: ${programResult.program.name} (${programId})`);
+        } else {
+          console.warn(`   ⚠️ Program not found for PassKit ID: ${passkitProgramId}`);
+        }
+      }
+
+      const userResult = await supabaseService.upsertUser({
+        email,
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
+        birthDate: birthday,
+      });
+
+      if (!userResult.success) {
+        console.error(`   ❌ Failed to upsert user: ${userResult.error}`);
+        return res.status(200).json(
+          createResponse(true, { 
+            acknowledged: true, 
+            action: "error",
+            error: userResult.error,
+          }, undefined, requestId)
+        );
+      }
+
+      console.log(`   👤 User synced: ${userResult.userId}`);
+
+      const externalId = `QR-${generate()}`;
+      
+      if (programId && userResult.userId) {
+        const passResult = await supabaseService.createPassFromEnrollment({
+          programId,
+          passkitProgramId: passkitProgramId || '',
+          passkitInternalId: passKitId,
+          userId: userResult.userId,
+          externalId,
+          protocol: programProtocol,
+          email,
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+        });
+
+        if (!passResult.success) {
+          console.error(`   ❌ Failed to create pass record: ${passResult.error}`);
+        } else {
+          console.log(`   ✅ Pass record created: ${passResult.passId}`);
+        }
+      } else {
+        console.warn(`   ⚠️ Skipping pass creation: No program found for PassKit ID ${passkitProgramId}`);
+      }
+
+      console.log(`   ✅ Vertical B Enrollment Complete: ${email}`);
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          {
+            acknowledged: true,
+            action: "processed",
+            event: PASSKIT_EVENTS.RECORD_CREATED,
+            passKitId,
+            userId: userResult.userId,
+            email,
+            protocol: programProtocol,
+            enrollmentSource: "QR_SCAN",
+          },
+          undefined,
+          requestId
+        )
+      );
+
+    } catch (error) {
+      console.error("❌ [Webhook] Error processing PassKit enrollment:", error);
+      
+      return res.status(200).json(
+        createResponse(
+          true,
+          { 
+            acknowledged: true, 
+            action: "error", 
+            error: error instanceof Error ? error.message : "Unknown error" 
+          },
+          undefined,
+          requestId
+        )
       );
     }
   }

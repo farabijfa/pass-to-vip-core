@@ -291,6 +291,38 @@ Step 1: Campaign Upload          Step 2: Mail Sent            Step 3: User Scans
                                                               +-------------------+
 ```
 
+### Instant QR Enrollment Flow (Vertical B)
+
+```
+Step 1: Business Setup              Step 2: Customer Scans           Step 3: Pass Installed
++-------------------+              +--------------------+            +-------------------+
+|  Admin gets       |              |  Customer sees     |            |  PassKit creates  |
+|  enrollment URL   |  --------->  |  QR at register,   |  -------> |  pass & notifies  |
+|  from PassKit     |              |  scans with phone  |            |  backend webhook  |
++-------------------+              +--------------------+            +-------------------+
+         |                                  |                                 |
+         |                                  |                                 |
+         v                                  v                                 v
++-------------------+              +--------------------+            +-------------------+
+| Store prints QR   |              |  PassKit form      |            |  Backend syncs    |
+| or displays on    |              |  collects name,    |            |  user to Supabase |
+| digital signage   |              |  email, birthday   |            |  with pass record |
++-------------------+              +--------------------+            +-------------------+
+```
+
+**Key Differences from Vertical A:**
+- **No physical mail** - QR codes displayed at business locations
+- **PassKit-hosted form** - Data collection happens on PassKit's page
+- **Reverse sync** - PassKit creates pass first, backend syncs after
+- **Instant enrollment** - No claim code needed, immediate pass installation
+
+**Enrollment URL Format:**
+```
+https://pub2.pskt.io/c/{shortcode}
+```
+
+Store this URL in the program's `enrollment_url` field for easy access.
+
 ---
 
 ## Tech Stack
@@ -686,6 +718,53 @@ Handle PassKit pass uninstall events.
   }
 }
 ```
+
+#### POST /api/webhooks/passkit/enrollment
+Handle PassKit enrollment events (Vertical B - Instant QR Enrollment).
+
+**No authentication required** - PassKit sends this webhook when a new member enrolls.
+
+**Request (from PassKit):**
+```json
+{
+  "event": "PASS_EVENT_RECORD_CREATED",
+  "pass": {
+    "id": "passkit_internal_id",
+    "classId": "passkit_program_id",
+    "protocol": 100,
+    "personDetails": {
+      "forename": "John",
+      "surname": "Doe",
+      "emailAddress": "john@example.com"
+    },
+    "meta": {
+      "birthday": "1990-05-15"
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "acknowledged": true,
+    "action": "processed",
+    "event": "PASS_EVENT_RECORD_CREATED",
+    "passKitId": "passkit_internal_id",
+    "userId": "supabase_user_uuid",
+    "email": "john@example.com",
+    "protocol": "MEMBERSHIP",
+    "enrollmentSource": "QR_SCAN"
+  }
+}
+```
+
+**PassKit Webhook Setup:**
+1. In PassKit portal, go to Integrations > Webhooks
+2. Add webhook URL: `https://your-app.replit.app/api/webhooks/passkit/enrollment`
+3. Enable `PASS_EVENT_RECORD_CREATED` event
 
 #### POST /api/webhooks/passkit/event
 Generic PassKit event handler.

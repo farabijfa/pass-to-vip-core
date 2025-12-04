@@ -447,6 +447,109 @@ class SupabaseService {
     return this.initialized && isSupabaseConfigured();
   }
 
+  async createPassFromEnrollment(params: {
+    programId: string;
+    passkitProgramId: string;
+    passkitInternalId: string;
+    userId: string;
+    externalId: string;
+    protocol?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<{
+    success: boolean;
+    passId?: string;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const fullPassData: Record<string, any> = {
+        program_id: params.programId,
+        user_id: params.userId,
+        passkit_internal_id: params.passkitInternalId,
+        external_id: params.externalId,
+        status: "INSTALLED",
+        is_active: true,
+        protocol: params.protocol || "MEMBERSHIP",
+        points_balance: 0,
+        member_email: params.email || null,
+        member_first_name: params.firstName || null,
+        member_last_name: params.lastName || null,
+        enrollment_source: "QR_SCAN",
+        last_updated: new Date().toISOString(),
+      };
+
+      const { data, error } = await client
+        .from("passes_master")
+        .upsert(fullPassData, { onConflict: "passkit_internal_id" })
+        .select("id")
+        .single();
+
+      if (error) {
+        if (error.message?.includes("enrollment_source") || 
+            error.message?.includes("member_email") ||
+            error.message?.includes("member_first_name") ||
+            error.message?.includes("member_last_name") ||
+            error.message?.includes("points_balance") ||
+            error.message?.includes("protocol") ||
+            error.code === "PGRST204") {
+          console.log("   ⚠️ Some columns don't exist, trying minimal insert...");
+          
+          const minimalPassData: Record<string, any> = {
+            program_id: params.programId,
+            user_id: params.userId,
+            passkit_internal_id: params.passkitInternalId,
+            external_id: params.externalId,
+            status: "INSTALLED",
+            is_active: true,
+            protocol: params.protocol || "MEMBERSHIP",
+          };
+
+          const { data: minData, error: minError } = await client
+            .from("passes_master")
+            .upsert(minimalPassData, { onConflict: "passkit_internal_id" })
+            .select("id")
+            .single();
+
+          if (minError) {
+            console.error("Minimal pass creation also failed:", minError);
+            return {
+              success: false,
+              error: minError.message || "Failed to create pass record (minimal)",
+            };
+          }
+
+          console.log(`✅ Pass record created from QR enrollment (minimal): ${minData?.id}`);
+          return {
+            success: true,
+            passId: minData?.id,
+          };
+        }
+
+        console.error("Create pass from enrollment error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to create pass record",
+        };
+      }
+
+      console.log(`✅ Pass record created from QR enrollment: ${data?.id}`);
+
+      return {
+        success: true,
+        passId: data?.id,
+      };
+    } catch (error) {
+      console.error("Create pass from enrollment error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
   async getProgramByPasskitId(passkitProgramId: string): Promise<{
     success: boolean;
     program?: {

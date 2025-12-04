@@ -14,4 +14,9 @@ router.post(
   asyncHandler(webhookController.handlePassKitEvent.bind(webhookController))
 );
 
+router.post(
+  "/passkit/enrollment",
+  asyncHandler(webhookController.handlePassKitEnrollment.bind(webhookController))
+);
+
 export default router;

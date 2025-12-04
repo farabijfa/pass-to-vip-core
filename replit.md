@@ -47,6 +47,7 @@ Run these SQL files in **Supabase Studio > SQL Editor** in order:
 | 002 | `migrations/002_program_suspension.sql` | Kill switch for program suspension |
 | 003 | `migrations/003_passkit_tier_id.sql` | PassKit tier ID, PostGrid template ID, protocol columns |
 | 004 | `migrations/004_rpc_functions_verification.sql` | Verify & create RPC functions |
+| 005 | `migrations/005_enrollment_url.sql` | Vertical B: enrollment_url, enrollment_source columns |
 
 ### 4. Required Supabase RPC Functions
 
@@ -86,11 +87,22 @@ Via WeWeb Admin or API:
 - PostGrid Template ID (from Step 2)
 - Protocol: `MEMBERSHIP`, `EVENT_TICKET`, or `COUPON`
 
-### Step 4: Launch Campaign
+### Step 4: Launch Campaign (Vertical A - Physical Mail)
 1. Upload CSV with customer data
 2. System generates claim codes
 3. PostGrid sends physical mail with QR codes
 4. QR codes redirect to `/claim/:id` → PassKit enrollment
+
+### Alternative: Instant QR Enrollment (Vertical B)
+1. Create SmartPass URL in PassKit (enrollment form URL)
+2. Store URL in program's `enrollment_url` field
+3. Print QR code or display on digital signage at business location
+4. Customers scan → PassKit form → Instant pass installation
+5. PassKit webhook notifies backend → User synced to Supabase
+
+**Vertical B Webhook Setup:**
+- Configure PassKit webhook: `POST /api/webhooks/passkit/enrollment`
+- Enable event: `PASS_EVENT_RECORD_CREATED`
 
 ---
 
@@ -170,6 +182,12 @@ Supported actions: `MEMBER_EARN`, `MEMBER_REDEEM`, `MEMBER_ADJUST`, `COUPON_ISSU
 | `/api/notify/broadcast` | POST | Send push to all active passes in a program |
 | `/api/notify/targeted` | POST | Send push to specific passes |
 
+### Webhooks (PassKit)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/webhooks/passkit/enrollment` | POST | Handle Vertical B instant enrollment (no auth) |
+| `/api/webhooks/passkit/uninstall` | POST | Handle pass uninstall events |
+
 ### Admin Dashboard
 | Endpoint | Method | Auth |
 |----------|--------|------|
@@ -240,6 +258,7 @@ Supported actions: `MEMBER_EARN`, `MEMBER_REDEEM`, `MEMBER_ADJUST`, `COUPON_ISSU
 | `passkit_program_id` | TEXT | PassKit program identifier |
 | `passkit_tier_id` | TEXT | PassKit tier (default: 'base') |
 | `postgrid_template_id` | TEXT | PostGrid template for mail |
+| `enrollment_url` | TEXT | Vertical B: PassKit SmartPass URL for instant enrollment |
 | `protocol` | TEXT | MEMBERSHIP, EVENT_TICKET, COUPON |
 | `is_suspended` | BOOLEAN | Kill switch |
 | `birthday_bot_enabled` | BOOLEAN | Auto birthday rewards |

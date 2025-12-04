@@ -53,6 +53,9 @@ class ProgramsController {
           birthday_bot_enabled,
           birthday_reward_points,
           birthday_message,
+          enrollment_url,
+          is_suspended,
+          protocol,
           created_at
         `);
 
@@ -133,6 +136,7 @@ class ProgramsController {
         "birthday_message",
         "name",
         "is_suspended",
+        "enrollment_url",
       ];
 
       const sanitizedUpdates: Record<string, any> = {};
@@ -169,7 +173,10 @@ class ProgramsController {
           passkit_program_id,
           birthday_bot_enabled,
           birthday_reward_points,
-          birthday_message
+          birthday_message,
+          enrollment_url,
+          is_suspended,
+          protocol
         `);
 
       if (isUuid) {
@@ -241,6 +248,9 @@ class ProgramsController {
           birthday_bot_enabled,
           birthday_reward_points,
           birthday_message,
+          enrollment_url,
+          is_suspended,
+          protocol,
           created_at
         `)
         .order("created_at", { ascending: false });
