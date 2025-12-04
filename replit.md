@@ -80,6 +80,11 @@ I do not want the agent to make changes to the /admin folder.
 - `server/services/campaign.service.ts` - CSV parsing with birth_date/phone_number support
 - `server/services/supabase.service.ts` - Contains `upsertUser()` for user data management
 
+### PassKit Webhooks
+- `server/controllers/webhook.controller.ts` - Webhook handlers for PassKit events
+- `server/routes/webhook.routes.ts` - Route definitions for `/api/webhooks/*`
+- `server/services/supabase.service.ts` - Contains `processPassUninstall()` for churn tracking
+
 ## API Authentication
 - **Admin API Key:** Set via `ADMIN_API_KEY` environment variable (default: `pk_phygital_admin_2024`)
 - **Header:** `X-API-Key: <your-api-key>`
@@ -160,6 +165,27 @@ I do not want the agent to make changes to the /admin folder.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/admin/tenants` | POST | Provision new tenant |
+
+### Webhooks (`/api/webhooks`) - No Auth Required
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/webhooks/passkit/uninstall` | POST | PassKit pass uninstall callback |
+| `/api/webhooks/passkit/event` | POST | Generic PassKit event handler |
+
+**PassKit Uninstall Webhook**
+- Called by PassKit when a user removes a pass from their wallet
+- Updates `passes_master` (status=UNINSTALLED, is_active=false)
+- Logs UNINSTALL transaction in `transactions` table
+- Always returns 200 OK (as required by PassKit)
+- No authentication required (PassKit cannot send custom headers)
+
+**Example webhook payload:**
+```json
+{
+  "id": "passkit-internal-id",
+  "event": "delete"
+}
+```
 
 ## Test Results Summary (December 2024)
 
