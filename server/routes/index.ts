@@ -8,6 +8,7 @@ import campaignRoutes from "./campaign.routes";
 import adminRoutes from "./admin.routes";
 import notificationRoutes from "./notification.routes";
 import claimRoutes from "./claim.routes";
+import webhookRoutes from "./webhook.routes";
 
 const router = Router();
 
@@ -28,5 +29,7 @@ router.use("/admin", adminRoutes);
 router.use("/notify", notificationRoutes);
 
 router.use("/claim", claimRoutes);
+
+router.use("/webhooks", webhookRoutes);
 
 export default router;

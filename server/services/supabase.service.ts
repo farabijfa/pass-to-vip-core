@@ -380,6 +380,65 @@ class SupabaseService {
     }
   }
 
+  async processPassUninstall(passKitInternalId: string): Promise<{
+    success: boolean;
+    passUuid?: string;
+    transactionId?: string;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data: pass, error: findError } = await client
+        .from("passes_master")
+        .update({ 
+          status: "UNINSTALLED", 
+          is_active: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq("passkit_internal_id", passKitInternalId)
+        .select("id, email, first_name, last_name")
+        .single();
+
+      if (findError || !pass) {
+        console.warn(`Pass ${passKitInternalId} not found in database`);
+        return {
+          success: false,
+          error: findError?.message || "Pass not found",
+        };
+      }
+
+      const { data: txn, error: txnError } = await client
+        .from("transactions")
+        .insert({
+          pass_id: pass.id,
+          action_type: "UNINSTALL",
+          value_change: 0,
+          notes: "Webhook: User removed pass from wallet",
+        })
+        .select("id")
+        .single();
+
+      if (txnError) {
+        console.error("Failed to log uninstall transaction:", txnError);
+      }
+
+      console.log(`✅ Uninstall processed for pass ${passKitInternalId} (UUID: ${pass.id})`);
+
+      return {
+        success: true,
+        passUuid: pass.id,
+        transactionId: txn?.id,
+      };
+    } catch (error) {
+      console.error("Process pass uninstall error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
   isInitialized(): boolean {
     return this.initialized && isSupabaseConfigured();
   }
