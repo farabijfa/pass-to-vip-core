@@ -1,0 +1,181 @@
+This is the ultimate "Live Fire" exercise. We will simulate the complete lifecycle of a single customer—from receiving a physical letter to joining the program, earning points, receiving a marketing blast, and finally leaving.
+
+Since PostGrid is in test mode, you won't lose money on postage, but the digital flow will be 100% real.
+
+**Prerequisites:**
+
+1.  **Your iPhone** (ready to scan).
+2.  **Replit Console** open (to run the commands).
+3.  **Supabase Table View** open (to watch data change live).
+
+Here is your **Grand Tour Test Script**.
+
+-----
+
+### 🎭 Phase 1: The "Acquisition" (Sending the Letter)
+
+**Goal:** Verify the Bulk Upload engine can generate a "Letter" campaign and unique User Identity.
+
+**Step 1: Create the Test Data**
+In Replit, create a file named `live_test.csv`:
+
+```csv
+first_name,last_name,email,address,city,state,zip,birth_date
+LiveTest,User,mytest@email.com,123 Test St,New York,NY,10001,1990-01-01
+```
+
+**Step 2: Launch the Campaign (via Curl)**
+Run this command in the Replit Shell. Replace `YOUR_PROGRAM_ID` and `YOUR_TEMPLATE_ID` with real IDs from your database/PostGrid.
+
+  * *Note: We verify the new "Letter" logic here.*
+
+<!-- end list -->
+
+```bash
+curl -X POST https://[YOUR-REPLIT-URL]/api/campaign/upload-csv \
+  -H "x-api-key: [YOUR_POS_API_KEY]" \
+  -F "file=@live_test.csv" \
+  -F "program_id=YOUR_PROGRAM_ID" \
+  -F "template_id=YOUR_TEMPLATE_ID" \
+  -F "resource_type=letter"
+```
+
+**🔍 Verification:**
+
+1.  **PostGrid:** Check the Dashboard. You should see a **Letter** (not a postcard) in the queue.
+2.  **Supabase:** Go to `passes_master`. Find the newest row.
+      * Status: `ISSUED`
+      * Copy the `external_id` (e.g., `MAIL-12345`).
+
+-----
+
+### 📲 Phase 2: The "Activation" (The Install)
+
+**Goal:** Verify the QR Logic and Apple Wallet Installation.
+
+Since we can't wait for the mailman, we will "simulate" scanning the physical QR code.
+
+**Step 1: Construct the Link**
+Type this URL into Safari on your **iPhone**:
+`https://[YOUR-REPLIT-URL]/claim/[PASTE_EXTERNAL_ID_HERE]`
+
+**Step 2: The Action**
+
+1.  The browser should redirect you to the PassKit landing page.
+2.  Tap **"Add to Apple Wallet"**.
+3.  **Success:** The Blue/Gold Pass appears on your screen. Tap "Add".
+
+**🔍 Verification:**
+
+  * **Supabase:** Refresh `passes_master`. Status should change from `ISSUED` -\> `INSTALLED`.
+
+-----
+
+### 💰 Phase 3: The "Engagement" (Adding Points)
+
+**Goal:** Verify the POS Logic and Real-Time Push Notifications.
+
+Now that the pass is in your pocket, let's give you some points.
+
+**Step 1: Run the POS Transaction**
+Run this in the Replit Shell (simulating a cashier adding 100 points):
+
+```bash
+curl -X POST https://[YOUR-REPLIT-URL]/api/pos/action \
+  -H "x-api-key: [YOUR_POS_API_KEY]" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "external_id": "[PASTE_EXTERNAL_ID_HERE]",
+    "action": "MEMBER_EARN",
+    "amount": 100
+  }'
+```
+
+**🔍 Verification:**
+
+1.  **iPhone:** 🔔 **DING\!** Look at your lock screen. It should say: *"You earned 100 points\!"*
+2.  **Wallet:** Open the pass. The balance should update to `100`.
+3.  **Supabase:** Check the `transactions` table. A new row `MEMBER_EARN` should exist.
+
+-----
+
+### 📢 Phase 4: The "Retention" (Broadcast Notification)
+
+**Goal:** Verify the Marketing Engine (Batching & Logging).
+
+Let's send a "Flash Sale" alert to your phone.
+
+**Step 1: The Dry Run (Safety First)**
+
+```bash
+curl -X POST https://[YOUR-REPLIT-URL]/api/notify/broadcast/test \
+  -H "x-api-key: [YOUR_POS_API_KEY]" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "programId": "YOUR_PROGRAM_ID",
+    "message": "🔥 Flash Sale! Show this pass for 20% off!",
+    "segment": "ALL"
+  }'
+```
+
+  * **Check:** It should return `success: true` and show your user in `sampleRecipients`. No notification yet.
+
+**Step 2: The Live Fire**
+Now run the **real** broadcast command (remove `/test` from the URL):
+
+```bash
+curl -X POST https://[YOUR-REPLIT-URL]/api/notify/broadcast \
+  -H "x-api-key: [YOUR_POS_API_KEY]" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "programId": "YOUR_PROGRAM_ID",
+    "message": "🔥 Flash Sale! Show this pass for 20% off!",
+    "segment": "ALL"
+  }'
+```
+
+**🔍 Verification:**
+
+1.  **iPhone:** 🔔 **DING\!** *"🔥 Flash Sale\! Show this pass for 20% off\!"*
+2.  **Supabase:** Check `notification_logs`. New row: `campaign_name: Manual Broadcast`, `success_count: 1`.
+
+-----
+
+### 🗑️ Phase 5: The "Churn" (Uninstall)
+
+**Goal:** Verify the Webhook Handler and Churn Analytics.
+
+**Step 1: The Action**
+
+1.  Open Apple Wallet on your iPhone.
+2.  Tap the **Three Dots (...)** on your pass.
+3.  Tap **Pass Details** -\> **Remove Pass**.
+4.  Confirm **Delete**.
+
+**Step 2: Wait & Verify**
+Wait about 10–30 seconds for Apple/PassKit to fire the webhook.
+
+**🔍 Verification:**
+
+1.  **Supabase:** Refresh `passes_master`.
+      * Status should be: `UNINSTALLED` 🔴.
+      * `is_active` should be: `FALSE`.
+2.  **Supabase:** Check `transactions`.
+      * New row: `action_type: UNINSTALL`.
+      * Notes: `Webhook: User removed pass from wallet`.
+
+-----
+
+### ✅ The Scorecard
+
+If you passed all 5 phases, your system is fully operational.
+
+| Phase | Test | Status |
+| :--- | :--- | :--- |
+| **1** | **Physical:** Letter Created in PostGrid | ⬜ |
+| **2** | **Digital:** Pass Installed via QR Link | ⬜ |
+| **3** | **Financial:** Points Added & Lock Screen Alert | ⬜ |
+| **4** | **Marketing:** Broadcast Received on Phone | ⬜ |
+| **5** | **Analytics:** Uninstall Detected via Webhook | ⬜ |
+
+**Ready to start Phase 1? Run the curl command and tell me if the Letter appears in PostGrid\!**

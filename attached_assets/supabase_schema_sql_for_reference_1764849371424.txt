@@ -1,0 +1,132 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.admin_profiles (
+id uuid NOT NULL,
+program_id uuid,
+role text DEFAULT 'CLIENT_ADMIN'::text,
+created_at timestamp with time zone DEFAULT now(),
+CONSTRAINT admin_profiles_pkey PRIMARY KEY (id),
+CONSTRAINT admin_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+CONSTRAINT admin_profiles_program_id_fkey FOREIGN KEY (program_id) REFERENCES public.programs(id)
+);
+CREATE TABLE public.birthday_logs (
+id uuid NOT NULL DEFAULT uuid_generate_v4(),
+pass_id uuid,
+program_id uuid,
+year integer NOT NULL,
+created_at timestamp with time zone DEFAULT now(),
+CONSTRAINT birthday_logs_pkey PRIMARY KEY (id),
+CONSTRAINT birthday_logs_pass_id_fkey FOREIGN KEY (pass_id) REFERENCES public.passes_master(id),
+CONSTRAINT birthday_logs_program_id_fkey FOREIGN KEY (program_id) REFERENCES public.programs(id)
+);
+CREATE TABLE public.claim_codes (
+id integer NOT NULL DEFAULT nextval('claim_codes_id_seq'::regclass),
+claim_code character varying NOT NULL UNIQUE,
+status character varying DEFAULT 'ISSUED'::character varying CHECK (status::text = ANY (ARRAY['ISSUED'::character varying, 'INSTALLED'::character varying, 'EXPIRED'::character varying, 'CANCELLED'::character varying]::text[])),
+passkit_program_id character varying NOT NULL,
+passkit_install_url text,
+first_name character varying,
+last_name character varying,
+email character varying,
+address_line_1 character varying,
+address_line_2 character varying,
+city character varying,
+state character varying,
+postal_code character varying,
+country character varying DEFAULT 'US'::character varying,
+created_at timestamp with time zone DEFAULT now(),
+installed_at timestamp with time zone,
+postcard_id character varying,
+CONSTRAINT claim_codes_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.notification_logs (
+id uuid NOT NULL DEFAULT uuid_generate_v4(),
+program_id uuid,
+campaign_name text,
+recipient_count integer DEFAULT 0,
+success_count integer DEFAULT 0,
+failed_count integer DEFAULT 0,
+message_content text,
+target_segment text,
+created_at timestamp with time zone DEFAULT now(),
+CONSTRAINT notification_logs_pkey PRIMARY KEY (id),
+CONSTRAINT notification_logs_program_id_fkey FOREIGN KEY (program_id) REFERENCES public.programs(id)
+);
+CREATE TABLE public.passes_master (
+id uuid NOT NULL DEFAULT uuid_generate_v4(),
+user_id uuid,
+program_id uuid,
+protocol USER-DEFINED NOT NULL,
+passkit_internal_id text NOT NULL UNIQUE,
+external_id text NOT NULL UNIQUE,
+install_url text,
+status USER-DEFINED DEFAULT 'ISSUED'::pass_status,
+is_active boolean NOT NULL DEFAULT true,
+last_updated timestamp with time zone DEFAULT now(),
+CONSTRAINT passes_master_pkey PRIMARY KEY (id),
+CONSTRAINT passes_master_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+CONSTRAINT passes_master_program_id_fkey FOREIGN KEY (program_id) REFERENCES public.programs(id)
+);
+CREATE TABLE public.programs (
+id uuid NOT NULL DEFAULT uuid_generate_v4(),
+name text NOT NULL,
+protocol USER-DEFINED NOT NULL,
+passkit_program_id text NOT NULL,
+postgrid_template_id text,
+created_at timestamp with time zone DEFAULT now(),
+birthday_bot_enabled boolean DEFAULT false,
+birthday_reward_points integer DEFAULT 0,
+birthday_message text DEFAULT 'Happy Birthday! We added points to your pass.'::text,
+CONSTRAINT programs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.protocol_coupon (
+pass_id uuid NOT NULL,
+offer_details text,
+expiry_date date,
+redeemed_at timestamp with time zone,
+CONSTRAINT protocol_coupon_pkey PRIMARY KEY (pass_id),
+CONSTRAINT protocol_coupon_pass_id_fkey FOREIGN KEY (pass_id) REFERENCES public.passes_master(id)
+);
+CREATE TABLE public.protocol_event_ticket (
+pass_id uuid NOT NULL,
+event_name text,
+venue text,
+checked_in_at timestamp with time zone,
+CONSTRAINT protocol_event_ticket_pkey PRIMARY KEY (pass_id),
+CONSTRAINT protocol_event_ticket_pass_id_fkey FOREIGN KEY (pass_id) REFERENCES public.passes_master(id)
+);
+CREATE TABLE public.protocol_membership (
+pass_id uuid NOT NULL,
+points_balance integer NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
+tier_points integer DEFAULT 0,
+secondary_points integer DEFAULT 0,
+lifetime_points integer DEFAULT 0,
+CONSTRAINT protocol_membership_pkey PRIMARY KEY (pass_id),
+CONSTRAINT protocol_membership_pass_id_fkey FOREIGN KEY (pass_id) REFERENCES public.passes_master(id)
+);
+CREATE TABLE public.transactions (
+id uuid NOT NULL DEFAULT uuid_generate_v4(),
+pass_id uuid,
+action_type USER-DEFINED NOT NULL,
+value_change integer,
+notes text,
+created_at timestamp with time zone DEFAULT now(),
+CONSTRAINT transactions_pkey PRIMARY KEY (id),
+CONSTRAINT transactions_pass_id_fkey FOREIGN KEY (pass_id) REFERENCES public.passes_master(id)
+);
+CREATE TABLE public.users (
+id uuid NOT NULL DEFAULT uuid_generate_v4(),
+email text UNIQUE,
+first_name text,
+last_name text,
+address_line1 text,
+city text,
+state text,
+zip text,
+created_at timestamp with time zone DEFAULT now(),
+birth_date date,
+marketing_opt_in boolean DEFAULT true,
+phone_number text,
+CONSTRAINT users_pkey PRIMARY KEY (id)
+);
