@@ -9,6 +9,8 @@ import adminRoutes from "./admin.routes";
 import notificationRoutes from "./notification.routes";
 import claimRoutes from "./claim.routes";
 import webhookRoutes from "./webhook.routes";
+import programsRoutes from "./programs.routes";
+import customersRoutes from "./customers.routes";
 
 const router = Router();
 
@@ -31,5 +33,9 @@ router.use("/notify", notificationRoutes);
 router.use("/claim", claimRoutes);
 
 router.use("/webhooks", webhookRoutes);
+
+router.use("/programs", programsRoutes);
+
+router.use("/customers", customersRoutes);
 
 export default router;

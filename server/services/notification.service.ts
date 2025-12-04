@@ -326,7 +326,6 @@ class NotificationService {
           failed_count: failedCount,
           message_content: message,
           target_segment: segment,
-          status: "COMPLETED",
         })
         .select("id")
         .single();

@@ -34,7 +34,7 @@ class SupabaseService {
   private client: SupabaseClient | null = null;
   private initialized = false;
 
-  private getClient(): SupabaseClient {
+  getClient(): SupabaseClient {
     if (!this.client) {
       if (!isSupabaseConfigured()) {
         throw new Error("Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.");
