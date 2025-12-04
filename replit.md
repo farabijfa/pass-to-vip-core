@@ -39,6 +39,11 @@ I do not want the agent to make changes to the /admin folder.
 - **Digital Wallet:** Manages enrollment, coupon issuance, pass creation, updates, deletion, and push notifications through PassKit.
 - **Direct Mail:** Integrates with PostGrid for sending postcards and letters, supporting various sizes and template variables.
 - **Bulk Campaign Manager:** Facilitates batch campaigns via CSV upload, allowing for sending postcards or letters with dynamically generated claim codes.
+- **Broadcast Notifications:** Send push notifications to all active passes in a program.
+  - **Dry-Run Testing:** `POST /api/notify/broadcast/test` previews recipients without sending.
+  - **Batched Execution:** Processes 50 passes per batch with 200ms throttle to prevent rate limiting.
+  - **Input Validation:** Requires message (min 5 chars) and programId; supports VIP segment filtering.
+  - **Audit Logging:** Full audit trail in `notification_logs` with message content, success/failure counts.
 - **Birthday Bot:** Configuration-driven automated process to identify members with birthdays, award points, and send personalized push notifications.
   - **Configuration:** Uses `programs.birthday_bot_enabled`, `birthday_reward_points`, and `birthday_message` columns for per-program settings.
   - **Double-Gifting Prevention:** Uses `birthday_logs` table with UNIQUE constraint on `(pass_id, year)` to prevent duplicate birthday rewards.

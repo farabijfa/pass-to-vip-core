@@ -11,6 +11,12 @@ router.post(
 );
 
 router.post(
+  "/broadcast/test",
+  checkApiKey,
+  notificationController.testBroadcast.bind(notificationController)
+);
+
+router.post(
   "/birthday-run",
   checkApiKey,
   notificationController.runBirthdayBot.bind(notificationController)

@@ -4,9 +4,15 @@ import { z } from "zod";
 
 const broadcastSchema = z.object({
   programId: z.string().min(1, "Program ID is required"),
-  message: z.string().min(1, "Message is required").max(500, "Message too long"),
+  message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
   segment: z.enum(["ALL", "VIP"]).optional(),
   campaignName: z.string().optional(),
+});
+
+const broadcastTestSchema = z.object({
+  programId: z.string().min(1, "Program ID is required"),
+  message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
+  segment: z.enum(["ALL", "VIP"]).optional(),
 });
 
 class NotificationController {
@@ -32,12 +38,13 @@ class NotificationController {
 
       console.log(`📢 Broadcast request received for program: ${programId}`);
 
-      const result = await notificationService.sendBroadcast(
+      const result = await notificationService.sendBroadcast({
         programId,
         message,
         segment,
-        campaignName
-      );
+        campaignName,
+        dryRun: false,
+      });
 
       const processingTime = Date.now() - startTime;
 
@@ -113,6 +120,73 @@ class NotificationController {
 
     } catch (error) {
       console.error("Birthday Bot controller error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+    }
+  }
+
+  async testBroadcast(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const validation = broadcastTestSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { programId, message, segment } = validation.data;
+
+      console.log(`🧪 Broadcast TEST (Dry Run) for program: ${programId}`);
+
+      const result = await notificationService.sendBroadcast({
+        programId,
+        message,
+        segment,
+        dryRun: true,
+      });
+
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "BROADCAST_TEST_FAILED",
+            message: result.error,
+          },
+          metadata: { processingTime, dryRun: true },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Dry run completed - no messages were sent",
+        data: {
+          totalRecipients: result.totalRecipients,
+          messagePreview: result.messagePreview,
+          targetSegment: result.targetSegment,
+          sampleRecipients: result.sampleRecipients,
+        },
+        metadata: { processingTime, dryRun: true },
+      });
+
+    } catch (error) {
+      console.error("Broadcast test error:", error);
       res.status(500).json({
         success: false,
         error: {

@@ -24,6 +24,14 @@ interface BirthdayUser {
   passkit_program_id: string;
 }
 
+interface BroadcastOptions {
+  programId: string;
+  message: string;
+  segment?: "ALL" | "VIP";
+  campaignName?: string;
+  dryRun?: boolean;
+}
+
 interface BroadcastResult {
   success: boolean;
   totalRecipients: number;
@@ -31,6 +39,15 @@ interface BroadcastResult {
   failedCount: number;
   campaignLogId?: string;
   error?: string;
+  dryRun?: boolean;
+  messagePreview?: string;
+  targetSegment?: string;
+  sampleRecipients?: Array<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  }>;
 }
 
 interface BirthdayBotResult {
@@ -129,17 +146,38 @@ class NotificationService {
     return { results, successCount, failedCount };
   }
 
-  async sendBroadcast(
-    programId: string,
-    message: string,
-    segment?: "ALL" | "VIP",
-    campaignName?: string
-  ): Promise<BroadcastResult> {
-    console.log(`📢 Starting broadcast for program: ${programId}`);
+  async sendBroadcast(options: BroadcastOptions): Promise<BroadcastResult> {
+    const { programId, message, segment = "ALL", campaignName, dryRun = false } = options;
+    
+    console.log(`📢 Broadcast Request${dryRun ? " [DRY RUN]" : ""}`);
+    console.log(`   Program: ${programId}`);
     console.log(`   Message: "${message}"`);
-    console.log(`   Segment: ${segment || "ALL"}`);
+    console.log(`   Segment: ${segment}`);
+    if (dryRun) {
+      console.log("   ⚠️ DRY RUN MODE - No messages will be sent");
+    }
 
     try {
+      if (!message || message.trim().length < 5) {
+        return {
+          success: false,
+          totalRecipients: 0,
+          successCount: 0,
+          failedCount: 0,
+          error: "Message too short (minimum 5 characters required)",
+        };
+      }
+
+      if (!programId || programId.trim().length === 0) {
+        return {
+          success: false,
+          totalRecipients: 0,
+          successCount: 0,
+          failedCount: 0,
+          error: "Program ID is required",
+        };
+      }
+
       const client = this.getClient();
 
       let query = client
@@ -162,7 +200,7 @@ class NotificationService {
           totalRecipients: 0,
           successCount: 0,
           failedCount: 0,
-          error: queryError.message,
+          error: `Database error: ${queryError.message}`,
         };
       }
 
@@ -173,36 +211,81 @@ class NotificationService {
           totalRecipients: 0,
           successCount: 0,
           failedCount: 0,
+          dryRun,
+          messagePreview: message,
+          targetSegment: segment,
         };
       }
 
-      console.log(`📬 Found ${passes.length} recipients`);
+      console.log(`📬 Found ${passes.length} eligible recipients`);
 
-      const { successCount, failedCount } = await this.processBatch(
-        passes as PassRecord[],
-        async (pass) => {
-          const result = await passKitService.pushMessage(
-            pass.passkit_internal_id,
-            pass.passkit_program_id,
-            message
-          );
-          if (!result.success) {
-            throw new Error(result.error);
-          }
-          return result;
+      if (dryRun) {
+        const sampleRecipients = passes.slice(0, 5).map((pass: any) => ({
+          id: pass.id,
+          email: pass.email || "unknown",
+          firstName: pass.first_name || "Unknown",
+          lastName: pass.last_name || "",
+        }));
+
+        console.log(`✅ Dry run complete - ${passes.length} would receive the message`);
+        console.log(`   Sample recipients: ${sampleRecipients.map(r => r.email).join(", ")}`);
+
+        return {
+          success: true,
+          totalRecipients: passes.length,
+          successCount: 0,
+          failedCount: 0,
+          dryRun: true,
+          messagePreview: message,
+          targetSegment: segment,
+          sampleRecipients,
+        };
+      }
+
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < passes.length; i += BATCH_SIZE) {
+        const batch = passes.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(passes.length / BATCH_SIZE);
+        console.log(`📦 Processing batch ${batchNum} of ${totalBatches} (${batch.length} recipients)`);
+
+        const results = await Promise.all(
+          batch.map(async (pass: any) => {
+            try {
+              const result = await passKitService.pushMessage(
+                pass.passkit_internal_id,
+                pass.passkit_program_id,
+                message
+              );
+              return result.success;
+            } catch (error) {
+              console.error(`   ❌ Failed to send to ${pass.email}:`, error);
+              return false;
+            }
+          })
+        );
+
+        successCount += results.filter((r) => r === true).length;
+        failedCount += results.filter((r) => r === false).length;
+
+        if (i + BATCH_SIZE < passes.length) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
-      );
+      }
 
       const { data: logData, error: logError } = await client
         .from("notification_logs")
         .insert({
           program_id: programId,
-          campaign_name: campaignName || "Broadcast",
+          campaign_name: campaignName || "Manual Broadcast",
           recipient_count: passes.length,
           success_count: successCount,
           failed_count: failedCount,
           message_content: message,
-          target_segment: segment || "ALL",
+          target_segment: segment,
+          status: "COMPLETED",
         })
         .select("id")
         .single();
@@ -219,6 +302,9 @@ class NotificationService {
         successCount,
         failedCount,
         campaignLogId: logData?.id,
+        dryRun: false,
+        messagePreview: message,
+        targetSegment: segment,
       };
 
     } catch (error) {
