@@ -1,0 +1,138 @@
+This is the final handshake. Your backend is now a robust "Headless Loyalty Engine" exposing clean, secured APIs. Now we just need to wire up the **WeWeb Frontend** to consume them.
+
+You have confirmed the endpoints work. Now, let's build the **Client Dashboard** interfaces.
+
+Here is the **Lead Developer Execution Guide** for the WeWeb integration.
+
+-----
+
+### 🏛️ Architecture: The "State Management" Strategy
+
+In WeWeb, we won't just hit APIs randomly. We will use **Variables** and **Collections** to manage state efficiently.
+
+  * **`activeProgramId` (Variable):** We need to know *which* business is logged in.
+      * *Logic:* On Login, fetch the user's profile from Supabase (`admin_profiles`) and set this variable. All API calls below will use this ID.
+  * **`X-API-Key`:** In WeWeb, go to **Plugins \> REST API** and set this as a global header or add it to each request.
+
+-----
+
+### 1\. Build the "Marketing Center" (Campaigns)
+
+**Goal:** Give the client a control panel for the Birthday Bot and Broadcasts.
+
+#### A. The Data Setup (On Page Load)
+
+1.  **Create a Collection:** named `currentProgramConfig`.
+2.  **Source:** REST API.
+3.  **Endpoint:** `GET /api/programs/[activeProgramId]` (Use the binding formula).
+4.  **Result:** This loads the current "Birthday Message" and "Enabled" status so the form isn't empty.
+
+#### B. Section 1: Birthday Bot Configuration
+
+Build a Card with a **Toggle** (Enable), **Input** (Points), and **Text Area** (Message).
+
+  * **Workflow: "Save Changes" Button**
+      * **Action:** REST API Request.
+      * **Method:** `PATCH`.
+      * **URL:** `/api/programs/[activeProgramId]`.
+      * **Body:**
+        ```javascript
+        {
+          "birthday_bot_enabled": variables.birthdayToggleValue,
+          "birthday_reward_points": variables.birthdayPointsValue,
+          "birthday_message": variables.birthdayMessageValue
+        }
+        ```
+      * **On Success:** Show Toast "Settings Saved".
+
+#### C. Section 2: Broadcast Blaster (The Safety Flow)
+
+Build a Form with **Message Input** and **Segment Dropdown**.
+
+  * **Step 1: The "Preview" Button**
+
+      * **Action:** REST API Request.
+      * **Method:** `POST`.
+      * **URL:** `/api/notify/broadcast/test`.
+      * **Body:**
+        ```javascript
+        {
+          "programId": variables.activeProgramId,
+          "message": variables.broadcastMessage,
+          "segment": variables.selectedSegment
+        }
+        ```
+      * **On Success:**
+        1.  Store result in a variable `broadcastPreviewData`.
+        2.  Open **Modal: "Confirm Broadcast"**.
+
+  * **Step 2: The "Confirm" Modal**
+
+      * **Display:** Bind text elements to `broadcastPreviewData.data.totalRecipients` and `sampleRecipients`.
+      * **Action (Send Button):** REST API Request (`POST /api/notify/broadcast`).
+      * **On Success:** Close Modal + Show Success Toast.
+
+-----
+
+### 2\. Build the "Customer Data" Page
+
+**Goal:** A high-performance table showing real-time stats.
+
+#### A. The Stats Bar (Top of Page)
+
+1.  **Create Collection:** `customerStats`.
+2.  **Endpoint:** `GET /api/customers/stats?programId=[activeProgramId]`.
+3.  **UI:** Create 4 Cards.
+      * **Total Members:** Bind to `customerStats.total`.
+      * **Active Rate:** Bind to `customerStats['activeRate'] + "%"`.
+      * **Churned:** Bind to `customerStats.uninstalled`.
+
+#### B. The Customer List (Data Grid)
+
+We use the **List** or **Data Grid** element in WeWeb.
+
+1.  **Create Collection:** `customerList`.
+2.  **Endpoint:** `GET /api/customers`.
+      * **Query Parameters:**
+          * `programId`: `[activeProgramId]`
+          * `limit`: `20`
+          * `offset`: `(variables.currentPage - 1) * 20` (For pagination).
+3.  **Binding:**
+      * **Name:** `item.data.first_name + " " + item.data.last_name`
+      * **Status:** `item.data.status` (Conditional styling: Green if `INSTALLED`).
+      * **Points:** `item.data.points_balance`.
+
+#### C. The Detail View (Drill Down)
+
+When clicking a row in the table:
+
+  * **Workflow:**
+    1.  **Fetch:** Call `GET /api/customers/[item.data.external_id]`.
+    2.  **Store:** Save result to variable `selectedCustomer`.
+    3.  **Open Modal:** "Customer Details".
+  * **Inside Modal:**
+      * Show Profile info.
+      * **Transaction History List:** Bind to `selectedCustomer.transactions`. This proves to the client exactly when points were earned/redeemed.
+
+-----
+
+### 3\. The "Super Admin" (Internal Ops)
+
+You previously mentioned managing different template IDs and letter sizes.
+
+**Recommendation:**
+Since you confirmed the **Programs API** is working (`List Programs`), build a hidden **"Super Admin"** page in WeWeb for yourself.
+
+  * **Table:** List all Programs.
+  * **Columns:** `Program Name`, `PassKit ID`, `PostGrid Template ID`.
+  * **Action:** "Add Client" -\> Uses your provisioning logic.
+
+### 🏁 Final Pre-Flight Check
+
+You are ready to construct the UI.
+
+1.  **Security:** Ensure the `X-API-Key` is stored safely in WeWeb.
+2.  **Error Handling:** In WeWeb workflows, add a "Failure" path to every API call that shows a Toast with `error.response.data.message`.
+3.  **Testing:** Log in as "Beta Pizza", go to the Marketing Page, run a Broadcast Preview, and confirm you see the sample data from your backend.
+
+**Would you like me to create the specific WeWeb JavaScript snippet for the "Pagination Logic" (handling the offset) so your customer table loads correctly?**
