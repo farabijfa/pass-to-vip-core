@@ -280,6 +280,23 @@ Returns status of Supabase, PassKit, and PostGrid connections.
 curl -H "x-api-key: pk_live_passtovip_8f3k9m2x7q" http://localhost:5000/api/programs
 ```
 
+### Production Validation Script (FAT)
+Run the comprehensive Final Acceptance Test to validate all 7 core workflows:
+```bash
+npx tsx scripts/prod-validation.ts
+```
+
+This tests:
+- **Flow A**: Tenant Onboarding (Agency Role)
+- **Flow B**: Campaign CSV Upload (Agency Role)
+- **Flow C**: Physical Bridge / Claim (End User Role)
+- **Flow D**: POS Transactions (Staff Role)
+- **Flow E**: Notification Dry-Run (Marketing Role)
+- **Flow F**: Churn Webhook (System Role)
+- **Flow G**: Kill Switch (Super Admin Role)
+
+Expected output: `ALL SYSTEMS GO: 7/7 flows passed`
+
 ---
 
 ## Deployment Checklist
@@ -296,6 +313,7 @@ Before deploying to production:
 - [ ] Verify WeWeb dashboard connects successfully
 - [ ] Configure PassKit credentials (if using digital wallets)
 - [ ] Configure PostGrid credentials (if using physical mail)
+- [ ] Run production validation: `npx tsx scripts/prod-validation.ts` (expect 7/7 passed)
 
 ---
 

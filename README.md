@@ -1,235 +1,344 @@
-# Phygital Loyalty Ecosystem
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Phygital%20Loyalty-6366f1?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDEySDE3TDE0IDIxTDEwIDNMNyAxMkgzIi8+PC9zdmc+" alt="Platform"/>
+  <img src="https://img.shields.io/badge/Status-Production%20Ready-22c55e?style=for-the-badge" alt="Status"/>
+  <img src="https://img.shields.io/badge/Node.js-20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
+</p>
 
-A comprehensive Node.js/Express backend API that bridges physical and digital loyalty experiences. This system integrates digital wallet technology (PassKit) with physical mail delivery (PostGrid) to create seamless customer engagement through QR-based redemption flows.
+<h1 align="center">Phygital Loyalty Ecosystem</h1>
+
+<p align="center">
+  <strong>Enterprise-grade multi-tenant SaaS platform bridging physical mail and digital wallets</strong>
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> |
+  <a href="#-features">Features</a> |
+  <a href="#-architecture">Architecture</a> |
+  <a href="#-api-reference">API Reference</a> |
+  <a href="#-deployment">Deployment</a>
+</p>
+
+---
+
+## What is Phygital?
+
+**Phygital** = **Physical** + **Digital**
+
+This platform transforms physical mail recipients into digital wallet users through QR-based redemption flows. Built for **PassToVIP** (passtovip.com / scantovip.com) under **OakMontLogic**, it serves retail, hospitality, and event management industries.
+
+```
+    PHYSICAL WORLD                              DIGITAL WORLD
+         
+    +--------------+                        +------------------+
+    |   Postcard   |     QR Code Scan      |   Apple Wallet   |
+    |   or Letter  |  ------------------>  |   Google Pay     |
+    |   with QR    |                        |   Loyalty Pass   |
+    +--------------+                        +------------------+
+          |                                         |
+          |              UNIFIED LOYALTY            |
+          +----------------EXPERIENCE---------------+
+```
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Tech Stack](#tech-stack)
-4. [System Design](#system-design)
-5. [API Reference](#api-reference)
-6. [Services](#services)
-7. [Physical Bridge Flow](#physical-bridge-flow)
-8. [Database Schema](#database-schema)
-9. [Environment Configuration](#environment-configuration)
-10. [Admin Dashboard](#admin-dashboard)
-11. [Deployment](#deployment)
+- [Quick Start](#-quick-start)
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Tech Stack](#-tech-stack)
+- [API Reference](#-api-reference)
+- [Database Schema](#-database-schema)
+- [Security & Enterprise Features](#-security--enterprise-features)
+- [WeWeb Integration](#-weweb-integration)
+- [Production Validation](#-production-validation)
+- [Environment Configuration](#-environment-configuration)
+- [Deployment](#-deployment)
+- [Troubleshooting](#-troubleshooting)
+- [License](#-license)
 
 ---
 
-## Overview
+## Quick Start
 
-The Phygital Loyalty Ecosystem solves the challenge of connecting offline customer interactions with digital loyalty programs. Key capabilities include:
+### Prerequisites
 
-- **Membership Management**: Points earning, redemption, and balance tracking
-- **Digital Wallet Integration**: Apple Wallet and Google Wallet pass creation via PassKit
-- **Physical Mail Campaigns**: Automated postcard and letter sending via PostGrid
-- **Physical Bridge**: QR code redemption flow converting mail recipients to digital wallet users
-- **POS Integration**: Real-time transaction processing for Softr and other POS systems
+- Node.js 20.x
+- npm or yarn
+- Supabase account (PostgreSQL database)
+- PassKit account (digital wallet integration)
+- PostGrid account (physical mail delivery)
 
-### The "Phygital" Concept
+### 1. Clone & Install
+
+```bash
+git clone <repository-url>
+cd phygital-loyalty
+npm install
+```
+
+### 2. Configure Environment
+
+Create your environment variables (see [Environment Configuration](#-environment-configuration)):
+
+```bash
+# Required
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+ADMIN_API_KEY=pk_live_your_api_key
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=your_secure_password
+SESSION_SECRET=your_random_secret
+
+# Optional (for full functionality)
+PASSKIT_API_KEY=your_passkit_key
+PASSKIT_API_SECRET=your_passkit_secret
+POSTGRID_API_KEY=your_postgrid_key
+APP_URL=https://your-app.replit.app
+```
+
+### 3. Run Database Migrations
+
+Execute these SQL files in **Supabase Studio > SQL Editor** (in order):
 
 ```
-Physical World                    Digital World
-     │                                 │
-     ▼                                 ▼
-┌─────────────┐   QR Scan    ┌─────────────────┐
-│  Postcard/  │ ──────────►  │  Digital Wallet │
-│   Letter    │              │   (Apple/Google)│
-└─────────────┘              └─────────────────┘
-     │                                 │
-     └────────── Unified ──────────────┘
-                Loyalty
-               Experience
+migrations/001_performance_indexes.sql
+migrations/002_program_suspension.sql
+migrations/003_passkit_tier_id.sql
+migrations/004_rpc_functions_verification.sql
 ```
+
+### 4. Start Development Server
+
+```bash
+npm run dev
+```
+
+Server starts at `http://localhost:5000`
+
+### 5. Verify Installation
+
+```bash
+# Health check
+curl http://localhost:5000/api/health
+
+# Run production validation (7 comprehensive tests)
+npx tsx scripts/prod-validation.ts
+```
+
+---
+
+## Features
+
+### Core Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Tenant Architecture** | Secure data isolation per client with program-level access control |
+| **Digital Wallet Integration** | Apple Wallet & Google Pay passes via PassKit |
+| **Physical Mail Campaigns** | Automated postcards & letters via PostGrid |
+| **Physical Bridge** | QR code redemption converting mail to digital wallet users |
+| **POS Integration** | Real-time points earn/redeem for retail systems |
+| **Push Notifications** | Real-time wallet updates with buzz notifications |
+| **Birthday Bot** | Automated birthday reward distribution |
+
+### Enterprise Security
+
+| Feature | Description |
+|---------|-------------|
+| **Kill Switch** | Instantly suspend non-paying clients |
+| **Rate Limiting** | 60 req/min for POS, 10 req/min for notifications |
+| **API Key Authentication** | Secure API access with rotatable keys |
+| **Input Validation** | Zod schema validation on all endpoints |
+| **UUID Verification** | Prevents cross-tenant data leakage |
+| **Dry-Run Mode** | Test campaigns without sending real notifications |
+
+### Operational Features
+
+| Feature | Description |
+|---------|-------------|
+| **Health Monitoring** | Detailed service status with reason codes |
+| **Churn Tracking** | Webhook-based pass uninstall detection |
+| **Campaign Logging** | Full audit trail for all marketing actions |
+| **CSV Bulk Upload** | Process thousands of contacts at once |
+| **WeWeb Dashboard** | Low-code admin interface integration |
 
 ---
 
 ## Architecture
 
-### High-Level Architecture
+### High-Level System Design
 
 ```
-                                    ┌──────────────────────────────────────────┐
-                                    │           External Services              │
-                                    │  ┌─────────┐ ┌─────────┐ ┌───────────┐  │
-                                    │  │ PassKit │ │PostGrid │ │  Supabase │  │
-                                    │  │   API   │ │   API   │ │    RPC    │  │
-                                    │  └────┬────┘ └────┬────┘ └─────┬─────┘  │
-                                    └───────┼──────────┼─────────────┼────────┘
-                                            │          │             │
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                              Application Layer                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐   │
-│  │                           Express Server (:5000)                         │   │
-│  └─────────────────────────────────────────────────────────────────────────┘   │
-│                                      │                                          │
-│  ┌───────────────────────────────────┼──────────────────────────────────────┐  │
-│  │                              Routes Layer                                 │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │  │
-│  │  │   POS    │ │  Loyalty │ │  Wallet  │ │   Mail   │ │   Campaign   │   │  │
-│  │  │  Routes  │ │  Routes  │ │  Routes  │ │  Routes  │ │    Routes    │   │  │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘   │  │
-│  └───────┼────────────┼────────────┼────────────┼──────────────┼───────────┘  │
-│          │            │            │            │              │               │
-│  ┌───────┼────────────┼────────────┼────────────┼──────────────┼───────────┐  │
-│  │       ▼            ▼            ▼            ▼              ▼            │  │
-│  │                         Controllers Layer                                │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │  │
-│  │  │   POS    │ │  Loyalty │ │  Wallet  │ │   Mail   │ │   Campaign   │   │  │
-│  │  │Controller│ │Controller│ │Controller│ │Controller│ │  Controller  │   │  │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘   │  │
-│  └───────┼────────────┼────────────┼────────────┼──────────────┼───────────┘  │
-│          │            │            │            │              │               │
-│  ┌───────┴────────────┴────────────┴────────────┴──────────────┴───────────┐  │
-│  │                           Services Layer                                 │  │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐    │  │
-│  │  │    Logic     │ │   PassKit    │ │   PostGrid   │ │   Supabase   │    │  │
-│  │  │   Service    │ │   Service    │ │   Service    │ │   Service    │    │  │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘    │  │
-│  │  ┌──────────────┐                                                        │  │
-│  │  │   Campaign   │                                                        │  │
-│  │  │   Service    │                                                        │  │
-│  │  └──────────────┘                                                        │  │
-│  └──────────────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------------+
+|                                  CLIENT LAYER                                      |
+|   +-------------+    +-------------+    +-------------+    +----------------+     |
+|   |   WeWeb     |    |    POS      |    |   Mobile    |    |   Mail Scan    |     |
+|   |  Dashboard  |    |   System    |    |   Wallet    |    |    (QR Code)   |     |
+|   +------+------+    +------+------+    +------+------+    +-------+--------+     |
++----------|------------------|------------------|------------------|--------------+
+           |                  |                  |                  |
+           v                  v                  v                  v
++-----------------------------------------------------------------------------------+
+|                              API GATEWAY (Express.js :5000)                        |
+|   +------------------------------------------------------------------------+      |
+|   |  Middleware: CORS | Rate Limiting | Auth | Request ID | Error Handler  |      |
+|   +------------------------------------------------------------------------+      |
++-----------------------------------------------------------------------------------+
+           |
+           v
++-----------------------------------------------------------------------------------+
+|                                 ROUTES LAYER                                       |
+|   +---------+ +--------+ +-------+ +-------+ +----------+ +--------+ +--------+   |
+|   |  Admin  | |  POS   | | Claim | |Loyalty| |Notify    | |Programs| |Webhooks|   |
+|   | Routes  | | Routes | |Routes | |Routes | |  Routes  | | Routes | | Routes |   |
+|   +---------+ +--------+ +-------+ +-------+ +----------+ +--------+ +--------+   |
++-----------------------------------------------------------------------------------+
+           |
+           v
++-----------------------------------------------------------------------------------+
+|                              CONTROLLERS LAYER                                     |
+|   Request validation, response formatting, error handling                          |
++-----------------------------------------------------------------------------------+
+           |
+           v
++-----------------------------------------------------------------------------------+
+|                               SERVICES LAYER                                       |
+|   +------------+  +------------+  +------------+  +------------+  +------------+  |
+|   |   Logic    |  |  PassKit   |  |  PostGrid  |  | Supabase   |  | Notification|  |
+|   |  Service   |  |  Service   |  |  Service   |  |  Service   |  |   Service   |  |
+|   | (POS Flow) |  | (Wallets)  |  |  (Mail)    |  |   (DB)     |  |   (Push)    |  |
+|   +------------+  +------------+  +------------+  +------------+  +------------+  |
++-----------------------------------------------------------------------------------+
+           |                    |                  |
+           v                    v                  v
++-----------------------------------------------------------------------------------+
+|                            EXTERNAL SERVICES                                       |
+|   +----------------+    +----------------+    +------------------+                 |
+|   |    Supabase    |    |    PassKit     |    |     PostGrid     |                 |
+|   |   PostgreSQL   |    | Digital Wallet |    |   Physical Mail  |                 |
+|   |   RPC Functions|    |   Apple/Google |    |  Postcards/Letters|                 |
+|   +----------------+    +----------------+    +------------------+                 |
++-----------------------------------------------------------------------------------+
 ```
-
-### Design Principles
-
-1. **Strict Separation of Concerns**
-   - Controllers: Request/response handling, validation
-   - Services: Business logic, external API integration
-   - Routes: URL mapping, middleware application
-
-2. **Database Logic via RPC**
-   - All complex database operations use Supabase RPC stored procedures
-   - Ensures transactional integrity and reduces round trips
-
-3. **Stateless API Design**
-   - JWT authentication for PassKit
-   - Basic auth for admin routes
-   - Session-based auth available for web interfaces
-
-4. **Fail-Fast Error Handling**
-   - Comprehensive error codes and messages
-   - Detailed logging for debugging
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Runtime** | Node.js 20 | Server-side JavaScript |
-| **Framework** | Express.js | HTTP server, routing, middleware |
-| **Language** | TypeScript | Type safety, developer experience |
-| **Database** | PostgreSQL (Supabase) | Data persistence, RPC functions |
-| **ORM** | Drizzle ORM | Type-safe database queries |
-| **Validation** | Zod | Schema validation |
-| **Auth** | JWT / Basic Auth | API authentication |
-| **File Upload** | Multer | CSV file handling |
-| **CSV Parsing** | csv-parser | Stream-based CSV processing |
-
-### External Services
-
-| Service | Purpose | Region |
-|---------|---------|--------|
-| **PassKit** | Digital wallet passes (Apple/Google) | US (PUB2) |
-| **PostGrid** | Physical mail delivery (postcards, letters) | US/Canada |
-| **Supabase** | PostgreSQL database, RPC functions | Cloud |
-| **QR Server** | QR code image generation | api.qrserver.com |
-
----
-
-## System Design
 
 ### Request Flow
 
 ```
 Client Request
-      │
-      ▼
-┌─────────────────┐
-│    Express      │
-│   Middleware    │
-│  (CORS, Auth,   │
-│   Logging)      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│     Router      │
-│  (URL Matching) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   Controller    │
-│  (Validation,   │
-│   Response)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    Service      │
-│ (Business Logic)│
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌───────┐ ┌───────┐
-│Supabase│ │External│
-│  RPC   │ │  APIs  │
-└───────┘ └───────┘
+      |
+      v
++------------------+
+|    Express       |
+|   Middleware     |
+| (CORS, Auth,     |
+|  Rate Limit,     |
+|  Request ID)     |
++--------+---------+
+         |
+         v
++------------------+
+|     Router       |
+| (URL Matching)   |
++--------+---------+
+         |
+         v
++------------------+
+|   Controller     |
+| (Validation,     |
+|  Response)       |
++--------+---------+
+         |
+         v
++------------------+
+|    Service       |
+|(Business Logic)  |
++--------+---------+
+         |
+    +----+----+
+    |         |
+    v         v
++-------+ +--------+
+|Supabase| |External|
+|  RPC   | |  APIs  |
++-------+ +--------+
 ```
 
-### Service Responsibilities
+### Physical Bridge Flow
 
-#### Logic Service (`logic.service.ts`)
-The main orchestrator for POS actions:
-- Routes actions to appropriate Supabase RPC functions
-- Triggers PassKit wallet updates after transactions
-- Handles action type mapping (MEMBER_EARN, COUPON_REDEEM, etc.)
+```
+Step 1: Campaign Upload          Step 2: Mail Sent            Step 3: User Scans QR
++-------------------+           +------------------+          +-------------------+
+|  Admin uploads    |           |   Postcard or    |          |  Phone camera     |
+|  CSV with names,  |  ------>  |   Letter with    |  ------> |  opens:           |
+|  addresses        |           |   QR code        |          |  /claim/A1B2C3D4  |
++-------------------+           +------------------+          +-------------------+
+         |                               |                             |
+         |                               |                             |
+         v                               v                             v
++-------------------+           +------------------+          +-------------------+
+| System generates  |           |  Customer's      |          |  Server enrolls   |
+| claim codes &     |           |  mailbox         |          |  in PassKit &     |
+| sends via PostGrid|           |                  |          |  redirects        |
++-------------------+           +------------------+          +-------------------+
+                                                                       |
+                                                                       v
+                                                              +-------------------+
+                                                              |  Digital wallet   |
+                                                              |  pass installed   |
+                                                              |  on phone!        |
+                                                              +-------------------+
+```
 
-#### PassKit Service (`passkit.service.ts`)
-Digital wallet integration:
-- Member enrollment and pass creation
-- Pass updates with push notifications
-- Coupon issuance and redemption
-- JWT-based authentication to PassKit API
+---
 
-#### PostGrid Service (`postgrid.service.ts`)
-Physical mail delivery:
-- Postcard sending (front/back templates)
-- Letter sending (A4 format)
-- Template management
-- Mail status tracking
+## Tech Stack
 
-#### Supabase Service (`supabase.service.ts`)
-Database operations via RPC:
-- `process_membership_transaction`: Points earn/redeem
-- `process_one_time_use`: Coupon operations
-- `generate_claim_code`: Physical bridge codes
-- `lookup_claim_code`: Claim validation
-- `update_claim_code_status`: Status transitions
+### Backend
 
-#### Campaign Service (`campaign.service.ts`)
-Bulk mail operations:
-- CSV file parsing and validation
-- Contact normalization
-- Batch claim code generation
-- Batch mail sending (postcards or letters)
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Node.js | 20.x | Runtime environment |
+| Express.js | 4.x | HTTP server & routing |
+| TypeScript | 5.x | Type safety |
+| Drizzle ORM | Latest | Type-safe database queries |
+| Zod | Latest | Schema validation |
+| Multer | Latest | File upload handling |
+| csv-parser | Latest | CSV stream processing |
+
+### Database
+
+| Technology | Purpose |
+|------------|---------|
+| PostgreSQL (Supabase) | Primary database |
+| Supabase RPC | Stored procedures for business logic |
+| Drizzle Kit | Migrations & schema management |
+
+### External Services
+
+| Service | Purpose | Region |
+|---------|---------|--------|
+| PassKit | Digital wallet passes | US (PUB2) |
+| PostGrid | Physical mail delivery | US/Canada |
+| QR Server | QR code generation | Global CDN |
+
+### Frontend (Admin)
+
+| Technology | Purpose |
+|------------|---------|
+| React + Vite | Admin dashboard |
+| TailwindCSS | Styling |
+| shadcn/ui | UI components |
+| TanStack Query | Data fetching |
+| wouter | Routing |
 
 ---
 
 ## API Reference
 
 ### Base URL
+
 ```
 Production: https://your-app.replit.app/api
 Development: http://localhost:5000/api
@@ -237,267 +346,277 @@ Development: http://localhost:5000/api
 
 ### Authentication
 
-**Admin Routes** (Basic Auth):
+**Admin Routes (Basic Auth):**
 ```
 Authorization: Basic base64(username:password)
-Default: admin:phygital2024
 ```
 
-**API Routes** (API Key or JWT):
+**API Routes (API Key):**
 ```
-x-api-key: YOUR_API_KEY
-# or
-Authorization: Bearer <JWT>
+x-api-key: YOUR_ADMIN_API_KEY
 ```
 
 ---
 
-### POS Actions
+### Health Endpoints
 
-#### Process POS Action
-```http
-POST /api/pos/action
-Content-Type: application/json
+#### GET /api/health
+Full system health check with service diagnostics.
 
+**Response:**
+```json
 {
-  "external_id": "QR_CODE_OR_MEMBER_PIN",
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "timestamp": "2025-12-04T14:23:07.211Z",
+    "version": "1.0.0",
+    "services": {
+      "supabase": {
+        "status": "connected",
+        "latency": 326
+      },
+      "passKit": {
+        "status": "connected",
+        "reason": "api_verified"
+      },
+      "postGrid": {
+        "status": "connected"
+      }
+    }
+  }
+}
+```
+
+**PassKit Status Reasons:**
+| Reason | Description |
+|--------|-------------|
+| `credentials_missing` | API key or secret not configured |
+| `credentials_invalid` | Auth failed (401/403) |
+| `api_unreachable` | Network cannot reach PassKit |
+| `api_server_issue` | PassKit having issues (500/502/503) |
+| `api_verified` | Everything working |
+
+---
+
+### Admin Endpoints
+
+#### POST /api/admin/provision
+Create a new tenant (business client).
+
+**Headers:**
+```
+x-api-key: YOUR_API_KEY
+```
+
+**Request:**
+```json
+{
+  "businessName": "Pizza Palace",
+  "email": "admin@pizzapalace.com",
+  "password": "SecurePass123!",
+  "passkitProgramId": "pk_pizza_2024",
+  "protocol": "MEMBERSHIP"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "uuid",
+    "programId": "uuid",
+    "email": "admin@pizzapalace.com",
+    "businessName": "Pizza Palace"
+  }
+}
+```
+
+#### GET /api/admin/tenants
+List all tenants.
+
+#### DELETE /api/admin/tenants/:userId
+Delete a tenant.
+
+---
+
+### POS Endpoints
+
+#### POST /api/pos/action
+Process a POS transaction (earn, redeem, adjust points).
+
+**Request:**
+```json
+{
+  "external_id": "MEMBER_PIN_OR_QR_CODE",
   "action": "MEMBER_EARN",
   "amount": 100
 }
 ```
 
 **Action Types:**
-| Action | Description | Required Fields |
+
+| Action | Description | Amount Required |
 |--------|-------------|-----------------|
-| `MEMBER_EARN` | Award points | `external_id`, `amount` |
-| `MEMBER_REDEEM` | Deduct points | `external_id`, `amount` |
-| `MEMBER_ADJUST` | Adjust balance | `external_id`, `amount` |
-| `COUPON_ISSUE` | Issue coupon | `external_id` |
-| `COUPON_REDEEM` | Redeem coupon | `external_id` |
-| `INSTALL` | Pass installed | `external_id` |
-| `UNINSTALL` | Pass removed | `external_id` |
+| `MEMBER_EARN` | Award points | Yes |
+| `MEMBER_REDEEM` | Deduct points | Yes |
+| `MEMBER_ADJUST` | Adjust balance | Yes |
+| `COUPON_ISSUE` | Issue coupon | No |
+| `COUPON_REDEEM` | Redeem coupon | No |
+| `TICKET_CHECKIN` | Event check-in | No |
+| `INSTALL` | Pass installed | No |
+| `UNINSTALL` | Pass removed | No |
 
 **Response:**
 ```json
 {
   "success": true,
+  "message": "100 points earned! New balance: 500",
   "data": {
-    "transactionId": "txn_123",
-    "newBalance": 1100,
-    "action": "MEMBER_EARN"
-  }
-}
-```
-
----
-
-### Loyalty Operations
-
-#### Process Membership Transaction
-```http
-POST /api/loyalty/membership
-Content-Type: application/json
-
-{
-  "externalId": "MEMBER_PIN",
-  "action": "MEMBER_EARN",
-  "amount": 50
-}
-```
-
-#### Get Points Balance
-```http
-GET /api/loyalty/members/:memberId/balance
-```
-
-#### Get Transaction History
-```http
-GET /api/loyalty/members/:memberId/transactions
-```
-
----
-
-### Digital Wallet (PassKit)
-
-#### Enroll New Member
-```http
-POST /api/wallet/enroll
-Content-Type: application/json
-
-{
-  "programId": "4RhsVhHek0dliVogVznjSQ",
-  "tierId": "base",
-  "member": {
-    "externalId": "MEMBER_001",
-    "firstName": "John",
-    "lastName": "Doe",
-    "email": "john@example.com"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "memberId": "abc123",
-    "installUrl": "https://pub2.pskt.io/abc123"
-  }
-}
-```
-
-#### Issue Coupon
-```http
-POST /api/wallet/coupons
-Content-Type: application/json
-
-{
-  "campaignId": "CAMPAIGN_ID",
-  "offerId": "OFFER_ID",
-  "externalId": "COUPON_001"
-}
-```
-
-#### Update Pass
-```http
-PATCH /api/wallet/passes/:serialNumber
-Content-Type: application/json
-
-{
-  "points": 500,
-  "tier": "gold"
-}
-```
-
-#### Send Push Notification
-```http
-POST /api/wallet/passes/:serialNumber/push
-```
-
----
-
-### Direct Mail (PostGrid)
-
-#### Send Postcard
-```http
-POST /api/mail/mail
-Content-Type: application/json
-
-{
-  "type": "postcard",
-  "frontTemplateId": "template_xxx",
-  "backTemplateId": "template_yyy",
-  "size": "6x4",
-  "recipientAddress": {
-    "firstName": "John",
-    "lastName": "Doe",
-    "addressLine1": "123 Main St",
-    "city": "San Francisco",
-    "state": "CA",
-    "postalCode": "94102",
-    "country": "US"
+    "transaction_id": "txn_abc123",
+    "new_balance": 500,
+    "previous_balance": 400,
+    "protocol": "MEMBERSHIP"
   },
-  "mergeVariables": {
-    "firstName": "John",
-    "qrCodeUrl": "https://api.qrserver.com/..."
+  "passKitSync": {
+    "synced": true
   }
 }
 ```
 
-#### Send Letter
-```http
-POST /api/mail/mail
-Content-Type: application/json
-
-{
-  "type": "letter",
-  "templateId": "template_xxx",
-  "recipientAddress": { ... },
-  "mergeVariables": { ... },
-  "addressPlacement": "top_first_page",
-  "doubleSided": true,
-  "color": true
-}
-```
-
-**Postcard Sizes:**
-| Size | Dimensions | Description |
-|------|------------|-------------|
-| `6x4` | 6" × 4" | Standard postcard |
-| `9x6` | 9" × 6" | Mid-size postcard |
-| `11x6` | 11" × 6" | Oversized postcard |
+#### GET /api/pos/actions
+List available action types.
 
 ---
 
-### Bulk Campaign
+### Program Endpoints
 
-#### Upload CSV Campaign
-```http
-POST /api/campaign/upload-csv
-Content-Type: multipart/form-data
-Authorization: Basic base64(admin:phygital2024)
+#### GET /api/programs
+List all programs.
 
-file: campaign.csv
-program_id: 4RhsVhHek0dliVogVznjSQ
-resource_type: postcard | letter
-
-# For postcards:
-front_template_id: template_xxx
-back_template_id: template_yyy
-size: 6x4 | 9x6 | 11x6
-
-# For letters:
-template_id: template_xxx
+**Headers:**
+```
+x-api-key: YOUR_API_KEY
 ```
 
-**CSV Format:**
-```csv
-first_name,last_name,email,address,city,state,zip
-John,Doe,john@example.com,123 Main St,San Francisco,CA,94102
-Jane,Smith,jane@example.com,456 Oak Ave,Los Angeles,CA,90001
+#### GET /api/programs/:programId
+Get program details (supports UUID or PassKit ID).
+
+#### PATCH /api/programs/:programId
+Update program settings.
+
+**Request:**
+```json
+{
+  "birthday_bot_enabled": true,
+  "birthday_reward_points": 50,
+  "birthday_message": "Happy Birthday! Enjoy 50 bonus points!",
+  "is_suspended": false
+}
 ```
+
+---
+
+### Customer Endpoints
+
+#### GET /api/customers?programId=UUID
+List customers with pagination.
+
+**Query Parameters:**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `programId` | Required | Program UUID |
+| `page` | 1 | Page number |
+| `limit` | 20 | Items per page |
+| `status` | all | Filter: active, churned, all |
+
+#### GET /api/customers/stats?programId=UUID
+Get dashboard statistics.
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "summary": {
-      "total": 10,
-      "success": 9,
-      "failed": 1,
-      "resourceType": "postcard"
-    },
-    "results": [
-      {
-        "contact": "John Doe",
-        "success": true,
-        "claimCode": "A1B2C3D4",
-        "mailId": "postcard_xxx"
-      }
-    ]
+    "total": 1250,
+    "activeRate": 78.4,
+    "activeCount": 980,
+    "churnedCount": 270
   }
 }
 ```
 
+#### GET /api/customers/:customerId
+Get customer details with transaction history.
+
 ---
 
-### Physical Bridge (Claim Routes)
+### Notification Endpoints
 
-#### Process Claim Code
-```http
-GET /claim/:claimCode
-```
-Redirects to PassKit install URL after:
-1. Validating claim code
-2. Enrolling member in PassKit
-3. Updating claim status to INSTALLED
+#### POST /api/notify/broadcast
+Send push notification to all active passes.
 
-#### Check Claim Status
-```http
-GET /claim/:claimCode/status
+**Headers:**
 ```
+x-api-key: YOUR_API_KEY
+```
+
+**Request:**
+```json
+{
+  "programId": "uuid",
+  "message": "Flash Sale! 2x points today only!",
+  "segment": "ALL"
+}
+```
+
+#### POST /api/notify/broadcast/test
+Dry-run broadcast (no messages sent).
+
+**Request:**
+```json
+{
+  "programId": "uuid",
+  "message": "Test notification"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Dry run completed - no messages were sent",
+  "data": {
+    "totalRecipients": 1250,
+    "messagePreview": "Test notification",
+    "sampleRecipients": ["john@example.com", "jane@example.com"]
+  }
+}
+```
+
+#### POST /api/notify/birthday-run
+Trigger birthday bot for all programs.
+
+#### GET /api/notify/birthday-bot/test
+Dry-run birthday bot with optional test date.
+
+---
+
+### Claim Endpoints (Physical Bridge)
+
+#### GET /claim/:claimCode
+Process claim code and redirect to PassKit.
+
+**Flow:**
+1. Lookup claim code in database
+2. Validate status is `ISSUED`
+3. Enroll member in PassKit
+4. Update status to `INSTALLED`
+5. Redirect to PassKit install URL
+
+#### GET /claim/:claimCode/status
+Check claim code status.
 
 **Response:**
 ```json
@@ -507,233 +626,265 @@ GET /claim/:claimCode/status
     "claimCode": "A1B2C3D4",
     "status": "ISSUED",
     "firstName": "John",
-    "lastName": "Doe"
+    "createdAt": "2025-12-04T10:00:00Z"
   }
 }
 ```
 
-**Claim Status Flow:**
+**Status Values:**
+| Status | Description |
+|--------|-------------|
+| `ISSUED` | Ready to be claimed |
+| `INSTALLED` | Pass added to wallet |
+| `EXPIRED` | Claim code expired |
+| `CANCELLED` | Manually cancelled |
+
+---
+
+### Campaign Endpoints
+
+#### POST /api/campaign/upload-csv
+Upload CSV and send mail campaign.
+
+**Headers:**
 ```
-ISSUED ────► INSTALLED
-   │              │
-   └──► EXPIRED   │
-   │              │
-   └──► CANCELLED─┘
+Authorization: Basic base64(username:password)
+Content-Type: multipart/form-data
+```
+
+**Form Data:**
+| Field | Required | Description |
+|-------|----------|-------------|
+| `file` | Yes | CSV file |
+| `program_id` | Yes | Program UUID |
+| `resource_type` | Yes | `postcard` or `letter` |
+| `template_id` | For letters | PostGrid template ID |
+| `front_template_id` | For postcards | Front template ID |
+| `back_template_id` | For postcards | Back template ID |
+| `size` | For postcards | `6x4`, `9x6`, or `11x6` |
+
+**CSV Format:**
+```csv
+first_name,last_name,email,address_line_1,city,province,postal_code,country
+John,Doe,john@example.com,123 Main St,Toronto,ON,M5V1A1,CA
 ```
 
 ---
 
-### Health Checks
+### Webhook Endpoints
 
-```http
-GET /api/health        # Full health check with service status
-GET /api/health/ready  # Kubernetes readiness probe
-GET /api/health/live   # Kubernetes liveness probe
+#### POST /api/webhooks/passkit/uninstall
+Handle PassKit pass uninstall events.
+
+**Request (from PassKit):**
+```json
+{
+  "event": "PASS_EVENT_UNINSTALLED",
+  "pass": {
+    "id": "passkit_member_id",
+    "protocol": 100
+  }
+}
 ```
 
----
-
-## Physical Bridge Flow
-
-The Physical Bridge connects offline mail campaigns to digital wallet enrollment:
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                         PHYSICAL BRIDGE FLOW                                │
-└────────────────────────────────────────────────────────────────────────────┘
-
-Step 1: Campaign Creation
-┌─────────────────────┐
-│  Admin Dashboard    │
-│  /admin/campaign    │
-│                     │
-│  ┌───────────────┐  │
-│  │ Upload CSV    │  │
-│  └───────────────┘  │
-└──────────┬──────────┘
-           │
-           ▼
-Step 2: Process Each Contact
-┌─────────────────────────────────────────────┐
-│  For each row in CSV:                        │
-│                                              │
-│  1. Generate claim code (Supabase RPC)       │
-│     └─► Returns: A1B2C3D4                    │
-│                                              │
-│  2. Generate QR code image                   │
-│     └─► https://api.qrserver.com/...         │
-│                                              │
-│  3. Send mail via PostGrid                   │
-│     └─► Postcard or Letter with QR           │
-└─────────────────────────────────────────────┘
-           │
-           ▼
-Step 3: Mail Delivered (Physical World)
-┌─────────────────────────────────────────────┐
-│  ┌───────────────────────────────────────┐  │
-│  │  ┌─────────────────────────────────┐  │  │
-│  │  │                                 │  │  │
-│  │  │   Dear John,                    │  │  │
-│  │  │                                 │  │  │
-│  │  │   Scan to join our             │  │  │
-│  │  │   loyalty program!              │  │  │
-│  │  │                                 │  │  │
-│  │  │   ┌─────────┐                   │  │  │
-│  │  │   │ QR CODE │                   │  │  │
-│  │  │   │  █▀▀█   │                   │  │  │
-│  │  │   │  █▄▄█   │                   │  │  │
-│  │  │   └─────────┘                   │  │  │
-│  │  │                                 │  │  │
-│  │  └─────────────────────────────────┘  │  │
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
-           │
-           ▼
-Step 4: User Scans QR Code
-┌─────────────────────────────────────────────┐
-│  Phone Camera → Opens URL:                   │
-│  https://app.replit.app/claim/A1B2C3D4      │
-└─────────────────────────────────────────────┘
-           │
-           ▼
-Step 5: Claim Processing
-┌─────────────────────────────────────────────┐
-│  GET /claim/A1B2C3D4                         │
-│                                              │
-│  1. Lookup claim code                        │
-│     └─► Validate status = ISSUED            │
-│                                              │
-│  2. Enroll in PassKit                        │
-│     └─► Create digital wallet pass          │
-│                                              │
-│  3. Update claim status                      │
-│     └─► Status = INSTALLED                  │
-│                                              │
-│  4. Redirect to PassKit                      │
-│     └─► https://pub2.pskt.io/memberId       │
-└─────────────────────────────────────────────┘
-           │
-           ▼
-Step 6: Digital Wallet (Digital World)
-┌─────────────────────────────────────────────┐
-│  ┌───────────────────────────────────────┐  │
-│  │         LOYALTY CARD                  │  │
-│  │                                       │  │
-│  │    John Doe                           │  │
-│  │    Member since Dec 2025              │  │
-│  │                                       │  │
-│  │    Points: 0                          │  │
-│  │    Tier: Base                         │  │
-│  │                                       │  │
-│  │    ████████████████                   │  │
-│  │    ████████████████                   │  │
-│  └───────────────────────────────────────┘  │
-│                                              │
-│  Saved to Apple Wallet / Google Pay         │
-└─────────────────────────────────────────────┘
-```
+#### POST /api/webhooks/passkit/event
+Generic PassKit event handler.
 
 ---
 
 ## Database Schema
 
-### Supabase RPC Functions
+### Key Tables
 
-#### `generate_claim_code`
+| Table | Purpose |
+|-------|---------|
+| `programs` | Client programs with PassKit/PostGrid config |
+| `passes_master` | All digital passes with member info |
+| `transactions` | Points earn/redeem history |
+| `admin_profiles` | Links Supabase users to programs |
+| `claim_codes` | Physical bridge claim codes |
+| `campaign_logs` | Notification campaign audit trail |
+
+### Programs Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `name` | TEXT | Business name |
+| `passkit_program_id` | TEXT | PassKit program ID |
+| `passkit_tier_id` | TEXT | PassKit tier (default: 'base') |
+| `postgrid_template_id` | TEXT | PostGrid template for mail |
+| `protocol` | TEXT | MEMBERSHIP, EVENT_TICKET, COUPON |
+| `is_suspended` | BOOLEAN | Kill switch |
+| `birthday_bot_enabled` | BOOLEAN | Auto birthday rewards |
+| `birthday_reward_points` | INTEGER | Points to award |
+| `birthday_message` | TEXT | Custom message |
+
+### Required Supabase RPC Functions
+
+| Function | Purpose |
+|----------|---------|
+| `process_membership_transaction` | Handle MEMBER_EARN, REDEEM, ADJUST |
+| `process_one_time_use` | Handle COUPON, TICKET actions |
+| `generate_claim_code` | Create unique claim codes |
+| `lookup_claim_code` | Look up claim details |
+| `update_claim_code_status` | Update after wallet install |
+| `get_service_status` | Health check (optional) |
+
+### Performance Indexes
+
+Run `migrations/001_performance_indexes.sql` to create:
+
 ```sql
-CREATE OR REPLACE FUNCTION generate_claim_code(
-  p_passkit_program_id TEXT,
-  p_first_name TEXT,
-  p_last_name TEXT,
-  p_email TEXT,
-  p_address_line_1 TEXT,
-  p_city TEXT,
-  p_state TEXT,
-  p_postal_code TEXT,
-  p_country TEXT DEFAULT 'US'
-)
-RETURNS JSON AS $$
-  -- Generates unique 8-character claim code
-  -- Stores contact info for later enrollment
-  -- Returns: { "claim_code": "A1B2C3D4" }
-$$;
+CREATE INDEX idx_passes_master_program_id ON passes_master(program_id);
+CREATE INDEX idx_passes_master_status ON passes_master(status);
+CREATE INDEX idx_passes_master_program_status ON passes_master(program_id, status);
+CREATE INDEX idx_transactions_pass_id ON transactions(pass_id);
+CREATE INDEX idx_transactions_created_at ON transactions(created_at DESC);
 ```
 
-#### `lookup_claim_code`
-```sql
-CREATE OR REPLACE FUNCTION lookup_claim_code(
-  p_claim_code TEXT
-)
-RETURNS JSON AS $$
-  -- Returns claim code details and status
-  -- Returns: {
-  --   "claim_code": "A1B2C3D4",
-  --   "status": "ISSUED",
-  --   "passkit_program_id": "...",
-  --   "first_name": "John",
-  --   ...
-  -- }
-$$;
+---
+
+## Security & Enterprise Features
+
+### Kill Switch (Program Suspension)
+
+Instantly block all transactions for a program:
+
+```bash
+# Suspend a program
+curl -X PATCH http://localhost:5000/api/programs/{programId} \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"is_suspended": true}'
 ```
 
-#### `update_claim_code_status`
-```sql
-CREATE OR REPLACE FUNCTION update_claim_code_status(
-  p_claim_code TEXT,
-  p_status TEXT,
-  p_passkit_install_url TEXT DEFAULT NULL
-)
-RETURNS JSON AS $$
-  -- Updates claim status (ISSUED → INSTALLED)
-  -- Stores PassKit install URL for reference
-$$;
+When suspended:
+- All POS actions return: `"Program Suspended. Contact Admin."`
+- Notifications still work (for "service restored" messages)
+- Dashboard still accessible
+
+### Rate Limiting
+
+| Route Pattern | Limit | Purpose |
+|--------------|-------|---------|
+| `/api/pos/*` | 60/min | Prevent brute-force scanning |
+| `/api/notify/*` | 10/min | Prevent notification spam |
+| `/api/admin/*` | 30/min | Protect provisioning |
+| `/claim/*` | 120/min | Allow legitimate traffic |
+
+### Multi-Tenant Isolation
+
+- All queries filter by `program_id`
+- Invalid/non-existent program IDs return empty data (not errors)
+- UUID validation prevents SQL injection
+- Zero-state handling: New clients get clean `{ total: 0 }` responses
+
+### Input Validation
+
+- All request bodies validated with Zod schemas
+- Program IDs validated as UUID format
+- Claim codes validated before database lookup
+- File uploads restricted to CSV only
+
+---
+
+## WeWeb Integration
+
+This API is designed for integration with WeWeb low-code dashboards.
+
+### Dashboard Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/programs` | GET | List all programs |
+| `/api/programs/:programId` | GET | Get program details |
+| `/api/programs/:programId` | PATCH | Update birthday bot settings |
+| `/api/customers?programId=...` | GET | List customers with pagination |
+| `/api/customers/stats?programId=...` | GET | Dashboard stats |
+| `/api/customers/:customerId` | GET | Customer detail |
+| `/api/notify/logs?programId=...` | GET | Campaign logs |
+
+### WeWeb Integration Steps
+
+1. Add API connector with base URL and API key header
+2. Create collections for Programs, Customers, Stats
+3. Build dashboard pages with tables and charts
+4. Add Birthday Bot toggle connected to PATCH endpoint
+5. Add Broadcast form connected to notification endpoints
+
+---
+
+## Production Validation
+
+### Automated Testing Script
+
+Run the comprehensive 7-flow validation:
+
+```bash
+npx tsx scripts/prod-validation.ts
 ```
 
-#### `process_membership_transaction`
-```sql
-CREATE OR REPLACE FUNCTION process_membership_transaction(
-  p_external_id TEXT,
-  p_action TEXT,
-  p_amount INTEGER
-)
-RETURNS JSON AS $$
-  -- Processes EARN/REDEEM/ADJUST actions
-  -- Returns: {
-  --   "transaction_id": "txn_123",
-  --   "new_balance": 1100,
-  --   "passkit_internal_id": "member_id",
-  --   "passkit_program_id": "..."
-  -- }
-$$;
+### What It Tests
+
+| Flow | What's Tested |
+|------|---------------|
+| **A: Onboarding** | Create new tenant via API |
+| **B: Campaign** | CSV upload with form-data |
+| **C: Physical Bridge** | Claim code lookup |
+| **D: POS Transactions** | Earn/Redeem/Validation |
+| **E: Notifications** | Broadcast dry-run |
+| **F: Churn Webhook** | PassKit uninstall event |
+| **G: Kill Switch** | Program suspension |
+
+### Expected Output
+
+```
+============================================================
+  FINAL SCORECARD
+============================================================
+
+  [PASS] Flow A: Onboarding
+  [PASS] Flow B: Campaign
+  [PASS] Flow C: Physical Bridge
+  [PASS] Flow D: POS Transactions
+  [PASS] Flow E: Notifications
+  [PASS] Flow F: Churn Webhook
+  [PASS] Flow G: Kill Switch
+
+  ALL SYSTEMS GO: 7/7 flows passed
+
+  Your Phygital Loyalty Platform is PRODUCTION READY!
+
+  The platform is:
+    - Multi-Tenant (Data isolated per client)
+    - Phygital (Seamless paper-to-mobile bridge)
+    - Defensive (Rate-limited, Kill-switched, Dry-run protected)
 ```
 
 ---
 
 ## Environment Configuration
 
-### Required Environment Variables
+### Required Secrets
 
-```bash
-# Supabase
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbG...
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SUPABASE_URL` | Supabase project URL | `https://xxxx.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key | `eyJhbGciOi...` |
+| `ADMIN_API_KEY` | API key for external calls | `pk_live_passtovip_xxx` |
+| `ADMIN_USERNAME` | Admin dashboard username | `admin_passtovip` |
+| `ADMIN_PASSWORD` | Admin dashboard password | `SecurePass!2024` |
+| `SESSION_SECRET` | Session encryption key | Random 32+ chars |
 
-# PassKit (US Region - PUB2)
-PASSKIT_API_KEY=your_api_key
-PASSKIT_API_SECRET=your_api_secret
+### Optional Secrets
 
-# PostGrid
-POSTGRID_API_KEY=test_sk_xxx
-
-# Application
-APP_URL=https://your-app.replit.app
-SESSION_SECRET=random_secret_string
-NODE_ENV=production
-
-# Optional
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your_secure_password
-```
+| Variable | Description | Required For |
+|----------|-------------|--------------|
+| `PASSKIT_API_KEY` | PassKit credentials | Digital wallet sync |
+| `PASSKIT_API_SECRET` | PassKit secret | Digital wallet sync |
+| `POSTGRID_API_KEY` | PostGrid API key | Physical mail |
+| `APP_URL` | Production URL for QR codes | Mail campaigns |
 
 ### PassKit Configuration
 
@@ -742,69 +893,6 @@ ADMIN_PASSWORD=your_secure_password
 | Region | US (PUB2) |
 | API Base URL | `https://api.pub2.passkit.io` |
 | Install URL Format | `https://pub2.pskt.io/{memberId}` |
-| Default Program ID | `4RhsVhHek0dliVogVznjSQ` |
-| Default Tier ID | `base` |
-
-### PostGrid Templates
-
-| Template | ID | Purpose |
-|----------|-----|---------|
-| Postcard Front | `template_wUMgpJdU5Hi7tPxXNTgLwj` | QR code and branding |
-| Postcard Back | `template_rBEJn1PtQepWxnKFb4RezV` | Message and CTA |
-| Letter (A4) | `template_3J62GbmowSk7SeD4dFcaUs` | Full letter format |
-
-### Template Merge Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `{{firstName}}` | Recipient first name | John |
-| `{{lastName}}` | Recipient last name | Doe |
-| `{{fullName}}` | Full name | John Doe |
-| `{{qrCodeUrl}}` | QR code image URL | `https://api.qrserver.com/...` |
-| `{{claimCode}}` | Raw claim code | A1B2C3D4 |
-
----
-
-## Admin Dashboard
-
-### Access
-- **URL**: `/admin/campaign`
-- **Authentication**: Basic Auth
-- **Default Credentials**: `admin` / `phygital2024`
-
-### Features
-
-1. **CSV Upload**
-   - Drag-and-drop file upload
-   - Automatic column detection
-   - Format validation
-
-2. **Resource Type Selection**
-   - Toggle between Postcards and Letters
-   - Dynamic form fields based on selection
-
-3. **Template Configuration**
-   - Postcard: Front template, back template, size
-   - Letter: Single template ID
-
-4. **Real-Time Processing**
-   - Progress indicator during batch processing
-   - Results table with success/failure status
-   - Claim codes and mail IDs displayed
-
-### CSV Column Mappings
-
-The system automatically detects these column variations:
-
-| Target Field | Accepted Column Names |
-|--------------|----------------------|
-| firstName | first_name, firstname, fname, given_name |
-| lastName | last_name, lastname, lname, surname |
-| email | email, e-mail, email_address |
-| addressLine1 | address, street, addr, address1 |
-| city | city, town, locality |
-| state | state, province, region, st |
-| postalCode | zip, zipcode, postal_code, postalcode |
 
 ---
 
@@ -812,62 +900,161 @@ The system automatically detects these column variations:
 
 ### Replit Deployment
 
-1. **Environment Setup**
-   - Add all required secrets in the Secrets tab
-   - Set `APP_URL` to your Replit deployment URL
-
-2. **Start Command**
+1. **Configure Secrets** in the Secrets tab
+2. **Run Migrations** in Supabase Studio
+3. **Start Application**:
    ```bash
    npm run dev
    ```
-
-3. **Health Check**
+4. **Verify Health**:
    ```bash
    curl https://your-app.replit.app/api/health
    ```
 
 ### Production Checklist
 
-- [ ] All environment variables configured
-- [ ] PassKit API credentials (production)
-- [ ] PostGrid API key (live mode)
-- [ ] Supabase RPC functions deployed
+- [ ] All required secrets configured
+- [ ] Database migrations run (001-004)
+- [ ] RPC functions verified in Supabase
+- [ ] `APP_URL` set to production domain
 - [ ] Admin password changed from default
-- [ ] APP_URL set to production domain
-- [ ] Health endpoints responding
+- [ ] PassKit credentials configured (for wallet features)
+- [ ] PostGrid credentials configured (for mail features)
+- [ ] Production validation script passes: `npx tsx scripts/prod-validation.ts`
 
 ---
 
-## Error Handling
+## Troubleshooting
 
-### Standard Error Response
+### Common Issues
+
+| Error | Solution |
+|-------|----------|
+| "Supabase is not configured" | Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` |
+| "Invalid API key" | Check `x-api-key` header matches `ADMIN_API_KEY` |
+| "programId must be UUID" | Use valid UUID format |
+| "Program Suspended" | Set `is_suspended = false` via PATCH |
+| QR codes point to localhost | Set `APP_URL` to production URL |
+| PassKit enrollment fails | Check credentials & tier ID |
+
+### Health Check Diagnostics
+
+```bash
+curl http://localhost:5000/api/health | jq
+```
+
+**Service Status Interpretation:**
+
+| Service | Status | Meaning |
+|---------|--------|---------|
+| Supabase | connected | Database operational |
+| PassKit | connected (api_verified) | Full wallet functionality |
+| PassKit | connected (api_server_issue) | Credentials OK, server issues |
+| PostGrid | connected | Mail sending available |
+
+### Viewing Logs
+
+```bash
+# Server logs
+npm run dev  # Logs to console
+
+# Production validation
+npx tsx scripts/prod-validation.ts
+```
+
+---
+
+## Project Structure
+
+```
+.
+├── server/
+│   ├── controllers/       # Request handlers
+│   │   ├── admin.controller.ts
+│   │   ├── campaign.controller.ts
+│   │   ├── claim.controller.ts
+│   │   ├── customers.controller.ts
+│   │   ├── health.controller.ts
+│   │   ├── notification.controller.ts
+│   │   ├── programs.controller.ts
+│   │   └── webhook.controller.ts
+│   ├── services/          # Business logic
+│   │   ├── logic.service.ts       # POS orchestrator
+│   │   ├── passkit.service.ts     # Digital wallet
+│   │   ├── postgrid.service.ts    # Physical mail
+│   │   ├── supabase.service.ts    # Database ops
+│   │   └── notification.service.ts
+│   ├── routes/            # Express routes
+│   ├── middleware/        # Auth, validation, rate limiting
+│   ├── config/            # Configuration
+│   └── index.ts           # Server entry
+├── client/                # React frontend (admin)
+├── migrations/            # SQL migrations
+├── scripts/
+│   └── prod-validation.ts # Production tests
+├── shared/                # Shared types
+└── README.md
+```
+
+---
+
+## API Response Format
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "data": { ... },
+  "message": "Optional success message",
+  "metadata": {
+    "requestId": "unique-id",
+    "timestamp": "2025-12-04T14:00:00.000Z",
+    "processingTime": 45
+  }
+}
+```
+
+### Error Response
 
 ```json
 {
   "success": false,
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "resource_type must be either 'postcard' or 'letter'"
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "details": { ... }
   },
   "metadata": {
-    "requestId": "abc123",
-    "timestamp": "2025-12-03T23:00:00.000Z"
+    "requestId": "unique-id",
+    "timestamp": "2025-12-04T14:00:00.000Z"
   }
 }
 ```
 
-### Common Error Codes
+### Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
+| Code | HTTP | Description |
+|------|------|-------------|
 | `VALIDATION_ERROR` | 400 | Invalid request body |
-| `INVALID_RESOURCE_TYPE` | 400 | resource_type not postcard/letter |
-| `INVALID_POSTCARD_SIZE` | 400 | Size not 6x4/9x6/11x6 |
+| `INVALID_ACTION` | 400 | Unknown POS action |
 | `CLAIM_NOT_FOUND` | 404 | Claim code doesn't exist |
-| `CLAIM_ALREADY_USED` | 409 | Claim already installed |
+| `CLAIM_ALREADY_USED` | 400 | Pass already installed |
+| `PROGRAM_NOT_FOUND` | 404 | Invalid program ID |
+| `PROGRAM_SUSPENDED` | 403 | Kill switch active |
 | `PASSKIT_ERROR` | 502 | PassKit API failure |
 | `POSTGRID_ERROR` | 502 | PostGrid API failure |
-| `DATABASE_ERROR` | 500 | Supabase RPC failure |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run validation: `npx tsx scripts/prod-validation.ts`
+5. Submit a pull request
 
 ---
 
@@ -879,4 +1066,14 @@ MIT License - See LICENSE file for details.
 
 ## Support
 
-For issues and feature requests, please open a GitHub issue or contact the development team.
+- **Documentation**: This README and `replit.md`
+- **Issues**: GitHub Issues
+- **Contact**: OakMontLogic / PassToVIP team
+
+---
+
+<p align="center">
+  <strong>Built with care by OakMontLogic for PassToVIP</strong>
+  <br>
+  <sub>Bridging the gap between physical mail and digital wallets</sub>
+</p>
