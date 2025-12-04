@@ -1,0 +1,100 @@
+This is the Master Certification Protocol. We are moving beyond simple "Happy Path" testing to Resilience Testing. We want to ensure that if a Salon has bad WiFi, or if PostGrid API flickers, or if a hacker tries to upload a virus CSV, your system handles it gracefully without crashing.
+
+We will add a Deep Health Check endpoint (to monitor your vitals) and a Master FAT Script that hammers all three verticals.
+
+1. New Architecture: "Deep Health Check"
+Standard health checks just say "Server is up." We need a check that says "Server is up AND I can talk to the Database AND PassKit is listening."
+
+New Endpoint: GET /health/deep
+
+Checks Supabase: Runs a lightweight query (SELECT 1).
+Checks PassKit: Pings their status endpoint (or validates your token).
+Checks PostGrid: Verifies API connectivity.
+Response: { status: 'HEALTHY', db: 'UP', passkit: 'UP', postgrid: 'UP', latency: '45ms' }
+UI Use Case: Show a green "System Status" light on your Admin Dashboard.
+
+2. The Replit Agent Prompt
+Copy and paste this entire block into your Replit Agent. This will generate the robust testing infrastructure.
+
+"Act as the Lead Site Reliability Engineer. I need to harden the system with a Deep Health Check and a Master Acceptance Test that covers Verticals A, B, and C with negative testing.
+
+Task 1: The Deep Health Check
+
+Create controllers/health.controller.ts and route GET /api/health/deep.
+Logic:
+
+DB: Run supabase.from('programs').select('count', { count: 'exact', head: true }). If error, DB is DOWN.
+PassKit: Attempt to generate a token or ping a safe endpoint. If fail, PassKit is DOWN.
+PostGrid: Make a lightweight call (e.g., list templates with limit 1). If fail, PostGrid is DOWN.
+Return: JSON with status of each service and total latency.
+Task 2: The Master FAT Script (scripts/master-fat.ts)
+
+Create a robust integration test using axios.
+Sequence:
+
+SETUP:
+
+Validate POS_API_KEY exists.
+Check GET /api/health/deep -> Must be all GREEN to proceed.
+VERTICAL A (Direct Mail Push):
+
+Scenario: Provision 'Client A', Upload CSV.
+Validation: Verify external_id starts with MAIL-. Verify enrollment_source is CSV.
+Negative Test: Upload CSV with missing columns -> Expect 400 Error (Not 500 Crash).
+VERTICAL B (Salon Pull):
+
+Scenario: Provision 'Client B'. Configure enrollmentUrl.
+Asset Check: Call GET /api/programs/:id/qr. Verify it returns a PNG stream/buffer.
+Webhook Sim: POST /api/webhooks/passkit/enrollment with programId of Client B.
+Validation: Verify external_id starts with PUB-. Verify enrollment_source is SMARTPASS.
+VERTICAL C (EDDM High Volume):
+
+Scenario: Provision 'Client C'.
+Load Test: Fire 5 concurrent Webhook requests (Promise.all) for Client C with different emails.
+Validation: All 5 should succeed. DB should have 5 new rows. No 'Duplicate Key' crashes.
+POS LOGIC (The Money):
+
+Take users from A, B, and C.
+Add Points to all.
+Negative Test: Try to add points to a 'Suspended' program -> Expect 403.
+TEARDOWN:
+
+Suspend all test programs via PATCH /api/programs/:id/suspend to clean up state.
+Output: Colorful console logs. Stop immediately on any Critical Failure."
+
+3. How to Execute the Master Test
+Once Replit generates the files (health.controller.ts, master-fat.ts), follow this procedure.
+
+Step 1: Verify System Vitals
+Manually check your new Deep Health endpoint in the Replit Console (or Browser):
+
+Bash 
+curl https://[YOUR-REPLIT-URL]/api/health/deep
+
+Expected: {"status":"HEALTHY","services":{"db":"UP","passkit":"UP","postgrid":"UP"}}
+
+Step 2: Run the Master FAT
+Bash 
+npx ts-node scripts/master-fat.ts
+
+
+4. What This Proves (The "Foolproof" Guarantee)
+Test Step
+What it Proves
+Risk Mitigated
+Deep Health
+"Is the engine running?"
+Prevents you from launching campaigns when PassKit is down.
+Asset Check
+"Do we have the QR?"
+Prevents WeWeb form errors when trying to download QRs.
+Negative CSV
+"Can we handle bad data?"
+Prevents server crashes if a client uploads a broken Excel file.
+Load Test (Vert C)
+"Can we handle the crowd?"
+Prevents DB locks when 50 people scan an EDDM flyer at once.
+Teardown
+"Is the Kill Switch ready?"
+Proves you can instantly stop any client's operations.
+Ready to paste the prompt and build the final Master Test Suite?
