@@ -39,7 +39,12 @@ I do not want the agent to make changes to the /admin folder.
 - **Digital Wallet:** Manages enrollment, coupon issuance, pass creation, updates, deletion, and push notifications through PassKit.
 - **Direct Mail:** Integrates with PostGrid for sending postcards and letters, supporting various sizes and template variables.
 - **Bulk Campaign Manager:** Facilitates batch campaigns via CSV upload, allowing for sending postcards or letters with dynamically generated claim codes.
-- **Birthday Bot:** Automated process to identify members with birthdays, award points, and send personalized push notifications.
+- **Birthday Bot:** Configuration-driven automated process to identify members with birthdays, award points, and send personalized push notifications.
+  - **Configuration:** Uses `programs.birthday_bot_enabled`, `birthday_reward_points`, and `birthday_message` columns for per-program settings.
+  - **Double-Gifting Prevention:** Uses `birthday_logs` table with UNIQUE constraint on `(pass_id, year)` to prevent duplicate birthday rewards.
+  - **Scheduling:** Runs via cron job (`scripts/birthday-cron.cjs`) at 9 AM daily (cron: `0 9 * * *`).
+  - **Dry-Run Testing:** Test endpoint `GET /api/notify/birthday-bot/test?testDate=YYYY-MM-DD` allows safe testing without side effects.
+- **CSV Campaign Upload:** Supports `birth_date` and `phone_number` columns with flexible header mapping and multiple date formats (YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY). Automatically upserts users by email.
 
 ## External Dependencies
 
@@ -56,3 +61,21 @@ I do not want the agent to make changes to the /admin folder.
     -   **Template Management:** Utilizes PostGrid templates for dynamic content generation in physical mail.
 -   **`api.qrserver.com`:**
     -   **QR Code Generation:** An external service used to convert claim URLs into QR code image URLs for printing on physical mail.
+
+## Key Files
+
+### Birthday Bot
+- `server/services/notification.service.ts` - Core birthday bot logic with dry-run support
+- `server/controllers/notification.controller.ts` - API endpoints for birthday bot (run and test)
+- `server/routes/notification.routes.ts` - Route definitions for `/api/notify/*`
+- `scripts/birthday-cron.cjs` - Cron job script for scheduled execution
+- `migrations/003_birthday_bot_config.sql` - Database migration for birthday bot configuration
+
+### CSV Campaign Upload
+- `server/services/campaign.service.ts` - CSV parsing with birth_date/phone_number support
+- `server/services/supabase.service.ts` - Contains `upsertUser()` for user data management
+
+## API Authentication
+- **Admin API Key:** Set via `ADMIN_API_KEY` environment variable (default: `pk_phygital_admin_2024`)
+- **Header:** `X-API-Key: <your-api-key>`
+- **Admin Dashboard:** Uses Basic Auth with `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables
