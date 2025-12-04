@@ -74,3 +74,21 @@ Run `migrations/001_performance_indexes.sql` in Supabase Studio for production s
 - `idx_passes_master_program_status` - Composite queries
 - `idx_transactions_pass_id` - Transaction history
 - `idx_transactions_created_at` - Date ordering
+
+### Security & Rate Limiting
+- **Rate Limiting:** `/api/pos/*` (60/min), `/api/notify/*` (10/min) - prevents abuse and spam
+- **UUID Validation:** All `programId` params/queries validated - blocks SQL injection attempts
+- **Duplicate Tenant Check:** `createTenant` validates unique business name + PassKit program ID
+- **Input Sanitization:** Returns 400 Bad Request for malformed programId values
+
+### Kill Switch (Program Suspension)
+Run `migrations/002_program_suspension.sql` in Supabase Studio to enable:
+- Adds `is_suspended` column to `programs` table (default: false)
+- When TRUE, all POS transactions for that client are blocked immediately
+- Error message: "Program Suspended. Contact Admin."
+
+### Security Note
+The following credentials in `server/middleware/auth.middleware.ts` should be moved to environment variables for production:
+- `ADMIN_USERNAME` (default: admin)
+- `ADMIN_PASSWORD` (default: phygital2024)
+- `ADMIN_API_KEY` (default: pk_phygital_admin_2024)
