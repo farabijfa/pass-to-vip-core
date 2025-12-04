@@ -457,9 +457,11 @@ class SupabaseService {
     email?: string;
     firstName?: string;
     lastName?: string;
+    enrollmentSource?: "SMARTPASS" | "QR_SCAN" | "CLAIM_CODE";
   }): Promise<{
     success: boolean;
     passId?: string;
+    isDuplicate?: boolean;
     error?: string;
   }> {
     try {
@@ -477,7 +479,7 @@ class SupabaseService {
         member_email: params.email || null,
         member_first_name: params.firstName || null,
         member_last_name: params.lastName || null,
-        enrollment_source: "QR_SCAN",
+        enrollment_source: params.enrollmentSource || "SMARTPASS",
         last_updated: new Date().toISOString(),
       };
 
@@ -488,6 +490,14 @@ class SupabaseService {
         .single();
 
       if (error) {
+        if (error.code === "23505" || error.message?.includes("duplicate key")) {
+          console.log(`   ℹ️ Duplicate pass detected (idempotent): ${params.passkitInternalId}`);
+          return {
+            success: true,
+            isDuplicate: true,
+          };
+        }
+
         if (error.message?.includes("enrollment_source") || 
             error.message?.includes("member_email") ||
             error.message?.includes("member_first_name") ||
@@ -514,6 +524,10 @@ class SupabaseService {
             .single();
 
           if (minError) {
+            if (minError.code === "23505" || minError.message?.includes("duplicate key")) {
+              console.log(`   ℹ️ Duplicate pass detected (idempotent): ${params.passkitInternalId}`);
+              return { success: true, isDuplicate: true };
+            }
             console.error("Minimal pass creation also failed:", minError);
             return {
               success: false,
@@ -521,7 +535,7 @@ class SupabaseService {
             };
           }
 
-          console.log(`✅ Pass record created from QR enrollment (minimal): ${minData?.id}`);
+          console.log(`✅ Pass record created (minimal): ${minData?.id}`);
           return {
             success: true,
             passId: minData?.id,
@@ -535,7 +549,7 @@ class SupabaseService {
         };
       }
 
-      console.log(`✅ Pass record created from QR enrollment: ${data?.id}`);
+      console.log(`✅ Pass record created: ${data?.id}`);
 
       return {
         success: true,

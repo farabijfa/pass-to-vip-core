@@ -109,6 +109,37 @@ function isUninstallEvent(event?: string): boolean {
   return uninstallEvents.includes(event);
 }
 
+function validateAndFormatBirthday(rawBirthday: string | null | undefined): string | null {
+  if (!rawBirthday) return null;
+  
+  try {
+    const dateFormats = [
+      /^\d{4}-\d{2}-\d{2}$/,
+      /^\d{2}\/\d{2}\/\d{4}$/,
+      /^\d{4}\/\d{2}\/\d{2}$/,
+    ];
+    
+    const isoMatch = rawBirthday.match(/^\d{4}-\d{2}-\d{2}/);
+    if (isoMatch) {
+      const date = new Date(isoMatch[0]);
+      if (!isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
+        return isoMatch[0];
+      }
+    }
+    
+    const date = new Date(rawBirthday);
+    if (!isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
+      return date.toISOString().split('T')[0];
+    }
+    
+    console.warn(`   ⚠️ Invalid birthday format: ${rawBirthday}`);
+    return null;
+  } catch {
+    console.warn(`   ⚠️ Birthday parsing failed: ${rawBirthday}`);
+    return null;
+  }
+}
+
 class WebhookController {
   async handlePassKitUninstall(req: Request, res: Response) {
     const requestId = (req.headers["x-request-id"] as string) || generate();
@@ -271,14 +302,16 @@ class WebhookController {
       const firstName = person.forename || (person.displayName ? person.displayName.split(' ')[0] : undefined);
       const lastName = person.surname || (person.displayName ? person.displayName.split(' ').slice(1).join(' ') : undefined);
       
-      const birthday = (passMeta as Record<string, string>).birthday 
+      const rawBirthday = (passMeta as Record<string, string>).birthday 
         || (passMetadata as Record<string, any>).birthday 
         || payloadMeta.birthday 
         || payloadMetadata.birthday
         || recordData.birthday 
         || null;
 
-      console.log(`\n🎫 [Webhook] PassKit Enrollment Event (Vertical B)`);
+      const birthday = validateAndFormatBirthday(rawBirthday);
+
+      console.log(`\n🎫 [Webhook] PassKit Enrollment Event (Vertical B/C - SMARTPASS)`);
       console.log(`   Pass ID: ${passKitId}`);
       console.log(`   Program ID: ${passkitProgramId || 'N/A'}`);
       console.log(`   Protocol: ${protocolName}`);
@@ -342,7 +375,10 @@ class WebhookController {
 
       console.log(`   👤 User synced: ${userResult.userId}`);
 
-      const externalId = `QR-${generate()}`;
+      const externalId = `PUB-${generate()}`;
+      
+      let passAction = "skipped";
+      let passId: string | undefined;
       
       if (programId && userResult.userId) {
         const passResult = await supabaseService.createPassFromEnrollment({
@@ -355,31 +391,40 @@ class WebhookController {
           email,
           firstName: firstName || undefined,
           lastName: lastName || undefined,
+          enrollmentSource: "SMARTPASS",
         });
 
         if (!passResult.success) {
           console.error(`   ❌ Failed to create pass record: ${passResult.error}`);
+          passAction = "error";
+        } else if (passResult.isDuplicate) {
+          console.log(`   ℹ️ Duplicate enrollment detected (idempotent)`);
+          passAction = "duplicate";
         } else {
           console.log(`   ✅ Pass record created: ${passResult.passId}`);
+          passAction = "created";
+          passId = passResult.passId;
         }
       } else {
         console.warn(`   ⚠️ Skipping pass creation: No program found for PassKit ID ${passkitProgramId}`);
+        passAction = "no_program";
       }
 
-      console.log(`   ✅ Vertical B Enrollment Complete: ${email}`);
+      console.log(`   ✅ SMARTPASS Enrollment Complete: ${email} (${passAction})`);
 
       return res.status(200).json(
         createResponse(
           true,
           {
             acknowledged: true,
-            action: "processed",
+            action: passAction,
             event: PASSKIT_EVENTS.RECORD_CREATED,
             passKitId,
+            passId,
             userId: userResult.userId,
             email,
             protocol: programProtocol,
-            enrollmentSource: "QR_SCAN",
+            enrollmentSource: "SMARTPASS",
           },
           undefined,
           requestId
