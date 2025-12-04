@@ -1,0 +1,170 @@
+This is a smart architectural decision. By using PassKit’s built-in Data Collection Page (often called "SmartPass Links" or "Public Distribution"), you offload the frontend complexity, form validation, and security directly to PassKit.
+
+However, to make this "Unbreakable" and integrated with your Phygital Brain (Supabase), we must solve one critical challenge: Data Synchronization.
+
+If a user signs up on PassKit’s page, your Supabase database doesn't know they exist yet. This means your Birthday Bot and Churn Tracker won't work for them.
+
+Here is the strategy to bridge "Vertical B" into your ecosystem using Webhooks.
+
+
+1. The Architecture: "The Reverse Sync"
+In Vertical A (Direct Mail), You create the data first, then tell PassKit.
+
+In Vertical B (Salon QR), PassKit gathers the data first, then tells You.
+
+The Workflow:
+
+Physical: Customer scans QR at Reception.
+PassKit Hosted Page: Customer enters Name, Email, Birthday.
+PassKit Logic: Validates input, creates Member, installs Pass.
+The Hook (Critical): PassKit fires a MEMBER_CREATED webhook to Replit.
+Replit Brain:
+
+Upserts the customer into users table (handling duplicates).
+Creates the record in passes_master with status INSTALLED.
+Logs the birth_date for the Birthday Bot.
+
+2. PassKit Configuration Strategy
+Before writing code, you configure the "Frontend" inside PassKit.
+
+Design the Pass:
+
+Fields: Ensure you add meta.birthday (Date type) if you want the Birthday Bot to work.
+Distribution Settings (SmartPass):
+
+Enable "Public Distribution".
+Form Fields: Select which fields are visible.
+
+Forename (Required)
+Surname (Required)
+Email (Required - Unique Key)
+Birthday (Optional/Required - Map this to a meta field).
+Design: Upload the Salon’s logo. PassKit generates the hosted URL (e.g., https://pub2.pskt.io/c/salon-vip).
+
+3. Technical Implementation (Replit)
+We need to upgrade your existing Webhook Handler. Currently, it only listens for "Uninstalls". We need to teach it to listen for "Enrollments".
+
+The Replit AI Prompt
+Copy and paste this instruction into your Replit Agent.
+
+"I need to expand our Webhook capabilities to support 'Vertical B' (PassKit-hosted Enrollment).
+
+Task: Update controllers/webhook.controller.ts and routes/webhook.routes.ts.
+
+1. New Logic: Handle Enrollment (MEMBER_CREATED or PASS_ISSUED)
+
+The PassKit payload will contain customer details (email, names, meta fields).
+Step A (User Sync):
+
+Extract email, forename, surname, and meta.birthday (if present).
+Perform a Supabase upsert on the users table using email as the key.
+Crucial: If the user exists, update their birth_date; do not duplicate them.
+Step B (Pass Sync):
+
+Extract the id (PassKit Member ID) and programId.
+Insert a row into passes_master:
+
+passkit_internal_id: The ID from payload.
+external_id: Generate a fallback ID (e.g., SALON-[ShortUUID]) since there was no CSV.
+status: 'INSTALLED'.
+protocol: 'MEMBERSHIP'.
+2. Route Configuration:
+
+Ensure the endpoint /api/webhooks/passkit/enrollment is open (no API Key required, as it comes from PassKit).
+Add validation: Check if email exists in payload to confirm it's a valid enrollment event.
+3. Robustness:
+
+Handle date formats carefully. PassKit might send YYYY-MM-DD or a timestamp. Convert to Postgres Date format safely."
+
+4. The Code Logic (For Developer Review)
+Here is how the new handler should look to ensure it is "Unbreakable" and matches your existing schema.
+
+TypeScript 
+/* controllers/webhook.controller.ts (Expanded) */
+const short = require('short-uuid');
+
+exports.handlePassKitEnrollment = async (req, res) => {
+try {
+const event = req.body;
+
+// 1. Data Mapping (PassKit -> Supabase)
+// Structure depends on PassKit event, usually req.body.data.person
+const person = event.data?.person || {};
+const meta = event.data?.meta || {};
+const passkitId = event.data?.id;
+const programId = event.data?.programId;
+
+if (!person.email || !passkitId) {
+console.warn('⚠️ Webhook ignored: Missing email or ID');
+return res.status(200).send('Ignored');
+}
+
+// 2. Sync User (The "Phygital Identity")
+// We use Upsert so if they exist, we just update info
+const { data: user, error: userError } = await supabase
+.from('users')
+.upsert({
+email: person.email,
+first_name: person.forename,
+last_name: person.surname,
+// Robust Date Parsing
+birth_date: meta.birthday ? new Date(meta.birthday) : null,
+marketing_opt_in: true
+}, { onConflict: 'email' })
+.select()
+.single();
+
+if (userError) throw new Error(`User Sync Failed: ${userError.message}`);
+
+// 3. Sync Pass (The "Membership")
+// We check if this pass exists first to be idempotent
+const { error: passError } = await supabase
+.from('passes_master')
+.upsert({
+user_id: user.id,
+// We need to look up our internal program_id using the PassKit ID
+// Note: You might need a helper query here to find program_id by passkit_program_id
+passkit_internal_id: passkitId,
+external_id: `SALON-${short.generate()}`, // Auto-generate an ID
+status: 'INSTALLED',
+protocol: 'MEMBERSHIP',
+is_active: true
+}, { onConflict: 'passkit_internal_id' });
+
+console.log(`✅ Vertical B Enrollment Synced: ${person.email}`);
+res.status(200).send('Synced');
+
+} catch (error) {
+console.error('❌ Enrollment Webhook Error:', error.message);
+res.status(500).send('Error');
+}
+};
+
+
+5. Deployment & Testing Strategy
+Once the code is deployed, here is how you launch "Vertical B":
+
+Configure PassKit:
+
+Set up the SmartPass page.
+Go to Webhooks.
+Create New:
+
+Event: Member Created (or Enrolled).
+URL: https://[YOUR-REPLIT-URL]/api/webhooks/passkit/enrollment
+The "Lobby Test":
+
+Open the SmartPass URL on your phone (simulate scanning the Salon QR).
+Fill in the form: "Test Salon User", "test@salon.com", Birthday: "1990-01-01".
+Tap Join.
+Verify:
+
+Phone: Pass installs.
+Supabase: Check users table. "test@salon.com" should exist with the correct birth date.
+Supabase: Check passes_master. Status should be INSTALLED.
+The "Reward Test":
+
+Since the user is now in Supabase, go to your WeWeb Marketing Page.
+Send a Broadcast to this program.
+The "Test Salon User" should receive the notification, proving the loop is closed.
+This strategy keeps your system Light (PassKit handles the UI) but Smart (Supabase owns the data).
