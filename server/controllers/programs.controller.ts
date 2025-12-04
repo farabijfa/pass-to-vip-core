@@ -132,6 +132,7 @@ class ProgramsController {
         "birthday_reward_points",
         "birthday_message",
         "name",
+        "is_suspended",
       ];
 
       const sanitizedUpdates: Record<string, any> = {};
