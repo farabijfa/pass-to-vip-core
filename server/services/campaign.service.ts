@@ -3,6 +3,7 @@ import csv from "csv-parser";
 import { Readable } from "stream";
 import { supabaseService } from "./supabase.service";
 import { postGridService } from "./postgrid.service";
+import { getAppUrl } from "../config";
 
 interface CampaignContact {
   [key: string]: string | undefined;
@@ -190,9 +191,7 @@ class CampaignService {
       backTemplateId,
       resourceType = "postcard",
       size = "6x4",
-      baseClaimUrl = process.env.APP_URL
-        ? `${process.env.APP_URL}/claim`
-        : "https://phygital-loyalty-ecosystem.replit.app/claim",
+      baseClaimUrl = `${getAppUrl()}/claim`,
       description,
     } = options;
 

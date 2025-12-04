@@ -15,18 +15,19 @@ Target industries: Retail, Hospitality, Event Management.
 
 ## Required Setup
 
-### 1. Environment Secrets (Required)
+### 1. Environment Variables (Required)
 
-These secrets MUST be configured in Replit Secrets for the application to work:
-
-| Secret | Description | Example |
-|--------|-------------|---------|
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `APP_URL` | Production URL for QR codes | `https://passtovip.replit.app` |
 | `SUPABASE_URL` | Your Supabase project URL | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (not anon key) | `eyJhbGciOi...` |
 | `ADMIN_USERNAME` | Admin dashboard login username | `admin_passtovip` |
 | `ADMIN_PASSWORD` | Admin dashboard login password | `Ptv$2024!Secure#Key` |
 | `ADMIN_API_KEY` | API key for WeWeb/external calls | `pk_live_passtovip_8f3k9m2x7q` |
 | `SESSION_SECRET` | Express session encryption key | Random 32+ char string |
+
+**IMPORTANT:** Before launching mail campaigns, update `APP_URL` to your production domain (e.g., `https://passtovip.replit.app`). QR codes will point to this URL.
 
 ### 2. Optional Secrets (For Full Features)
 
@@ -40,17 +41,56 @@ These secrets MUST be configured in Replit Secrets for the application to work:
 
 Run these SQL files in **Supabase Studio > SQL Editor** in order:
 
-**Migration 1: Performance Indexes**
-```
-migrations/001_performance_indexes.sql
-```
-Adds indexes for high-frequency queries (program filtering, status charts, transaction history).
+| Migration | File | Purpose |
+|-----------|------|---------|
+| 001 | `migrations/001_performance_indexes.sql` | Performance indexes for queries |
+| 002 | `migrations/002_program_suspension.sql` | Kill switch for program suspension |
+| 003 | `migrations/003_passkit_tier_id.sql` | PassKit tier ID, PostGrid template ID, protocol columns |
+| 004 | `migrations/004_rpc_functions_verification.sql` | Verify & create RPC functions |
 
-**Migration 2: Program Suspension (Kill Switch)**
-```
-migrations/002_program_suspension.sql
-```
-Adds `is_suspended` column to programs table for instant client shutoff.
+### 4. Required Supabase RPC Functions
+
+Your Supabase must have these RPC functions deployed:
+
+| Function | Purpose |
+|----------|---------|
+| `process_membership_transaction` | Handle MEMBER_EARN, MEMBER_REDEEM, MEMBER_ADJUST actions |
+| `process_one_time_use` | Handle COUPON_ISSUE, COUPON_REDEEM, TICKET_CHECKIN actions |
+| `generate_claim_code` | Create unique claim codes for mail campaigns |
+| `lookup_claim_code` | Look up claim code details for Physical Bridge |
+| `update_claim_code_status` | Update claim code after wallet installation |
+| `get_service_status` | Health check (optional) |
+
+**To verify:** Run `migrations/004_rpc_functions_verification.sql` - it shows which functions exist and provides templates for missing ones.
+
+---
+
+## Operational Workflow (Client Onboarding)
+
+### Step 1: PassKit (Digital Asset)
+1. Create a new Membership/Event project in PassKit
+2. Design the card (logo, colors, fields)
+3. Configure fields: `points`, `tierLabel`
+4. Copy the **Program ID** and **Tier ID**
+
+### Step 2: PostGrid (Physical Asset)
+1. Create a new postcard template in PostGrid
+2. Add merge variables: `{{firstName}}`, `{{qrCodeUrl}}`
+3. Copy the **Template ID**
+
+### Step 3: Provision Tenant
+Via WeWeb Admin or API:
+- Business Name
+- PassKit Program ID
+- PassKit Tier ID (from Step 1)
+- PostGrid Template ID (from Step 2)
+- Protocol: `MEMBERSHIP`, `EVENT_TICKET`, or `COUPON`
+
+### Step 4: Launch Campaign
+1. Upload CSV with customer data
+2. System generates claim codes
+3. PostGrid sends physical mail with QR codes
+4. QR codes redirect to `/claim/:id` → PassKit enrollment
 
 ---
 
@@ -85,6 +125,12 @@ migrations/            # SQL migrations for Supabase
 public/                # Static files (admin dashboard)
 ```
 
+### Protocol Routing
+The system routes POS actions based on protocol:
+- `MEMBERSHIP` → `process_membership_transaction` RPC (points earn/redeem)
+- `EVENT_TICKET` → `process_one_time_use` RPC (check-in once)
+- `COUPON` → `process_one_time_use` RPC (issue/redeem offers)
+
 ---
 
 ## API Endpoints
@@ -111,6 +157,12 @@ Supported actions: `MEMBER_EARN`, `MEMBER_REDEEM`, `MEMBER_ADJUST`, `COUPON_ISSU
 | `/api/customers?programId=...` | GET | List customers with pagination |
 | `/api/customers/stats?programId=...` | GET | Dashboard stats (total, active rate) |
 | `/api/customers/:customerId` | GET | Customer detail with transaction history |
+
+### Physical Bridge (Claim Flow)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/claim/:id` | GET | Process claim code → redirect to PassKit install |
+| `/api/claim/:id/status` | GET | Get claim code status |
 
 ### Notifications
 | Endpoint | Method | Description |
@@ -174,11 +226,23 @@ Supported actions: `MEMBER_EARN`, `MEMBER_REDEEM`, `MEMBER_ADJUST`, `COUPON_ISSU
 
 | Table | Purpose |
 |-------|---------|
-| `programs` | Client programs with PassKit IDs, birthday bot config, suspension status |
+| `programs` | Client programs with PassKit IDs, tier IDs, template IDs, protocol, suspension status |
 | `passes_master` | All digital passes with status, points, member info |
 | `transactions` | Point earn/redeem history |
 | `admin_profiles` | Links Supabase users to programs (multi-tenant) |
 | `claim_codes` | Physical bridge claim codes for mail campaigns |
+
+### Programs Table Columns (after migrations)
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | UUID | Primary key |
+| `name` | TEXT | Business name |
+| `passkit_program_id` | TEXT | PassKit program identifier |
+| `passkit_tier_id` | TEXT | PassKit tier (default: 'base') |
+| `postgrid_template_id` | TEXT | PostGrid template for mail |
+| `protocol` | TEXT | MEMBERSHIP, EVENT_TICKET, COUPON |
+| `is_suspended` | BOOLEAN | Kill switch |
+| `birthday_bot_enabled` | BOOLEAN | Auto birthday rewards |
 
 ### Performance Indexes
 After running `migrations/001_performance_indexes.sql`:
@@ -205,6 +269,12 @@ curl http://localhost:5000/api
 ```
 Returns: `{ "status": "UP", "service": "Phygital Loyalty Orchestrator" }`
 
+### Full Health Check (with services)
+```bash
+curl http://localhost:5000/api/health
+```
+Returns status of Supabase, PassKit, and PostGrid connections.
+
 ### Test API Key
 ```bash
 curl -H "x-api-key: pk_live_passtovip_8f3k9m2x7q" http://localhost:5000/api/programs
@@ -216,9 +286,12 @@ curl -H "x-api-key: pk_live_passtovip_8f3k9m2x7q" http://localhost:5000/api/prog
 
 Before deploying to production:
 
+- [ ] Set `APP_URL` to production domain (e.g., `https://passtovip.replit.app`)
 - [ ] All required secrets configured in Replit Secrets
 - [ ] Run `migrations/001_performance_indexes.sql` in Supabase
 - [ ] Run `migrations/002_program_suspension.sql` in Supabase
+- [ ] Run `migrations/003_passkit_tier_id.sql` in Supabase
+- [ ] Verify RPC functions exist using `migrations/004_rpc_functions_verification.sql`
 - [ ] Test API endpoints with production API key
 - [ ] Verify WeWeb dashboard connects successfully
 - [ ] Configure PassKit credentials (if using digital wallets)
@@ -244,3 +317,14 @@ The program has `is_suspended = true`. Update in Supabase to re-enable.
 1. Verify `programId` exists in `programs` table
 2. Check that passes exist in `passes_master` with matching `program_id`
 3. Ensure indexes are created for performance
+
+### QR codes pointing to localhost
+Update `APP_URL` environment variable to your production URL.
+
+### PassKit enrollment fails
+1. Check `PASSKIT_API_KEY` and `PASSKIT_API_SECRET` are configured
+2. Verify the program ID exists in PassKit
+3. Check the tier ID is valid (default: 'base')
+
+### RPC function not found
+Run `migrations/004_rpc_functions_verification.sql` in Supabase to check which functions are missing, then create them using the templates provided.

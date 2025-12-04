@@ -5,6 +5,11 @@ export const config = {
     apiVersion: "1.0.0",
   },
 
+  app: {
+    url: process.env.APP_URL || "",
+    isProduction: process.env.NODE_ENV === "production",
+  },
+
   supabase: {
     url: process.env.SUPABASE_URL || "",
     anonKey: process.env.SUPABASE_ANON_KEY || "",
@@ -61,4 +66,41 @@ export function isPassKitConfigured(): boolean {
 
 export function isPostGridConfigured(): boolean {
   return !!config.postGrid.apiKey;
+}
+
+export function isAppUrlConfigured(): boolean {
+  return !!config.app.url;
+}
+
+export function getAppUrl(): string {
+  if (!config.app.url) {
+    console.warn("⚠️ APP_URL not configured - using localhost fallback for QR codes");
+    return "http://localhost:5000";
+  }
+  return config.app.url;
+}
+
+export function validateProductionConfig(): { isValid: boolean; warnings: string[] } {
+  const warnings: string[] = [];
+
+  if (!isSupabaseConfigured()) {
+    warnings.push("SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY not configured");
+  }
+
+  if (!isAppUrlConfigured()) {
+    warnings.push("APP_URL not configured - QR codes may point to localhost");
+  }
+
+  if (!isPassKitConfigured()) {
+    warnings.push("PASSKIT_API_KEY/SECRET not configured - digital wallet features disabled");
+  }
+
+  if (!isPostGridConfigured()) {
+    warnings.push("POSTGRID_API_KEY not configured - physical mail features disabled");
+  }
+
+  return {
+    isValid: warnings.length === 0,
+    warnings,
+  };
 }

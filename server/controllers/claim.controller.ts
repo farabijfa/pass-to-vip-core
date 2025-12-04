@@ -84,7 +84,13 @@ export class ClaimController {
 
       console.log(`🎫 Enrolling new member in PassKit program: ${claim.passkitProgramId}`);
 
-      const DEFAULT_TIER_ID = "base";
+      // Fetch program config to get the correct tier_id
+      const programResult = await supabaseService.getProgramByPasskitId(claim.passkitProgramId);
+      const tierId = programResult.success && programResult.program 
+        ? programResult.program.passkitTierId 
+        : "base";
+
+      console.log(`📋 Using tier ID: ${tierId} for program: ${claim.passkitProgramId}`);
 
       const enrollResult = await passKitService.enrollMember(
         claim.passkitProgramId,
@@ -93,7 +99,7 @@ export class ClaimController {
           firstName: claim.firstName || "Guest",
           lastName: claim.lastName,
           points: 0,
-          tierId: DEFAULT_TIER_ID,
+          tierId,
         }
       );
 
