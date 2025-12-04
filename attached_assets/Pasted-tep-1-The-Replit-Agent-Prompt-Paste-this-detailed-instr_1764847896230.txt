@@ -1,0 +1,99 @@
+tep 1: The Replit Agent Prompt
+
+Paste this detailed instruction into your Replit Agent. I have added specific "Safety Checks" so the Agent doesn't break your existing code.
+
+    Prompt: "I need to implement a Webhook Handler to track when users uninstall their passes.
+
+    Context:
+
+        We use Supabase for the database (passes_master, transactions).
+
+        We use the transaction_action ENUM which already includes 'UNINSTALL'.
+
+        We need to listen for PassKit 'Delete' events.
+
+    Task: Create controllers/webhook.controller.ts and routes/webhook.routes.ts.
+
+    1. Review & Safety:
+
+        First, check config/supabase.ts to ensure the client is exported correctly.
+
+        Check services/logic.service.ts to see how we currently handle transactions.
+
+    2. Logic (handlePassKitWebhook):
+
+        Create a POST endpoint /api/webhooks/passkit/uninstall.
+
+        Input: Receive the JSON payload from PassKit. It typically contains the passId (which matches our passkit_internal_id).
+
+        Database Action 1 (Update Status):
+
+            Find the row in passes_master where passkit_internal_id matches.
+
+            Update status to 'UNINSTALLED' and is_active to FALSE.
+
+        Database Action 2 (Log Ledger):
+
+            Insert a row into transactions linked to that pass.
+
+            Set action_type to 'UNINSTALL'.
+
+            Set notes to 'User removed pass from wallet'.
+
+        Response: Return status 200 OK (so PassKit knows we received it).
+
+    3. Caution:
+
+        Ensure you handle the case where the pass ID doesn't exist in our DB (log a warning but don't crash).
+
+        Do NOT enable API Key authentication for this specific route, as PassKit servers won't send our custom x-api-key. (We will rely on the Pass ID matching)."
+
+🟢 Step 2: The Code Preview (What to expect)
+
+Here is the logic the Agent should generate. Review this to understand how we map the external signal to your internal database.
+TypeScript
+
+/* controllers/webhook.controller.ts */
+const supabase = require('../config/supabase');
+
+exports.handlePassKitUninstall = async (req, res) => {
+  try {
+    // PassKit sends the ID of the deleted pass
+    // Note: Verify the exact payload structure in PassKit docs (usually { "id": "..." })
+    const { id, event } = req.body;
+
+    console.log(`Received Webhook: ${event} for Pass ID: ${id}`);
+
+    if (event !== 'delete') {
+      return res.status(200).send('Ignored non-delete event');
+    }
+
+    // 1. Update the Master Record (The "State")
+    const { data: pass, error: findError } = await supabase
+      .from('passes_master')
+      .update({ status: 'UNINSTALLED', is_active: false })
+      .eq('passkit_internal_id', id)
+      .select('id') // We need our UUID for the transaction log
+      .single();
+
+    if (findError || !pass) {
+      console.warn(`⚠️ Webhook Warning: Pass ${id} not found in database.`);
+      return res.status(200).send('Pass not found, but acknowledged.');
+    }
+
+    // 2. Update the Ledger (The "History")
+    await supabase.from('transactions').insert({
+      pass_id: pass.id,
+      action_type: 'UNINSTALL',
+      value_change: 0,
+      notes: 'Webhook: User removed pass from wallet'
+    });
+
+    console.log(`✅ Churn Recorded for Pass UUID: ${pass.id}`);
+    res.status(200).send('Webhook processed');
+
+  } catch (error) {
+    console.error('❌ Webhook Error:', error.message);
+    res.status(500).send('Internal Server Error');
+  }
+};

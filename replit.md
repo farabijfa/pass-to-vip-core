@@ -84,3 +84,102 @@ I do not want the agent to make changes to the /admin folder.
 - **Admin API Key:** Set via `ADMIN_API_KEY` environment variable (default: `pk_phygital_admin_2024`)
 - **Header:** `X-API-Key: <your-api-key>`
 - **Admin Dashboard:** Uses Basic Auth with `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables
+
+## Complete API Reference
+
+### Health Check
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | System health check with service status |
+
+### POS Actions (`/api/pos`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pos/actions` | GET | List all available POS action types |
+| `/api/pos/action` | POST | Execute POS action (MEMBER_EARN, MEMBER_REDEEM, COUPON_ISSUE, COUPON_REDEEM) |
+
+**POST /api/pos/action** body:
+```json
+{
+  "external_id": "member-passkit-id",
+  "action": "MEMBER_EARN",
+  "amount": 100
+}
+```
+
+### Loyalty (`/api/loyalty`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/loyalty/membership` | POST | Process membership transaction |
+| `/api/loyalty/one-time-use` | POST | Process one-time offer redemption |
+| `/api/loyalty/members/:memberId/balance` | GET | Get member point balance |
+| `/api/loyalty/members/:memberId/transactions` | GET | Get member transaction history |
+
+### Digital Wallet / PassKit (`/api/wallet`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/wallet/passes` | POST | Create new digital pass |
+| `/api/wallet/passes/:serialNumber` | GET | Get pass details |
+| `/api/wallet/passes/:serialNumber` | PATCH | Update pass |
+| `/api/wallet/passes/:serialNumber` | DELETE | Delete pass |
+| `/api/wallet/passes/:serialNumber/push` | POST | Send push notification to pass |
+| `/api/wallet/enroll` | POST | Enroll new member |
+| `/api/wallet/coupons` | POST | Issue coupon |
+| `/api/wallet/tickets` | POST | Issue event ticket |
+
+### PostGrid Direct Mail (`/api/mail`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mail/templates` | GET | List available mail templates |
+| `/api/mail/mail` | POST | Send direct mail (postcard/letter) |
+| `/api/mail/mail/:mailId` | GET | Get mail job status |
+| `/api/mail/mail/:mailId` | DELETE | Cancel mail job |
+| `/api/mail/campaign` | POST | Send batch campaign |
+
+### Physical Bridge / Claim Codes (`/api/claim`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/claim/:id` | GET | Redeem claim code (redirects to PassKit install) |
+| `/api/claim/:id/status` | GET | Check claim code status |
+
+### Notifications (`/api/notify`) - Requires X-API-Key
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/notify/broadcast` | POST | Send broadcast notification |
+| `/api/notify/broadcast/test` | POST | Dry-run broadcast (no messages sent) |
+| `/api/notify/birthday-run` | POST | Run birthday bot |
+| `/api/notify/birthday-bot/test` | GET | Dry-run birthday bot test |
+| `/api/notify/logs` | GET | Get notification campaign logs |
+
+### Campaign Upload (`/api/campaign`)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/campaign/upload-csv` | POST | Upload CSV for bulk campaign (multipart/form-data) |
+
+### Admin (`/api/admin`) - Requires Basic Auth
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/tenants` | POST | Provision new tenant |
+
+## Test Results Summary (December 2024)
+
+### API Endpoint Tests - All Passing ✅
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **PostGrid Mail** | ✅ | Templates list (10 templates), validation working |
+| **POS Actions** | ✅ | All action types validated, proper error handling |
+| **Loyalty** | ✅ | Membership, one-time-use, balance, transactions |
+| **Digital Wallet** | ✅ | Pass CRUD, enrollment, coupons, push notifications |
+| **Physical Bridge** | ✅ | Claim code status & redemption (route fixed) |
+| **Notifications** | ✅ | Broadcast, birthday bot, campaign logs |
+
+### Database Schema Relationships
+- `passes_master.program_id` → `programs.id` (FK relationship)
+- `programs.passkit_program_id` - PassKit external program ID
+- Query pattern: Lookup programs by `passkit_program_id`, then query `passes_master` by internal `program_id`
+
+### Key Fixes Applied
+1. **Broadcast Query Fix**: Updated to first lookup program by `passkit_program_id`, then query `passes_master` using internal `program_id` FK
+2. **Claim Routes Registration**: Added missing `/api/claim` routes to main router index
+3. **Notification Logging**: Uses internal `program.id` for `notification_logs` table

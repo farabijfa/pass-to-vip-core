@@ -259,7 +259,18 @@ class SupabaseService {
         };
       }
 
-      if (!data) {
+      // Check for empty results (null, undefined, empty array, or empty object)
+      if (!data || (Array.isArray(data) && data.length === 0) || (typeof data === 'object' && !data.claim_code)) {
+        return {
+          success: false,
+          error: "Claim code not found",
+        };
+      }
+
+      // Handle array result (some RPCs return arrays)
+      const claimData = Array.isArray(data) ? data[0] : data;
+
+      if (!claimData || !claimData.claim_code) {
         return {
           success: false,
           error: "Claim code not found",
@@ -269,15 +280,15 @@ class SupabaseService {
       return {
         success: true,
         claimCode: {
-          claimCode: data.claim_code,
-          status: data.status,
-          passkitProgramId: data.passkit_program_id,
-          passkitInstallUrl: data.passkit_install_url,
-          firstName: data.first_name,
-          lastName: data.last_name,
-          email: data.email,
-          createdAt: data.created_at,
-          installedAt: data.installed_at,
+          claimCode: claimData.claim_code,
+          status: claimData.status,
+          passkitProgramId: claimData.passkit_program_id,
+          passkitInstallUrl: claimData.passkit_install_url,
+          firstName: claimData.first_name,
+          lastName: claimData.last_name,
+          email: claimData.email,
+          createdAt: claimData.created_at,
+          installedAt: claimData.installed_at,
         },
       };
     } catch (error) {
