@@ -13,4 +13,14 @@ router.get(
   clientController.getAnalytics.bind(clientController)
 );
 
+router.get(
+  "/members",
+  clientController.getMembers.bind(clientController)
+);
+
+router.get(
+  "/members/search",
+  clientController.getMembers.bind(clientController)
+);
+
 export default router;

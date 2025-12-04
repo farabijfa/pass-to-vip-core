@@ -171,7 +171,7 @@ export const memberApi = {
       );
       return { success: true, data: { members: filtered, count: filtered.length } };
     }
-    return apiCall<{ members: Member[]; count: number }>(`/api/members/search?q=${encodeURIComponent(query)}`);
+    return apiCall<{ members: Member[]; count: number }>(`/api/client/members?q=${encodeURIComponent(query)}`);
   },
 
   async getById(externalId: string): Promise<ApiResponse<Member>> {
@@ -183,7 +183,12 @@ export const memberApi = {
       }
       return { success: false, error: { code: "NOT_FOUND", message: "Member not found" } };
     }
-    return apiCall<Member>(`/api/members/${encodeURIComponent(externalId)}`);
+    return apiCall<{ members: Member[]; count: number }>(`/api/client/members?q=${encodeURIComponent(externalId)}`).then(res => {
+      if (res.success && res.data?.members?.length > 0) {
+        return { success: true, data: res.data.members[0] };
+      }
+      return { success: false, error: { code: "NOT_FOUND", message: "Member not found" } };
+    });
   },
 
   async getAll(): Promise<ApiResponse<{ members: Member[]; count: number }>> {
@@ -191,7 +196,7 @@ export const memberApi = {
       await new Promise(r => setTimeout(r, 400));
       return { success: true, data: { members: mockMembers, count: mockMembers.length } };
     }
-    return apiCall<{ members: Member[]; count: number }>("/api/members");
+    return apiCall<{ members: Member[]; count: number }>("/api/client/members");
   },
 };
 
