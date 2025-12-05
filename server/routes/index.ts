@@ -13,6 +13,7 @@ import programsRoutes from "./programs.routes";
 import customersRoutes from "./customers.routes";
 import clientRoutes from "./client.routes";
 import enrollRoutes from "./enroll.routes";
+import callbackRoutes from "./callbacks.routes";
 import { posRateLimiter, notifyRateLimiter } from "../middleware";
 
 const router = Router();
@@ -44,5 +45,7 @@ router.use("/customers", customersRoutes);
 router.use("/client", clientRoutes);
 
 router.use("/enroll", enrollRoutes);
+
+router.use("/callbacks", callbackRoutes);
 
 export default router;
