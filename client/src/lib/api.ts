@@ -84,7 +84,7 @@ export interface ApiResponse<T> {
 
 const mockClientContext: ClientContext = {
   userId: "mock-user-123",
-  role: "CLIENT_ADMIN",
+  role: "PLATFORM_ADMIN",
   programId: "mock-program-456",
   programName: "Demo Pizza Rewards",
   passkitProgramId: "pk_demo_123",
