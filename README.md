@@ -112,13 +112,18 @@ APP_URL=https://your-app.replit.app
 Execute these SQL files in **Supabase Studio > SQL Editor** (in order):
 
 ```
-migrations/001_performance_indexes.sql
-migrations/002_program_suspension.sql
-migrations/003_passkit_tier_id.sql
-migrations/004_rpc_functions_verification.sql
-migrations/010_dashboard_slug.sql
-migrations/011_pos_integration.sql
+migrations/001_performance_indexes.sql      # Performance optimization
+migrations/002_program_suspension.sql       # Kill switch feature
+migrations/003_passkit_tier_id.sql         # Tier-based programs
+migrations/004_rpc_functions_verification.sql  # Core RPC functions
+migrations/010_dashboard_slug.sql          # Unique enrollment URLs
+migrations/011_pos_integration.sql         # POS API keys & transactions
+migrations/012_secure_public_access.sql    # CRITICAL: RLS for anon key
+migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
+migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
 ```
+
+**Important:** Migrations 012 and 014 are critical for production security and resilient client provisioning.
 
 ### 4. Start Development Server
 
@@ -137,6 +142,50 @@ curl http://localhost:5000/api/health
 # Run production validation (7 comprehensive tests)
 npx tsx scripts/prod-validation.ts
 ```
+
+### 6. Run Security Validation (Recommended)
+
+After migrations, run Protocol D security test in **Supabase SQL Editor**:
+
+```sql
+SET ROLE anon;
+SELECT * FROM programs;  -- Should return error 42501 (permission denied)
+```
+
+If this returns data instead of an error, your RLS policies are not working. Apply migration 012 immediately.
+
+See `docs/SECURITY_VALIDATION.md` for the complete security test suite.
+
+---
+
+## Production Validation Protocols
+
+This system has been hardened with four validation protocols designed to break the system under stress:
+
+| Protocol | Name | Test Objective | Success Criteria |
+|----------|------|----------------|------------------|
+| **A** | Provisioning Resilience | Client creation with broken PassKit API | Client created, `passkit_status: manual_required` |
+| **B** | Churn Loop | Webhook updates member status | `pass.uninstalled` → status changes to `CHURNED` |
+| **C** | Clerk Proof POS | Redeem action blocked until confirmed | Modal appears, Enter key confirms, no premature API call |
+| **D** | Security Tunnel | Anon key data access | Direct SELECT fails, RPC returns only public data |
+
+### Protocol Details
+
+**A: Soft-Fail Provisioning**
+- Temporarily break `PASSKIT_API_KEY` → provision a client → verify client created
+- Expected: `passkit_status: "manual_required"`, `passkit_program_id: null`
+
+**B: Webhook Churn Detection**
+- Send `pass.uninstalled` event to `/api/callbacks/passkit`
+- Expected: Member's `status` changes to `UNINSTALLED` in `passes_master`
+
+**C: POS Clerk Protection**
+- Scan code in "Redeem" tab → modal should appear (no API call yet)
+- Press Enter → transaction completes
+
+**D: RLS Security**
+- Use anon key to attempt `SELECT * FROM programs` → must fail with 42501
+- Use RPC `get_public_program_info('slug')` → must return only name and URL
 
 ---
 
@@ -173,6 +222,18 @@ npx tsx scripts/prod-validation.ts
 | **API Key Authentication** | Secure API access with rotatable keys |
 | **JWT Authentication** | Secure client dashboard sessions |
 | **Input Validation** | Zod schema validation on all endpoints |
+| **Row Level Security** | PostgreSQL RLS prevents data leakage (Protocol D verified) |
+| **HMAC Webhooks** | PassKit callbacks verified with signature |
+
+### Production-Grade Architecture
+
+| Feature | Description |
+|---------|-------------|
+| **Soft-Fail Provisioning** | Client creation succeeds even if PassKit API fails |
+| **Protocol Routing** | MEMBERSHIP auto-provisions, EVENT_TICKET/COUPON skip PassKit |
+| **Webhook Status Sync** | Real-time wallet install/uninstall tracking |
+| **Idempotent Transactions** | Duplicate API calls return same result |
+| **Clerk Protection** | POS redeem requires confirmation modal |
 
 ---
 
@@ -543,6 +604,95 @@ See `docs/POS_INTEGRATION.md` for full integration guide.
 
 ---
 
+### PassKit Webhook Callbacks
+
+PassKit sends wallet events to these endpoints for real-time status sync:
+
+#### POST /api/callbacks/passkit
+
+Receives wallet install/uninstall events from PassKit.
+
+**No API key required** - Uses HMAC signature verification instead.
+
+**Headers:**
+```
+x-passkit-signature: <hmac_sha256_signature>
+```
+
+**Events Handled:**
+
+| Event | Action | Database Update |
+|-------|--------|-----------------|
+| `pass.installed` | User added pass to wallet | `status: INSTALLED`, `is_active: true` |
+| `pass.uninstalled` | User removed pass | `status: UNINSTALLED`, `is_active: false` |
+| `pass.updated` | Pass data changed | `last_updated` timestamp |
+
+**Request:**
+```json
+{
+  "event": "pass.uninstalled",
+  "externalId": "PUB-ABC123",
+  "passId": "passkit-internal-id",
+  "timestamp": "2024-12-05T12:00:00Z"
+}
+```
+
+**Response:** Always returns `200 OK` to prevent PassKit retries.
+
+---
+
+### Admin API Endpoints
+
+#### POST /api/admin/provision
+
+Create a new client tenant with optional PassKit auto-provisioning.
+
+**Authentication:** `x-api-key` header
+
+**Request:**
+```json
+{
+  "businessName": "Pizza Palace",
+  "email": "admin@pizzapalace.com",
+  "password": "SecurePass123!",
+  "protocol": "MEMBERSHIP",
+  "timezone": "America/New_York",
+  "autoProvision": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "uuid",
+    "programId": "uuid",
+    "dashboardSlug": "abc123",
+    "dashboardUrl": "/enroll/abc123",
+    "passkit": {
+      "status": "provisioned",
+      "programId": "pk-program-id",
+      "tierId": "pk-tier-id",
+      "enrollmentUrl": "https://pub2.pskt.io/c/..."
+    }
+  }
+}
+```
+
+**Soft-Fail Behavior:**
+If PassKit API fails, client is still created with `passkit.status: "manual_required"`.
+
+#### GET /api/admin/tenants
+
+List all client tenants (PLATFORM_ADMIN only).
+
+#### GET /api/admin/tenants/:userId
+
+Get specific tenant details.
+
+---
+
 ### Public Enrollment Endpoint
 
 #### GET /api/enroll/:slug
@@ -712,14 +862,26 @@ When suspended:
 
 ### Production Checklist
 
-- [ ] All required secrets configured
-- [ ] Database migrations run (001-004, 010-011)
+**Required:**
+- [ ] All required secrets configured (SUPABASE_*, ADMIN_API_KEY, SESSION_SECRET)
+- [ ] Database migrations run (001-004, 010-014)
 - [ ] RPC functions verified in Supabase
 - [ ] `APP_URL` set to production domain
 - [ ] `VITE_MOCK_MODE` set to `false`
+
+**Security Validation (Critical):**
+- [ ] Protocol D passed: `SELECT * FROM programs` returns error 42501
+- [ ] Migration 012 applied (RLS policies)
+- [ ] Migration 014 applied (soft-fail provisioning)
+
+**External Services:**
 - [ ] PassKit credentials configured (for wallet features)
 - [ ] PostGrid credentials configured (for mail features)
-- [ ] Production validation script passes
+- [ ] PassKit webhook URL configured: `https://your-domain/api/callbacks/passkit`
+
+**Validation:**
+- [ ] Production validation script passes: `npx tsx scripts/prod-validation.ts`
+- [ ] All 4 hardening protocols verified (A-D)
 
 ---
 
@@ -782,9 +944,13 @@ curl http://localhost:5000/api/health | jq
 │   │   └── webhook.routes.ts # External webhooks
 │   ├── middleware/           # Auth, validation
 │   └── index.ts              # Server entry
-├── migrations/               # SQL migrations
+├── migrations/               # SQL migrations (001-014)
+├── scripts/
+│   ├── prod-validation.ts   # Production validation tests
+│   └── test-provisioning.ts # Provisioning tests
 ├── docs/
-│   └── POS_INTEGRATION.md   # POS webhook guide
+│   ├── POS_INTEGRATION.md   # POS webhook guide
+│   └── SECURITY_VALIDATION.md  # Protocol D security tests
 ├── design_guidelines.md     # UI/UX guidelines
 └── README.md
 ```
@@ -796,6 +962,60 @@ curl http://localhost:5000/api/health | jq
 - **Email**: support@passtovip.com
 - **Documentation**: This README and `replit.md`
 - **POS Integration**: See `docs/POS_INTEGRATION.md`
+- **Security**: See `docs/SECURITY_VALIDATION.md`
+
+---
+
+## Known Gaps & Future Enhancements
+
+The following areas have been identified for future improvement. AI agents may assist in addressing these:
+
+### Data & Performance
+| Gap | Description | Priority |
+|-----|-------------|----------|
+| **Analytics Caching** | Dashboard analytics queries run directly on DB | Medium |
+| **Batch Transactions** | POS processes one transaction at a time | Low |
+| **Query Optimization** | Large member lists may need pagination improvements | Medium |
+
+### Integration & Reliability
+| Gap | Description | Priority |
+|-----|-------------|----------|
+| **Webhook Retry Queue** | Failed PassKit callbacks are not automatically retried | High |
+| **PassKit Rate Limiting** | No backoff strategy for PassKit API rate limits | Medium |
+| **PostGrid Status Tracking** | Mail delivery status not synced back to dashboard | Low |
+
+### Monitoring & Observability
+| Gap | Description | Priority |
+|-----|-------------|----------|
+| **Structured Logging** | Logs are text-based, not JSON for aggregation | Medium |
+| **Metrics Dashboard** | No Prometheus/Grafana integration | Low |
+| **Error Alerting** | No PagerDuty/Slack integration for failures | Medium |
+
+### Security & Compliance
+| Gap | Description | Priority |
+|-----|-------------|----------|
+| **API Key Rotation UI** | Keys must be rotated via SQL, no admin UI | Medium |
+| **Audit Logging** | Admin actions not tracked for compliance | High |
+| **GDPR Export** | No self-service data export for members | Medium |
+
+### User Experience
+| Gap | Description | Priority |
+|-----|-------------|----------|
+| **Mobile POS App** | POS is web-only, no native mobile app | Low |
+| **Multi-Language** | Dashboard is English-only | Low |
+| **Dark Mode** | Dashboard theme not fully implemented | Low |
+
+---
+
+## Changelog
+
+### v1.0.0 - Production Hardening (December 2024)
+- ✅ Soft-fail provisioning (Protocol A)
+- ✅ PassKit webhook status sync (Protocol B)
+- ✅ POS clerk protection modal (Protocol C)
+- ✅ RLS security validation (Protocol D)
+- ✅ Complete migration set (001-014)
+- ✅ API documentation for all endpoints
 
 ---
 
@@ -809,4 +1029,7 @@ MIT License - See LICENSE file for details.
   <strong>Pass To VIP - Bridging Physical Mail and Digital Wallets</strong>
   <br>
   <sub>Operated by Oakmont Logic LLC</sub>
+  <br><br>
+  <img src="https://img.shields.io/badge/Validated-Protocol%20A%20B%20C%20D-22c55e?style=flat-square" alt="Validated"/>
+  <img src="https://img.shields.io/badge/Security-RLS%20Verified-2563eb?style=flat-square" alt="Security"/>
 </p>
