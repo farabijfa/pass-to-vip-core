@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { postGridService, supabaseService } from "../services";
 import type { PostGridMail, ApiResponse, BatchCampaignRequest, BatchCampaignContact } from "@shared/schema";
 import { generate } from "short-uuid";
+import { getCampaignPricing } from "./campaign.controller";
 
 function createResponse<T>(
   success: boolean,
@@ -258,11 +259,64 @@ export class PostGridController {
 
     try {
       const campaignData: BatchCampaignRequest = req.body;
-      const { templateId, frontTemplateId, backTemplateId, size, programId, contacts, baseClaimUrl } = campaignData;
+      const { templateId, frontTemplateId, backTemplateId, size, programId, contacts, baseClaimUrl, resourceType, mailingClass, highCostConfirmation } = campaignData;
 
       const claimBaseUrl = baseClaimUrl || `${req.protocol}://${req.get('host')}/claim`;
 
       console.log(`📬 Starting batch campaign: ${contacts.length} contacts, program: ${programId}`);
+
+      // === GAP M: BUDGET SAFETY VALIDATION ===
+      // Fetch program budget from database - programId can be UUID or passkit_program_id
+      const programResult = await supabaseService.getProgramById(programId);
+      let program = programResult.success ? programResult.program : null;
+      
+      // Fallback: try by passkit_program_id if UUID lookup fails
+      if (!program) {
+        const passkitResult = await supabaseService.getProgramByPasskitId(programId);
+        if (passkitResult.success && passkitResult.program) {
+          // Re-fetch with getProgramById to get campaign_budget_cents
+          const fullProgram = await supabaseService.getProgramById(passkitResult.program.id);
+          program = fullProgram.success ? fullProgram.program : null;
+        }
+      }
+
+      if (!program) {
+        console.warn(`⚠️ Could not fetch program budget for ${programId}, using default limit`);
+      }
+
+      const budgetCents = Math.max(program?.campaign_budget_cents ?? 50000, 1); // Default $500, min 1 cent
+
+      // Calculate estimated cost
+      const pricing = getCampaignPricing(resourceType || "postcard", size || "6x9", mailingClass || "standard");
+      const estimatedCostCents = pricing.unitCostCents * contacts.length;
+
+      console.log(`💰 Budget check: Estimated $${(estimatedCostCents / 100).toFixed(2)} vs Budget $${(budgetCents / 100).toFixed(2)}`);
+
+      // Check if over budget
+      if (estimatedCostCents > budgetCents) {
+        // Require explicit confirmation for over-budget campaigns
+        if (!highCostConfirmation || highCostConfirmation !== "CONFIRM CHARGE") {
+          return res.status(400).json(
+            createResponse(
+              false,
+              {
+                budgetExceeded: true,
+                estimatedCostCents,
+                budgetCents,
+                estimatedCostDollars: (estimatedCostCents / 100).toFixed(2),
+                budgetDollars: (budgetCents / 100).toFixed(2),
+                overagePercent: Math.round((estimatedCostCents / budgetCents - 1) * 100),
+              },
+              {
+                code: "BUDGET_EXCEEDED",
+                message: `Campaign cost ($${(estimatedCostCents / 100).toFixed(2)}) exceeds budget ($${(budgetCents / 100).toFixed(2)}). Type 'CONFIRM CHARGE' to proceed.`,
+              },
+              requestId
+            )
+          );
+        }
+        console.log(`✅ Over-budget campaign confirmed: $${(estimatedCostCents / 100).toFixed(2)}`);
+      }
 
       const results: Array<{
         contact: string;

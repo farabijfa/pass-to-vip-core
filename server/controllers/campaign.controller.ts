@@ -365,7 +365,7 @@ export class CampaignController {
     const requestId = (req.headers["x-request-id"] as string) || generate();
 
     try {
-      const { contact_count, resource_type, size, mailing_class } = req.body;
+      const { contact_count, resource_type, size, mailing_class, program_id } = req.body;
 
       if (!contact_count || contact_count < 1) {
         return res.status(400).json(
@@ -384,6 +384,34 @@ export class CampaignController {
       const pricing = getCampaignPricing(resource_type, size, mailing_class);
       const totalCostCents = pricing.unitCostCents * contact_count;
 
+      // Gap M: Fetch program budget if program_id provided
+      let budgetInfo: {
+        programBudgetCents: number;
+        budgetUtilization: number;
+        isOverBudget: boolean;
+        isNearBudget: boolean;
+        requiresConfirmation: boolean;
+      } | undefined;
+
+      if (program_id) {
+        const programResult = await supabaseService.getProgramById(program_id);
+        if (programResult.success && programResult.program) {
+          // Guard against zero/negative budgets to avoid NaN
+          const programBudgetCents = Math.max(programResult.program.campaign_budget_cents ?? 50000, 1);
+          const budgetUtilization = Math.round((totalCostCents / programBudgetCents) * 100);
+          const isOverBudget = totalCostCents > programBudgetCents;
+          const isNearBudget = !isOverBudget && budgetUtilization >= 80;
+
+          budgetInfo = {
+            programBudgetCents,
+            budgetUtilization,
+            isOverBudget,
+            isNearBudget,
+            requiresConfirmation: isOverBudget,
+          };
+        }
+      }
+
       return res.status(200).json(
         createResponse(
           true,
@@ -395,6 +423,7 @@ export class CampaignController {
             unitCostCents: pricing.unitCostCents,
             totalCostCents,
             breakdown: pricing.breakdown,
+            ...(budgetInfo && { budget: budgetInfo }),
           },
           undefined,
           requestId
@@ -533,7 +562,7 @@ export class CampaignController {
   }
 }
 
-function getCampaignPricing(
+export function getCampaignPricing(
   resourceType: string,
   size: string,
   mailingClass: string

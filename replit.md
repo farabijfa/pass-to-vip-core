@@ -16,6 +16,12 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
 - **Protocol K Fix (Campaign Launcher)**: Two-step selector (Tenant → Program) prevents enrollment flow mismatches in multi-program clients
 - **Migration 021**: Added `program_id` FK to claim_codes table for precise program targeting
 - **Gap L Fix (Template Defaults)**: Each program stores its own `postgrid_template_id` for template-protocol matching; Client Command Center has dropdown to set default; Campaign Launcher auto-selects template with "Auto-filled" badge
+- **Gap M Fix (Campaign Budget Limits)**: Per-program campaign budget limits prevent accidental large campaign launches
+  - **Migration 022**: Added `campaign_budget_cents` column to programs table (default $500.00)
+  - **Backend Validation**: Two-tier safety (80% warning, 100% block with typed "CONFIRM CHARGE" confirmation)
+  - **Client Command Center**: New budget input field with currency formatting in Programs section
+  - **Campaign Launcher UI**: Real-time budget tracking, amber warning at 80%, confirmation modal with typed override for over-budget campaigns
+  - **Cost Estimate API**: Enhanced to return budget comparison info when program_id provided
 
 ## User Preferences
 - Iterative development preferred

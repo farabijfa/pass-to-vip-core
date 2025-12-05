@@ -65,6 +65,7 @@ const MOCK_PROFILES: Record<string, TenantProfile> = {
       earnRateMultiplier: 10,
       memberLimit: 500,
       postgridTemplateId: "template_pizza_001",
+      campaignBudgetCents: 50000,
       passkit: {
         status: "provisioned",
         programId: "pk_pizza_vip_001",
@@ -114,6 +115,7 @@ const MOCK_PROFILES: Record<string, TenantProfile> = {
       earnRateMultiplier: 15,
       memberLimit: null,
       postgridTemplateId: null,
+      campaignBudgetCents: 100000,
       passkit: {
         status: "provisioned",
         programId: "pk_deli_rewards_002",
@@ -148,6 +150,7 @@ const MOCK_PROFILES: Record<string, TenantProfile> = {
       earnRateMultiplier: 1,
       memberLimit: 5000,
       postgridTemplateId: "template_event_003",
+      campaignBudgetCents: 200000,
       passkit: {
         status: "manual_required",
         programId: "pk_music_fest_003",
@@ -190,6 +193,7 @@ const MOCK_PROFILES: Record<string, TenantProfile> = {
       earnRateMultiplier: 8,
       memberLimit: 200,
       postgridTemplateId: null,
+      campaignBudgetCents: 25000,
       passkit: {
         status: "provisioned",
         programId: "pk_coffee_harbor_004",
@@ -224,6 +228,7 @@ const MOCK_PROFILES: Record<string, TenantProfile> = {
       earnRateMultiplier: 1,
       memberLimit: 10000,
       postgridTemplateId: "template_coupon_005",
+      campaignBudgetCents: 75000,
       passkit: {
         status: "provisioned",
         programId: "pk_flash_sale_005",
@@ -268,6 +273,7 @@ interface TenantProfile {
     earnRateMultiplier: number;
     memberLimit: number | null;
     postgridTemplateId: string | null;
+    campaignBudgetCents: number;
     passkit: {
       status: string;
       programId: string | null;
@@ -313,6 +319,7 @@ async function updateTenantConfig(programId: string, config: {
   earnRateMultiplier?: number;
   memberLimit?: number | null;
   postgridTemplateId?: string | null;
+  campaignBudgetCents?: number;
   isSuspended?: boolean;
 }): Promise<void> {
   const token = getAuthToken();
@@ -484,6 +491,7 @@ export default function AdminClientDetailsPage() {
     memberLimit: "",
     earnRateMultiplier: "",
     postgridTemplateId: "",
+    campaignBudgetDollars: "",
     isSuspended: false,
   });
   const [copied, setCopied] = useState(false);
@@ -507,6 +515,7 @@ export default function AdminClientDetailsPage() {
         memberLimit: profile.program.memberLimit?.toString() || "",
         earnRateMultiplier: profile.program.earnRateMultiplier.toString(),
         postgridTemplateId: profile.program.postgridTemplateId || "",
+        campaignBudgetDollars: ((profile.program.campaignBudgetCents ?? 50000) / 100).toString(),
         isSuspended: profile.program.isSuspended,
       });
     }
@@ -517,6 +526,7 @@ export default function AdminClientDetailsPage() {
       earnRateMultiplier: parseInt(configForm.earnRateMultiplier) || 10,
       memberLimit: configForm.memberLimit ? parseInt(configForm.memberLimit) : null,
       postgridTemplateId: configForm.postgridTemplateId || null,
+      campaignBudgetCents: configForm.campaignBudgetDollars ? Math.round(parseFloat(configForm.campaignBudgetDollars) * 100) : 50000,
       isSuspended: configForm.isSuspended,
     }),
     onSuccess: () => {
@@ -904,6 +914,25 @@ export default function AdminClientDetailsPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">Auto-selected when launching campaigns for this program</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="campaignBudget" className="text-sm">Campaign Budget Limit</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id="campaignBudget"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="500.00"
+                    className="pl-7"
+                    value={configForm.campaignBudgetDollars}
+                    onChange={(e) => setConfigForm({ ...configForm, campaignBudgetDollars: e.target.value })}
+                    data-testid="input-campaign-budget"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Maximum spend per campaign launch (safety rail to prevent accidental overspending)</p>
               </div>
 
               <div className="flex items-center justify-between pt-2">

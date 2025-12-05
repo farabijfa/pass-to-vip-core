@@ -628,6 +628,68 @@ class SupabaseService {
     }
   }
 
+  async getProgramById(programId: string): Promise<{
+    success: boolean;
+    program?: {
+      id: string;
+      name: string;
+      passkit_program_id: string;
+      passkit_tier_id: string;
+      postgrid_template_id: string | null;
+      protocol: string;
+      is_suspended: boolean;
+      campaign_budget_cents: number | null;
+    };
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("programs")
+        .select("id, name, passkit_program_id, passkit_tier_id, postgrid_template_id, protocol, is_suspended, campaign_budget_cents")
+        .eq("id", programId)
+        .limit(1);
+
+      if (error) {
+        console.error("Get program by ID error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to get program",
+        };
+      }
+
+      const program = data?.[0];
+
+      if (!program) {
+        return {
+          success: false,
+          error: "Program not found",
+        };
+      }
+
+      return {
+        success: true,
+        program: {
+          id: program.id,
+          name: program.name,
+          passkit_program_id: program.passkit_program_id,
+          passkit_tier_id: program.passkit_tier_id || "base",
+          postgrid_template_id: program.postgrid_template_id,
+          protocol: program.protocol || "MEMBERSHIP",
+          is_suspended: program.is_suspended || false,
+          campaign_budget_cents: program.campaign_budget_cents,
+        },
+      };
+    } catch (error) {
+      console.error("Get program by ID error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
   async validateClientById(clientId: string): Promise<{
     success: boolean;
     client?: {

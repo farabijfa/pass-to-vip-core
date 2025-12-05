@@ -89,6 +89,7 @@ interface TenantProgram {
   isPrimary: boolean;
   postgridTemplateId: string | null;
   memberLimit: number | null;
+  campaignBudgetCents: number;
   createdAt: string;
 }
 
@@ -930,6 +931,7 @@ class AdminService {
       earnRateMultiplier?: number;
       memberLimit?: number | null;
       postgridTemplateId?: string | null;
+      campaignBudgetCents?: number;
       isSuspended?: boolean;
     }
   ): Promise<{
@@ -939,6 +941,7 @@ class AdminService {
       earnRateMultiplier: number;
       memberLimit: number | null;
       postgridTemplateId: string | null;
+      campaignBudgetCents: number;
       isSuspended: boolean;
     };
     error?: string;
@@ -979,6 +982,16 @@ class AdminService {
         updates.postgrid_template_id = config.postgridTemplateId;
       }
 
+      if (config.campaignBudgetCents !== undefined) {
+        if (config.campaignBudgetCents < 0) {
+          return { success: false, error: "Campaign budget cannot be negative" };
+        }
+        if (config.campaignBudgetCents > 100000000) { // Max $1,000,000
+          return { success: false, error: "Campaign budget cannot exceed $1,000,000" };
+        }
+        updates.campaign_budget_cents = config.campaignBudgetCents;
+      }
+
       if (config.isSuspended !== undefined) {
         updates.is_suspended = config.isSuspended;
       }
@@ -991,7 +1004,7 @@ class AdminService {
         .from("programs")
         .update(updates)
         .eq("id", programId)
-        .select("id, earn_rate_multiplier, member_limit, postgrid_template_id, is_suspended")
+        .select("id, earn_rate_multiplier, member_limit, postgrid_template_id, campaign_budget_cents, is_suspended")
         .single();
 
       if (updateError) {
@@ -1007,6 +1020,7 @@ class AdminService {
           earnRateMultiplier: updatedProgram.earn_rate_multiplier || 10,
           memberLimit: updatedProgram.member_limit || null,
           postgridTemplateId: updatedProgram.postgrid_template_id || null,
+          campaignBudgetCents: updatedProgram.campaign_budget_cents ?? 50000,
           isSuspended: updatedProgram.is_suspended || false,
         },
       };
@@ -1182,6 +1196,7 @@ class AdminService {
           is_primary,
           postgrid_template_id,
           member_limit,
+          campaign_budget_cents,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1207,6 +1222,7 @@ class AdminService {
         isPrimary: p.is_primary || false,
         postgridTemplateId: p.postgrid_template_id,
         memberLimit: p.member_limit,
+        campaignBudgetCents: p.campaign_budget_cents ?? 50000,
         createdAt: p.created_at,
       }));
 
@@ -1392,6 +1408,7 @@ class AdminService {
           is_primary,
           postgrid_template_id,
           member_limit,
+          campaign_budget_cents,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1422,6 +1439,7 @@ class AdminService {
           isPrimary: program.is_primary || false,
           postgridTemplateId: program.postgrid_template_id,
           memberLimit: program.member_limit,
+          campaignBudgetCents: program.campaign_budget_cents ?? 50000,
           createdAt: program.created_at,
         },
       };

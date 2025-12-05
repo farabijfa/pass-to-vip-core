@@ -235,6 +235,9 @@ export const batchCampaignRequestSchema = z.object({
   programId: z.string().min(1, "PassKit Program ID is required"),
   contacts: z.array(batchCampaignContactSchema).min(1, "At least one contact is required"),
   baseClaimUrl: z.string().url().optional(),
+  resourceType: z.enum(["postcard", "letter"]).optional(),
+  mailingClass: z.enum(["standard", "first_class"]).optional(),
+  highCostConfirmation: z.string().optional(),
 });
 
 export type BatchCampaignRequest = z.infer<typeof batchCampaignRequestSchema>;

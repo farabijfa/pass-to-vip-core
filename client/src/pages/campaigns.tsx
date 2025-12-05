@@ -22,6 +22,7 @@ interface ClientProgram {
   userId?: string;
   passkit_status?: string;
   postgrid_template_id?: string;
+  campaign_budget_cents?: number;
   is_primary?: boolean;
 }
 
@@ -300,6 +301,8 @@ export default function CampaignsPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchResult, setLaunchResult] = useState<CampaignResult | null>(null);
+  const [budgetConfirmation, setBudgetConfirmation] = useState<string>("");
+  const [programBudgetCents, setProgramBudgetCents] = useState<number>(50000);
 
   const { data: clientsData, isLoading: isLoadingClients } = useQuery({
     queryKey: ["admin-clients-for-campaigns"],
@@ -354,11 +357,16 @@ export default function CampaignsPage() {
       } else {
         setTemplateAutoFilled(false);
       }
+      // Update program budget (Gap M)
+      setProgramBudgetCents(selectedProgram.campaign_budget_cents ?? 50000);
     } else if (clientMode === "manual" && validatedClient) {
       setTemplateAutoFilled(false);
+      setProgramBudgetCents(50000); // Default for manual mode
     } else {
       setTemplateAutoFilled(false);
+      setProgramBudgetCents(50000);
     }
+    setBudgetConfirmation(""); // Reset confirmation when program changes
   }, [selectedProgram?.id, validatedClient?.id, clientMode]);
 
   const showPassKitWarning = 
@@ -372,6 +380,14 @@ export default function CampaignsPage() {
     selectedTemplate && 
     filteredTemplates.length > 0 &&
     !filteredTemplates.some(t => t.id === selectedTemplate);
+
+  // Gap M: Budget safety calculations (guard against zero budget to avoid NaN)
+  const safeBudget = Math.max(programBudgetCents, 1);
+  const isOverBudget = costEstimate && costEstimate.totalCostCents > safeBudget;
+  const isNearBudget = costEstimate && costEstimate.totalCostCents > safeBudget * 0.8 && costEstimate.totalCostCents <= safeBudget;
+  const budgetUtilization = costEstimate ? Math.round((costEstimate.totalCostCents / safeBudget) * 100) : 0;
+  const requiresConfirmation = isOverBudget;
+  const canLaunch = !requiresConfirmation || budgetConfirmation === "CONFIRM CHARGE";
 
   const fetchCostEstimate = async () => {
     if (!preview || preview.valid === 0) return;
@@ -397,6 +413,7 @@ export default function CampaignsPage() {
 
     try {
       const token = localStorage.getItem("auth_token");
+      const programId = clientMode === "dropdown" && selectedProgram ? selectedProgram.id : validatedClient?.programId;
       const response = await fetch("/api/campaign/estimate-cost", {
         method: "POST",
         headers: {
@@ -408,11 +425,16 @@ export default function CampaignsPage() {
           resource_type: resourceType,
           size: currentSize,
           mailing_class: mailingClass,
+          program_id: programId,
         }),
       });
       const result = await response.json();
       if (result.success && result.data) {
         setCostEstimate(result.data);
+        // Gap M: Update budget from server response if available
+        if (result.data.budget?.programBudgetCents) {
+          setProgramBudgetCents(result.data.budget.programBudgetCents);
+        }
       }
     } catch (error) {
       console.error("Cost estimation failed:", error);
@@ -1375,7 +1397,7 @@ export default function CampaignsPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+      <Dialog open={showConfirmModal} onOpenChange={(open) => { setShowConfirmModal(open); if (!open) setBudgetConfirmation(""); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm Campaign Launch</DialogTitle>
@@ -1395,18 +1417,66 @@ export default function CampaignsPage() {
               </span>
             </div>
             {costEstimate && (
-              <div className="flex items-center justify-between p-4 rounded-md bg-primary/5 border border-primary/20">
-                <span className="text-sm font-medium text-foreground">Total Cost</span>
-                <span className="text-xl font-semibold text-primary">{formatCurrency(costEstimate.totalCostCents)}</span>
+              <div className={`flex items-center justify-between p-4 rounded-md border ${
+                isOverBudget 
+                  ? "bg-destructive/10 border-destructive/30" 
+                  : isNearBudget 
+                    ? "bg-yellow-500/10 border-yellow-500/30"
+                    : "bg-primary/5 border-primary/20"
+              }`}>
+                <div className="space-y-1">
+                  <span className="text-sm font-medium text-foreground">Total Cost</span>
+                  <p className="text-xs text-muted-foreground">
+                    Budget: {formatCurrency(safeBudget)} ({budgetUtilization}% used)
+                  </p>
+                </div>
+                <span className={`text-xl font-semibold ${isOverBudget ? "text-destructive" : "text-primary"}`}>
+                  {formatCurrency(costEstimate.totalCostCents)}
+                </span>
+              </div>
+            )}
+            
+            {isOverBudget && (
+              <div className="space-y-3 p-4 rounded-md bg-destructive/5 border border-destructive/20">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-destructive">Budget Exceeded</p>
+                    <p className="text-xs text-muted-foreground">
+                      This campaign costs {formatCurrency(costEstimate?.totalCostCents || 0)} but the program budget is only {formatCurrency(safeBudget)}.
+                      To proceed, type <code className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">CONFIRM CHARGE</code> below.
+                    </p>
+                  </div>
+                </div>
+                <Input
+                  placeholder="Type CONFIRM CHARGE to proceed"
+                  value={budgetConfirmation}
+                  onChange={(e) => setBudgetConfirmation(e.target.value)}
+                  className={budgetConfirmation === "CONFIRM CHARGE" ? "border-green-500" : ""}
+                  data-testid="input-budget-confirmation"
+                />
+              </div>
+            )}
+
+            {isNearBudget && !isOverBudget && (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30">
+                <AlertTriangle className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  This campaign uses {budgetUtilization}% of the program budget. Consider adjusting the budget limit in Client Settings if needed.
+                </p>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmModal(false)} data-testid="button-cancel-launch">
+            <Button variant="outline" onClick={() => { setShowConfirmModal(false); setBudgetConfirmation(""); }} data-testid="button-cancel-launch">
               Cancel
             </Button>
-            <Button onClick={handleLaunchCampaign} data-testid="button-confirm-launch">
-              Confirm & Launch
+            <Button 
+              onClick={handleLaunchCampaign} 
+              disabled={!canLaunch}
+              data-testid="button-confirm-launch"
+            >
+              {isOverBudget ? "Override & Launch" : "Confirm & Launch"}
             </Button>
           </DialogFooter>
         </DialogContent>
