@@ -630,11 +630,13 @@ export default function CampaignsPage() {
                         <SelectValue placeholder="Select a client program..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {clientsData?.programs.map((program) => (
-                          <SelectItem key={program.id} value={program.id}>
-                            {program.name} ({program.protocol})
-                          </SelectItem>
-                        ))}
+                        {clientsData?.programs
+                          .filter((program) => program.id && program.id.trim() !== "")
+                          .map((program) => (
+                            <SelectItem key={program.id} value={program.id}>
+                              {program.name} ({program.protocol})
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   )}
@@ -827,12 +829,15 @@ export default function CampaignsPage() {
                         {resourceType === "postcard" && (
                           <div className="space-y-2">
                             <Label className="text-sm text-foreground">Back Template (Optional)</Label>
-                            <Select value={selectedBackTemplate} onValueChange={setSelectedBackTemplate}>
+                            <Select 
+                              value={selectedBackTemplate || "__none__"} 
+                              onValueChange={(v) => setSelectedBackTemplate(v === "__none__" ? "" : v)}
+                            >
                               <SelectTrigger data-testid="select-back-template">
                                 <SelectValue placeholder="Same as front..." />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">Same as front</SelectItem>
+                                <SelectItem value="__none__">Same as front</SelectItem>
                                 {filteredTemplates.map((tmpl) => (
                                   <SelectItem key={tmpl.id} value={tmpl.id}>{tmpl.name}</SelectItem>
                                 ))}
