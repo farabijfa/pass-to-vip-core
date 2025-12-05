@@ -1,7 +1,7 @@
 # Pass To VIP - Phygital Loyalty Ecosystem
 
 ## Overview
-A production-ready multi-tenant SaaS platform designed to bridge physical mail campaigns with digital wallet technology. The platform enables businesses in Retail, Hospitality, and Event Management to manage loyalty programs, engage with customers via direct mail, and integrate with Apple Wallet and Google Pay. System has passed 4 production validation protocols ensuring commercial readiness.
+A production-ready multi-tenant SaaS platform designed to bridge physical mail campaigns with digital wallet technology. The platform enables businesses in Retail, Hospitality, and Event Management to manage loyalty programs, engage with customers via direct mail, and integrate with Apple Wallet and Google Pay. System has passed 7 production validation protocols ensuring commercial readiness.
 
 ## User Preferences
 - Iterative development preferred
@@ -49,7 +49,7 @@ Branding includes a "Pass To VIP" logo in the header and "Operated by Oakmont Lo
 
 ## Production Validation Protocols
 
-The system has been hardened with 4 validation protocols:
+The system has been hardened with 7 validation protocols:
 
 | Protocol | Name | Status |
 |----------|------|--------|
@@ -57,6 +57,9 @@ The system has been hardened with 4 validation protocols:
 | **B** | Webhook Churn Tracking | PASSED - `pass.uninstalled` updates `passes_master.status` to UNINSTALLED |
 | **C** | Clerk Proof POS | PASSED - Modal appears before redeem, Enter key confirms |
 | **D** | RLS Security | PASSED - `SELECT * FROM programs` returns error 42501 for anon role |
+| **E** | Double-Claim Prevention | PASSED - Atomic RPC `process_claim_attempt` with FOR UPDATE locks |
+| **F** | Race Condition Prevention | PASSED - Atomic RPC `process_membership_transaction_atomic` prevents concurrent updates |
+| **G** | Revenue Leakage Prevention | PASSED - Billing audit script monitors member quotas per program |
 
 ## Database Migrations
 
