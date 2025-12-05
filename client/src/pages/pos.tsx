@@ -328,7 +328,6 @@ export default function POSPage() {
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2 mb-4">
               <Button 
-                variant="outline" 
                 onClick={handleOpenScanner}
                 className="flex-1 min-w-[140px]"
                 data-testid="button-scan-camera"
