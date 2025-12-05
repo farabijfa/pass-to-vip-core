@@ -129,6 +129,7 @@ Automation options:
 ### Documentation
 - `docs/SECURITY_VALIDATION.md` - Protocol D test procedures
 - `docs/POS_INTEGRATION.md` - External POS webhook guide
+- `docs/CAMPAIGN_LAUNCHER_ADMIN_ARCHITECTURE.md` - Admin-controlled campaign system (PARKED for future implementation)
 
 ## External Dependencies
 
