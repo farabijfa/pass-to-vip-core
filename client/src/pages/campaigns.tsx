@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { AlertTriangle } from "lucide-react";
 
 interface ClientProgram {
   id: string;
@@ -365,6 +366,12 @@ export default function CampaignsPage() {
     selectedProgram && 
     selectedProgram.protocol === "MEMBERSHIP" && 
     selectedProgram.passkit_status !== "provisioned";
+
+  const showTemplateTypeMismatch = 
+    templateAutoFilled && 
+    selectedTemplate && 
+    filteredTemplates.length > 0 &&
+    !filteredTemplates.some(t => t.id === selectedTemplate);
 
   const fetchCostEstimate = async () => {
     if (!preview || preview.valid === 0) return;
@@ -1052,6 +1059,12 @@ export default function CampaignsPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {showTemplateTypeMismatch && (
+                            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-1" data-testid="warning-template-mismatch">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>Program default template is for a different resource type. Please select a valid {resourceType} template.</span>
+                            </div>
+                          )}
                         </div>
                         {resourceType === "postcard" && (
                           <div className="space-y-2">

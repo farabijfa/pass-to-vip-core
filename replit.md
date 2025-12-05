@@ -15,6 +15,7 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
 - **Migration 020**: Added `tenant_id` and `is_primary` columns to programs table
 - **Protocol K Fix (Campaign Launcher)**: Two-step selector (Tenant → Program) prevents enrollment flow mismatches in multi-program clients
 - **Migration 021**: Added `program_id` FK to claim_codes table for precise program targeting
+- **Gap L Fix (Template Defaults)**: Each program stores its own `postgrid_template_id` for template-protocol matching; Client Command Center has dropdown to set default; Campaign Launcher auto-selects template with "Auto-filled" badge
 
 ## User Preferences
 - Iterative development preferred
@@ -45,7 +46,7 @@ The client dashboard employs a USA Patriotic Color Scheme: Primary Blue (`#2563e
 - **Client Dashboard:** Login, program overview, analytics, member management, program assets, POS simulator, and admin interface.
 - **Program Assets Page:** Provides high-res PNG and SVG QR code downloads, and copy-to-clipboard functionality for enrollment URLs.
 - **POS Simulator:** Offers dual scanning, supports various member ID prefixes, includes a confirmation modal for redeem actions, and supports "Spend Amount" and "Direct Points" earning modes.
-- **Client Command Center (Admin-Only):** Detailed client profile management for platform administrators, including identity, configuration, billing health, API keys, and PassKit sync retry.
+- **Client Command Center (Admin-Only):** Detailed client profile management for platform administrators, including identity, configuration, billing health, API keys, and PassKit sync retry. Programs section includes PostGrid template dropdown selector for per-program template defaults.
 - **Campaign Launcher (Admin-Only):** Full-featured system for direct mail campaigns via PostGrid. Features two-step Tenant → Program selector to prevent enrollment mismatches in multi-program clients. Supports various resource types (postcards, letters), mailing classes, template selection, CSV upload with validation, real-time cost estimation, and campaign history tracking. Claim codes are now linked to specific program_id for precise targeting.
 - **Public Enrollment Engine:** Self-service enrollment for strangers via web form (`/enroll/:slug`). Captures firstName, lastName, email without pre-assigned codes. Features duplicate email detection (returns existing pass URL), PassKit soft-fail provisioning, rate limiting (20 requests/15min), and source tracking (`source: PUBLIC_FORM` in passes_master). Available for MEMBERSHIP protocol programs only.
 - **API Endpoints:** Categorized into Client Dashboard (JWT), Admin (API key), Internal POS (JWT), External POS Webhooks (API key + idempotency), Public Enrollment (Zod validation + rate limiting, no auth), Campaign (JWT + admin role), and PassKit Callbacks (HMAC verified).
