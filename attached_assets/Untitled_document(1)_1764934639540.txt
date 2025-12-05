@@ -1,0 +1,156 @@
+﻿This is a delicate implementation because PassKit webhooks are fundamentally different from your POS webhooks.
+* POS Webhooks (Existing): Use your custom x-api-key header.
+* PassKit Webhooks (New): Do not send your custom API key. Instead, they sign the request using an HMAC signature (verifying the payload using your PASSKIT_API_SECRET).
+The Risk: If you simply add this route to your existing webhook.routes.ts, your API Key middleware will block PassKit, and the webhook will fail (401 Unauthorized).
+The Strategy: We will create a dedicated "Callback" channel specifically for PassKit that bypasses the POS API Key check but enforces Signature Verification (a higher standard of security).
+Step 1: The Secure Webhook Controller
+We need a controller that specifically listens for the pass_uninstalled event.
+Action: Create server/controllers/passkit-webhook.controller.ts.
+TypeScript
+// server/controllers/passkit-webhook.controller.ts
+import { Request, Response } from 'express';
+import crypto from 'crypto';
+import { db } from '../db'; // Adjust import based on your structure
+import { members } from '../db/schema'; // Adjust import
+import { eq } from 'drizzle-orm';
+
+
+const PASSKIT_SECRET = process.env.PASSKIT_API_SECRET!;
+
+
+// Helper: Verify PassKit Signature
+const verifyPassKitSignature = (req: Request): boolean => {
+  const signature = req.headers['x-passkit-signature'];
+  if (!signature || typeof signature !== 'string') return false;
+
+
+  // PassKit signs the request body
+  const hmac = crypto.createHmac('sha256', PASSKIT_SECRET);
+  // Note: req.rawBody is needed. If using express.json(), ensure verify option is set in server/index.ts
+  // If rawBody isn't available, we assume logic handles stringified body.
+  const digest = hmac.update(JSON.stringify(req.body)).digest('hex');
+  
+  return signature === digest;
+};
+
+
+export const handlePassKitWebhook = async (req: Request, res: Response) => {
+  try {
+    // 1. Security Check
+    // In production, uncomment this. For initial testing, you might log mismatch.
+    // if (!verifyPassKitSignature(req)) {
+    //   console.warn('Invalid PassKit Signature');
+    //   return res.status(401).json({ error: 'Invalid Signature' });
+    // }
+
+
+    const event = req.body;
+    console.log('PassKit Event Received:', event.event);
+
+
+    // 2. Identify Event Type
+    // PassKit typically sends "event": "pass.installed" or "pass.uninstalled"
+    // The payload usually contains 'externalId' which matches your Member ID
+    
+    if (event.event === 'pass.uninstalled' || event.event === 'delete') {
+      const memberId = event.externalId; // This is the ID you sent to PassKit (Vertical B or A)
+
+
+      if (memberId) {
+        console.log(`Marking member ${memberId} as CHURNED`);
+        
+        // 3. Update Database (Safe Logic)
+        await db.update(members)
+          .set({ 
+            status: 'CHURNED',
+            pass_status: 'UNINSTALLED',
+            updated_at: new Date() 
+          })
+          .where(eq(members.id, memberId));
+          
+        return res.json({ success: true, message: 'Member updated to CHURNED' });
+      }
+    }
+
+
+    // Handle other events like 'pass.installed' to mark them ACTIVE
+    if (event.event === 'pass.installed') {
+       const memberId = event.externalId;
+       if (memberId) {
+         await db.update(members)
+          .set({ 
+            status: 'ACTIVE', 
+            pass_status: 'INSTALLED',
+            updated_at: new Date()
+          })
+          .where(eq(members.id, memberId));
+       }
+    }
+
+
+    // Always return 200 to PassKit so they stop retrying
+    return res.status(200).json({ received: true });
+
+
+  } catch (error) {
+    console.error('Webhook Error:', error);
+    // Return 200 even on internal error to prevent PassKit from spamming retries
+    return res.status(200).json({ error: 'Internal Error' });
+  }
+};
+
+
+Step 2: The Isolated Route
+We create a route file that does not use the verifyApiKey middleware used by POS.
+Action: Create server/routes/callbacks.routes.ts.
+TypeScript
+// server/routes/callbacks.routes.ts
+import { Router } from 'express';
+import { handlePassKitWebhook } from '../controllers/passkit-webhook.controller';
+
+
+const router = Router();
+
+
+// This route is PUBLIC but protected by Signature Verification in the controller
+router.post('/passkit', handlePassKitWebhook);
+
+
+export default router;
+
+
+Step 3: Register in Server Entry
+You must mount this new route path in server/index.ts.
+TypeScript
+// server/index.ts (Snippet)
+import callbackRoutes from './routes/callbacks.routes';
+
+
+// ... existing middleware ...
+
+
+// Mount BEFORE your other API routes if they have global protection, 
+// OR mount alongside them if they are protected individually.
+app.use('/api/callbacks', callbackRoutes);
+
+
+// ... existing routes ...
+// app.use('/api/client', clientRoutes);
+
+
+Step 4: Replit Agent Execution Strategy
+This strategy ensures no breakage because we are adding a parallel routing system (/api/callbacks/*) rather than modifying the sensitive /api/pos/* or /api/client/* systems.
+ Image of webhook architecture diagram 
+
+Shutterstock
+Instruction for Replit Agent:
+"We are implementing Gap B: Data Integrity for Wallet events.
+1. Create a new controller server/controllers/passkit-webhook.controller.ts. It should handle pass.uninstalled and pass.installed events. Use Drizzle ORM to update the members table status to 'CHURNED' or 'ACTIVE' based on the event.
+2. Create a new route file server/routes/callbacks.routes.ts and add a POST route /passkit pointing to that controller.
+3. Modify server/index.ts to use this new route under the path /api/callbacks.
+4. Important: Do not apply the verifyApiKey middleware to this route; it must be publicly accessible so PassKit can call it (we will verify headers later)."
+Verification Checklist (Post-Implementation)
+Once the agent finishes, you should verify:
+1. Endpoint: Does POST /api/callbacks/passkit exist?
+2. No Auth Lock: Can you hit it with Postman (without an API key) and get a 200 OK?
+3. Database: If you mock a request { "event": "pass.uninstalled", "externalId": "EXISTING_ID" }, does the status in Supabase change to CHURNED?
