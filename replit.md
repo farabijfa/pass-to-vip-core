@@ -20,7 +20,7 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Migration 018:** Billing and quotas system for Gap G (revenue leakage prevention)
 - **Gap H:** Program Assets page - QR code downloads, social sharing links (no backend changes needed)
 - **Gap I:** Campaign Launcher page - CSV upload with preview, cost estimation, and PostGrid integration
-- **Admin Campaign Launcher:** Moved Campaign Launcher to admin-only access with client selector dropdown for SUPER_ADMIN and PLATFORM_ADMIN roles
+- **Admin Campaign Launcher:** Full-featured campaign system with dual client selection (dropdown + manual ID validation), resource type switching (postcard/letter), size/mailing class options, template selection, cost estimation, campaign history tracking. Backend enforces SUPER_ADMIN/PLATFORM_ADMIN role via middleware.
 
 ## System Architecture
 
