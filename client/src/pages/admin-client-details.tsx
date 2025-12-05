@@ -377,6 +377,23 @@ async function fetchTenantPrograms(userId: string): Promise<TenantProgram[]> {
   return result.data?.programs || [];
 }
 
+interface PostGridTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  type?: string;
+}
+
+async function fetchPostGridTemplates(): Promise<PostGridTemplate[]> {
+  const token = getAuthToken();
+  const response = await fetch("/api/campaign/templates", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const result = await response.json();
+  if (!result.success) return [];
+  return result.data?.templates || [];
+}
+
 async function addProgramToTenant(userId: string, params: {
   name: string;
   protocol: string;
@@ -540,6 +557,12 @@ export default function AdminClientDetailsPage() {
     queryKey: ["admin-tenant-programs", userId],
     queryFn: () => fetchTenantPrograms(userId!),
     enabled: isAdmin && !!userId && !mockMode,
+  });
+
+  const { data: postgridTemplates, isLoading: templatesLoading } = useQuery({
+    queryKey: ["postgrid-templates"],
+    queryFn: fetchPostGridTemplates,
+    enabled: isAdmin,
   });
 
   const programs = useMemo(() => {
@@ -856,16 +879,31 @@ export default function AdminClientDetailsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="postgridTemplateId" className="text-sm">PostGrid Template ID</Label>
-                <Input
-                  id="postgridTemplateId"
-                  type="text"
-                  placeholder="template_xxxxx"
-                  value={configForm.postgridTemplateId}
-                  onChange={(e) => setConfigForm({ ...configForm, postgridTemplateId: e.target.value })}
-                  data-testid="input-postgrid-template"
-                />
-                <p className="text-xs text-muted-foreground">Default template for mail campaigns</p>
+                <Label htmlFor="postgridTemplateId" className="text-sm">Default PostGrid Template</Label>
+                <Select
+                  value={configForm.postgridTemplateId || "none"}
+                  onValueChange={(value) => setConfigForm({ ...configForm, postgridTemplateId: value === "none" ? "" : value })}
+                >
+                  <SelectTrigger data-testid="select-postgrid-template">
+                    <SelectValue placeholder={templatesLoading ? "Loading templates..." : "Select template"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      <span className="text-muted-foreground">No default template</span>
+                    </SelectItem>
+                    {(postgridTemplates || []).map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        <span className="flex items-center gap-2">
+                          <span>{template.name}</span>
+                          {template.type && (
+                            <Badge variant="outline" className="text-xs">{template.type}</Badge>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Auto-selected when launching campaigns for this program</p>
               </div>
 
               <div className="flex items-center justify-between pt-2">
