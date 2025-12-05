@@ -1,0 +1,56 @@
+As your CTO and Lead Architect, I have analyzed the current "Hardened" state of the system. While the infrastructure is now secure and resilient (Gaps A-D closed), we must now focus on Business Logic Scaling—specifically the financial engine of the loyalty program.
+
+Here is the verdict on the Point System and the remaining hidden gaps.
+Part 1: The Point Balance & Currency Dilemma
+
+The Problem: You asked about the "Factor of 10 or 100" and how to handle global currencies (USD, GBP, AED, JPY). The Reality: If a customer spends $12.50, and your system awards 1 point per dollar, you have a floating-point math problem. Do they get 12 points? 12.5 points? 13 points?
+
+    Decimals: Messy on Apple Wallet (looks like a bank account, not a game).
+
+    Rounding Down: Customers feel cheated ($12.99 = 12 points).
+
+    Rounding Up: Financial leakage.
+
+The Industry Standard: The "Casino Chip" Model (Integer-Based)
+
+The global standard for modern loyalty (Starbucks, Airlines, Square) is Decoupled Integers.
+
+    Never store points as decimals. Always Integers.
+
+    The "Psychological Multiplier": A factor of 10x or 100x is standard.
+
+        Psychology: Earning "125 Points" feels significantly more rewarding than earning "12.5 Points", even if the redeemable value is identical.
+
+The Solution: Configurable earn_rate_multiplier
+
+We will not hardcode a currency symbol into the Point Balance. Points are a universal currency. Instead, we implement a Conversion Layer in the backend.
+
+Proposed Architecture:
+
+    Database Change: Add earn_rate_multiplier (integer) to the programs table.
+
+        Default: 10 (Spend 1.00 -> Get 10 Points).
+
+    POS Logic:
+
+        Clerk enters Spend Amount: $12.50.
+
+        System Logic: Points = floor(12.50 * 10) = 125 Points.
+
+    PassKit API Integration:
+
+        PassKit stores the integer 125.
+
+        On Apple Wallet, it displays: "125 VIP Points".
+
+    Global Compatibility:
+
+        US/UK/EU (Decimals): Multiplier 10 works perfectly.
+
+        Japan (Yen - No Decimals): Multiplier 0.1 or 1. (1000 Yen = 100 Points).
+
+        Middle East (3 Decimals): Multiplier 100 captures the granularity.
+
+Recommendation for Replit Agent:
+
+    "Modify the programs table to add a column earn_rate_multiplier (DEFAULT 10). Update the process_membership_transaction RPC function. It should accept transaction_amount (money), multiply it by the program's multiplier, and add that integer result to the member's point balance."
