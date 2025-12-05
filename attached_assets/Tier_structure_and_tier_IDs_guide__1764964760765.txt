@@ -1,0 +1,366 @@
+﻿https://help.passkit.com/en/articles/10801467-introduction-to-tiers
+
+
+Introduction
+Whether you’re building a loyalty program to reward customers or a membership program to manage access and benefits, Tiers are a powerful tool for organizing and customizing your program. Tiers allow you to segment users into distinct groups, each with its own unique design, benefits, and features. This ensures a personalized experience for every member or customer, while maintaining a cohesive and scalable program structure.
+
+
+ 
+
+
+In this article, we’ll explore what tiers are, how they differ from projects, and how they can be used effectively in both loyalty and membership programs.
+
+
+ 
+
+
+ 
+
+
+What is a Tier?
+A Tier is a subcategory within a program that allows you to create distinct designs, benefits, and experiences for different groups of users. Tiers are ideal for organizing users based on criteria such as:
+
+
+Loyalty levels (e.g., entry-level, mid-tier, VIP)
+
+
+Membership levels (e.g., weekday-only, 7-day access, VIP)
+
+
+Roles (e.g., staff, trainers, members)
+
+
+Access levels (e.g., standard, 24/7 access, family access)
+
+
+Geographic regions (e.g., local, national, international customers)
+
+
+Each tier can have its own unique design elements, including:
+
+
+Colors: Different color schemes to visually distinguish tiers.
+
+
+Images: Custom logos, backgrounds, or icons tailored to the tier.
+
+
+Fields: Specific data fields relevant to the tier (e.g., points balance, membership type, access hours).
+
+
+Tiers operate independently within the same project, meaning changes to one tier do not affect others. This flexibility allows you to cater to diverse user groups while maintaining a cohesive program structure.
+
+
+ 
+
+
+ 
+
+
+Tiers vs. Projects: What’s the Difference?
+To understand tiers better, it’s important to distinguish them from Projects.
+
+
+ 
+
+
+What is a Project?
+A Project is a high-level container that represents a distinct program or use case. Each project is designed to serve a specific purpose and typically has its own unique set of passes, designs, and configurations.
+
+
+ 
+
+
+Example: Loyalty Program vs. Membership Program
+Loyalty Program Project:
+
+
+Purpose: Rewards customers for their engagement and purchases.
+
+
+Features: Includes fields like customer name, points balance, QR codes for rewards redemption, and tier status.
+
+
+Design: Focused on branding and tier differentiation (e.g., Bronze, Silver, Gold).
+
+
+Membership Program Project:
+
+
+Purpose: Manages access and benefits for members.
+
+
+Features: Includes fields like member name, membership type, access hours, and QR codes for entry.
+
+
+Design: Optimized for easy identification and access control.
+
+
+What is a Tier?
+A Tier is a subcategory within a project that allows for further customization and segmentation. Tiers are used to differentiate groups of users within the same program.
+
+
+ 
+
+
+ 
+
+
+Examples of Tiers
+ 
+
+
+1: Loyalty Program Tiers
+Within a Retail Loyalty Program, tiers might include:
+
+
+Bronze Tier:
+
+
+Entry-level tier for new customers.
+
+
+Design: Simple branding with minimal customization.
+
+
+Benefits: Basic rewards, such as discounts on select items or birthday offers.
+
+
+Silver Tier:
+
+
+Mid-level tier for regular shoppers.
+
+
+Design: Enhanced visuals (e.g., silver accents, additional fields like exclusive offers).
+
+
+Benefits: Extra perks like free shipping, early access to sales, or bonus points on purchases.
+
+
+Gold Tier:
+
+
+High-level tier for loyal, high-spending customers.
+
+
+Design: Premium branding (e.g., gold accents, exclusive imagery).
+
+
+Benefits: Premium rewards, such as personalized shopping experiences, VIP customer service, or double points on all purchases.
+
+
+Platinum Tier:
+
+
+Top-tier for the most loyal and high-value customers.
+
+
+Design: Luxurious branding (e.g., platinum accents, VIP imagery).
+
+
+Benefits: Exclusive perks like private shopping events, concierge services, or complimentary products.
+
+
+ 
+
+
+2: Membership Program Tiers
+Within a Gym Membership Program, tiers might include:
+
+
+Weekday Only Tier:
+
+
+Tier for members who primarily use the gym on weekdays.
+
+
+Design: Simple branding with minimal customization.
+
+
+Benefits: Access to gym facilities Monday to Friday during regular hours.
+
+
+7-Day Access Tier:
+
+
+Tier for members who want full access throughout the week.
+
+
+Design: Enhanced visuals (e.g., additional fields like access to all facilities).
+
+
+Benefits: Access to gym facilities 7 days a week, including weekends.
+
+
+24/7 Access Tier:
+
+
+Tier for members who want unrestricted access at any time.
+
+
+Design: Premium branding (e.g., exclusive imagery, bold accents).
+
+
+Benefits: 24/7 access to gym facilities, including early morning or late-night workouts.
+
+
+Family Tier:
+
+
+Tier for families or groups.
+
+
+Design: Custom branding to reflect family-oriented benefits.
+
+
+Benefits: Shared membership for multiple family members, discounted rates, and access to family-friendly facilities like swimming pools or kids’ zones.
+
+
+ 
+
+
+ 
+
+
+Key Differences Between a Project and a Tier
+Aspect
+
+
+Project
+
+
+Tier
+
+
+Scope
+
+
+Broad (e.g., Loyalty Cards, Membership Cards)
+
+
+Narrow (e.g., Bronze, Silver, Gold, Platinum)
+
+
+Purpose
+
+
+Defines a complete program or use case
+
+
+Segments users within a program
+
+
+Design
+
+
+Unique to the project’s purpose
+
+
+Customizable within the project’s framework
+
+
+Program Name
+
+
+Different Program Name for each project
+
+
+Same Program Name for all tiers
+
+
+Fields
+
+
+Specific to the project's functionality
+
+
+Can vary slightly between tiers
+
+
+Example
+
+
+Loyalty Cards, Membership Cards
+
+
+Bronze, Silver, Gold, Platinum tiers
+
+
+ 
+ 
+
+
+ 
+
+
+Why Use Tiers?
+Customization
+Deliver personalized experiences that reflect the level or role of each user.
+
+
+ 
+
+
+Engagement
+Encourage users to progress to higher tiers by offering increasingly attractive benefits.
+
+
+ 
+
+
+Organization
+Easily manage and segment users based on their loyalty level, membership type, or access level.
+
+
+ 
+
+
+Consistency
+Duplicate a perfected base tier to ensure uniformity across all tiers, saving time and effort.
+
+
+ 
+
+
+Scalability
+Add new tiers as your program grows or evolves, without disrupting existing designs.
+
+
+ 
+
+
+ 
+
+
+Best Practices for Using Tiers
+Perfect Your Base Tier
+Before creating new tiers, ensure your base tier is thoroughly tested and optimized. Test it in Apple Wallet and Google Wallet, and refine the design in the PassKit Pass Designer.
+
+
+ 
+
+
+Use Descriptive Tier Names
+Choose clear and intuitive names for your tiers (e.g., Bronze, Silver, Gold) to make them easy to identify.
+
+
+ 
+
+
+Leverage Tier IDs
+Assign unique Tier IDs to make it easier to manage and reference tiers programmatically.
+
+
+ 
+
+
+Align Benefits with Tiers
+Ensure each tier offers meaningful and incremental benefits to motivate users to upgrade.
+
+
+ 
+
+
+Plan for Updates
+Remember that changes to a tier must be applied to each tier, so plan your designs carefully to minimize future updates

@@ -93,6 +93,10 @@ interface TenantProgram {
   tierBronzeMax: number;
   tierSilverMax: number;
   tierGoldMax: number;
+  passkitTierBronzeId: string | null;
+  passkitTierSilverId: string | null;
+  passkitTierGoldId: string | null;
+  passkitTierPlatinumId: string | null;
   createdAt: string;
 }
 
@@ -1288,6 +1292,10 @@ class AdminService {
           tier_bronze_max,
           tier_silver_max,
           tier_gold_max,
+          passkit_tier_bronze_id,
+          passkit_tier_silver_id,
+          passkit_tier_gold_id,
+          passkit_tier_platinum_id,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1317,6 +1325,10 @@ class AdminService {
         tierBronzeMax: p.tier_bronze_max ?? 999,
         tierSilverMax: p.tier_silver_max ?? 4999,
         tierGoldMax: p.tier_gold_max ?? 14999,
+        passkitTierBronzeId: p.passkit_tier_bronze_id,
+        passkitTierSilverId: p.passkit_tier_silver_id,
+        passkitTierGoldId: p.passkit_tier_gold_id,
+        passkitTierPlatinumId: p.passkit_tier_platinum_id,
         createdAt: p.created_at,
       }));
 
@@ -1506,6 +1518,10 @@ class AdminService {
           tier_bronze_max,
           tier_silver_max,
           tier_gold_max,
+          passkit_tier_bronze_id,
+          passkit_tier_silver_id,
+          passkit_tier_gold_id,
+          passkit_tier_platinum_id,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1540,6 +1556,10 @@ class AdminService {
           tierBronzeMax: program.tier_bronze_max ?? 999,
           tierSilverMax: program.tier_silver_max ?? 4999,
           tierGoldMax: program.tier_gold_max ?? 14999,
+          passkitTierBronzeId: program.passkit_tier_bronze_id,
+          passkitTierSilverId: program.passkit_tier_silver_id,
+          passkitTierGoldId: program.passkit_tier_gold_id,
+          passkitTierPlatinumId: program.passkit_tier_platinum_id,
           createdAt: program.created_at,
         },
       };
@@ -1558,6 +1578,10 @@ class AdminService {
       tierBronzeMax: number;
       tierSilverMax: number;
       tierGoldMax: number;
+      passkitTierBronzeId?: string | null;
+      passkitTierSilverId?: string | null;
+      passkitTierGoldId?: string | null;
+      passkitTierPlatinumId?: string | null;
     }
   ): Promise<{ success: boolean; data?: any; error?: string }> {
     console.log(`🔄 Updating tier thresholds for program: ${programId}`);
@@ -1583,16 +1607,41 @@ class AdminService {
         };
       }
 
-      // Update tier thresholds
+      // Build update object with tier thresholds
+      const updateData: Record<string, any> = {
+        tier_bronze_max: thresholds.tierBronzeMax,
+        tier_silver_max: thresholds.tierSilverMax,
+        tier_gold_max: thresholds.tierGoldMax,
+      };
+
+      // Add PassKit tier IDs if provided (can be set to null to clear)
+      if (thresholds.passkitTierBronzeId !== undefined) {
+        updateData.passkit_tier_bronze_id = thresholds.passkitTierBronzeId || null;
+      }
+      if (thresholds.passkitTierSilverId !== undefined) {
+        updateData.passkit_tier_silver_id = thresholds.passkitTierSilverId || null;
+      }
+      if (thresholds.passkitTierGoldId !== undefined) {
+        updateData.passkit_tier_gold_id = thresholds.passkitTierGoldId || null;
+      }
+      if (thresholds.passkitTierPlatinumId !== undefined) {
+        updateData.passkit_tier_platinum_id = thresholds.passkitTierPlatinumId || null;
+      }
+
+      // Update tier thresholds and PassKit tier IDs
       const { data: updated, error: updateError } = await client
         .from("programs")
-        .update({
-          tier_bronze_max: thresholds.tierBronzeMax,
-          tier_silver_max: thresholds.tierSilverMax,
-          tier_gold_max: thresholds.tierGoldMax,
-        })
+        .update(updateData)
         .eq("id", programId)
-        .select("tier_bronze_max, tier_silver_max, tier_gold_max")
+        .select(`
+          tier_bronze_max,
+          tier_silver_max,
+          tier_gold_max,
+          passkit_tier_bronze_id,
+          passkit_tier_silver_id,
+          passkit_tier_gold_id,
+          passkit_tier_platinum_id
+        `)
         .single();
 
       if (updateError) {
@@ -1606,6 +1655,10 @@ class AdminService {
           tierBronzeMax: updated.tier_bronze_max,
           tierSilverMax: updated.tier_silver_max,
           tierGoldMax: updated.tier_gold_max,
+          passkitTierBronzeId: updated.passkit_tier_bronze_id,
+          passkitTierSilverId: updated.passkit_tier_silver_id,
+          passkitTierGoldId: updated.passkit_tier_gold_id,
+          passkitTierPlatinumId: updated.passkit_tier_platinum_id,
         }
       };
 

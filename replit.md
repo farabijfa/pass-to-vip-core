@@ -1,6 +1,6 @@
 # Pass To VIP - Phygital Loyalty Ecosystem
 
-**Version:** 2.5.0  
+**Version:** 2.5.1  
 **Last Updated:** December 5, 2025  
 **Status:** Production Ready
 
@@ -35,6 +35,11 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
   - **Segment Preview**: Dry-run capability shows recipient count and sample members before sending
   - **CSV Upload**: Target specific member IDs from uploaded CSV files
   - **Birthday Bot**: Automated birthday rewards with per-program configuration
+- **PassKit Tier ID Mapping (v2.5.1)**: Per-tier pass design support
+  - **Migration 020**: Added PassKit tier ID columns to programs table (`passkit_tier_bronze_id`, `passkit_tier_silver_id`, `passkit_tier_gold_id`, `passkit_tier_platinum_id`)
+  - **Client Command Center UI**: Tier configuration section now includes optional PassKit Tier ID inputs per tier level
+  - **API Enhancement**: Tier threshold endpoint now accepts PassKit tier IDs for saving tier-specific pass designs
+  - **Pass Design Per Tier**: When member points cross tier thresholds, can display different PassKit visual templates
 
 ## User Preferences
 - Iterative development preferred

@@ -377,6 +377,10 @@ interface TenantProgram {
   tierBronzeMax: number;
   tierSilverMax: number;
   tierGoldMax: number;
+  passkitTierBronzeId: string | null;
+  passkitTierSilverId: string | null;
+  passkitTierGoldId: string | null;
+  passkitTierPlatinumId: string | null;
   campaignBudgetCents: number;
   createdAt: string;
 }
@@ -439,6 +443,10 @@ async function updateProgramTierThresholds(programId: string, params: {
   tierBronzeMax: number;
   tierSilverMax: number;
   tierGoldMax: number;
+  passkitTierBronzeId?: string | null;
+  passkitTierSilverId?: string | null;
+  passkitTierGoldId?: string | null;
+  passkitTierPlatinumId?: string | null;
 }): Promise<void> {
   const token = getAuthToken();
   const response = await fetch(`/api/client/admin/programs/${programId}/tier-thresholds`, {
@@ -475,6 +483,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       tierBronzeMax: 999,
       tierSilverMax: 4999,
       tierGoldMax: 14999,
+      passkitTierBronzeId: "pk_tier_bronze_001",
+      passkitTierSilverId: "pk_tier_silver_001",
+      passkitTierGoldId: "pk_tier_gold_001",
+      passkitTierPlatinumId: "pk_tier_platinum_001",
       campaignBudgetCents: 50000,
       createdAt: "2024-11-15T10:30:00Z",
     },
@@ -498,6 +510,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       tierBronzeMax: 999,
       tierSilverMax: 4999,
       tierGoldMax: 14999,
+      passkitTierBronzeId: null,
+      passkitTierSilverId: null,
+      passkitTierGoldId: null,
+      passkitTierPlatinumId: null,
       campaignBudgetCents: 100000,
       createdAt: "2024-12-01T14:15:00Z",
     },
@@ -519,6 +535,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       tierBronzeMax: 999,
       tierSilverMax: 4999,
       tierGoldMax: 14999,
+      passkitTierBronzeId: null,
+      passkitTierSilverId: null,
+      passkitTierGoldId: null,
+      passkitTierPlatinumId: null,
       campaignBudgetCents: 50000,
       createdAt: "2024-12-05T10:00:00Z",
     },
@@ -638,6 +658,10 @@ export default function AdminClientDetailsPage() {
     bronzeMax: string;
     silverMax: string;
     goldMax: string;
+    passkitBronzeId: string;
+    passkitSilverId: string;
+    passkitGoldId: string;
+    passkitPlatinumId: string;
   }>>({});
 
   const initTierConfig = (program: TenantProgram) => {
@@ -648,6 +672,10 @@ export default function AdminClientDetailsPage() {
           bronzeMax: program.tierBronzeMax?.toString() || "999",
           silverMax: program.tierSilverMax?.toString() || "4999",
           goldMax: program.tierGoldMax?.toString() || "14999",
+          passkitBronzeId: program.passkitTierBronzeId || "",
+          passkitSilverId: program.passkitTierSilverId || "",
+          passkitGoldId: program.passkitTierGoldId || "",
+          passkitPlatinumId: program.passkitTierPlatinumId || "",
         },
       }));
     }
@@ -661,6 +689,10 @@ export default function AdminClientDetailsPage() {
         tierBronzeMax: parseInt(config.bronzeMax) || 999,
         tierSilverMax: parseInt(config.silverMax) || 4999,
         tierGoldMax: parseInt(config.goldMax) || 14999,
+        passkitTierBronzeId: config.passkitBronzeId || null,
+        passkitTierSilverId: config.passkitSilverId || null,
+        passkitTierGoldId: config.passkitGoldId || null,
+        passkitTierPlatinumId: config.passkitPlatinumId || null,
       });
     },
     onSuccess: () => {
@@ -1367,60 +1399,127 @@ export default function AdminClientDetailsPage() {
                           </Button>
 
                           {expandedTierConfig === program.id && tierConfigForm[program.id] && (
-                            <div className="mt-3 space-y-3 text-xs">
-                              <div className="flex items-center gap-2">
-                                <Medal className="w-4 h-4 text-amber-600" />
-                                <span className="w-16">Bronze</span>
-                                <span className="text-muted-foreground">0 -</span>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  className="h-7 text-xs"
-                                  value={tierConfigForm[program.id].bronzeMax}
-                                  onChange={(e) => setTierConfigForm((prev) => ({
-                                    ...prev,
-                                    [program.id]: { ...prev[program.id], bronzeMax: e.target.value },
-                                  }))}
-                                  data-testid={`input-tier-bronze-${program.id}`}
-                                />
+                            <div className="mt-3 space-y-4 text-xs">
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">Point Thresholds</p>
+                                <div className="flex items-center gap-2">
+                                  <Medal className="w-4 h-4 text-amber-600" />
+                                  <span className="w-16">Bronze</span>
+                                  <span className="text-muted-foreground">0 -</span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    className="h-7 text-xs"
+                                    value={tierConfigForm[program.id].bronzeMax}
+                                    onChange={(e) => setTierConfigForm((prev) => ({
+                                      ...prev,
+                                      [program.id]: { ...prev[program.id], bronzeMax: e.target.value },
+                                    }))}
+                                    data-testid={`input-tier-bronze-${program.id}`}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Award className="w-4 h-4 text-slate-400" />
+                                  <span className="w-16">Silver</span>
+                                  <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1} -</span>
+                                  <Input
+                                    type="number"
+                                    min={(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1}
+                                    className="h-7 text-xs"
+                                    value={tierConfigForm[program.id].silverMax}
+                                    onChange={(e) => setTierConfigForm((prev) => ({
+                                      ...prev,
+                                      [program.id]: { ...prev[program.id], silverMax: e.target.value },
+                                    }))}
+                                    data-testid={`input-tier-silver-${program.id}`}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Star className="w-4 h-4 text-yellow-500" />
+                                  <span className="w-16">Gold</span>
+                                  <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1} -</span>
+                                  <Input
+                                    type="number"
+                                    min={(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1}
+                                    className="h-7 text-xs"
+                                    value={tierConfigForm[program.id].goldMax}
+                                    onChange={(e) => setTierConfigForm((prev) => ({
+                                      ...prev,
+                                      [program.id]: { ...prev[program.id], goldMax: e.target.value },
+                                    }))}
+                                    data-testid={`input-tier-gold-${program.id}`}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Gem className="w-4 h-4 text-cyan-400" />
+                                  <span className="w-16">Platinum</span>
+                                  <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].goldMax) || 0) + 1}+</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Award className="w-4 h-4 text-slate-400" />
-                                <span className="w-16">Silver</span>
-                                <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1} -</span>
-                                <Input
-                                  type="number"
-                                  min={(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1}
-                                  className="h-7 text-xs"
-                                  value={tierConfigForm[program.id].silverMax}
-                                  onChange={(e) => setTierConfigForm((prev) => ({
-                                    ...prev,
-                                    [program.id]: { ...prev[program.id], silverMax: e.target.value },
-                                  }))}
-                                  data-testid={`input-tier-silver-${program.id}`}
-                                />
+
+                              <div className="border-t border-border pt-3 space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">PassKit Tier IDs (Optional)</p>
+                                <p className="text-[10px] text-muted-foreground">Use different pass designs per tier level</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">Bronze Pass ID</Label>
+                                    <Input
+                                      type="text"
+                                      placeholder="pk_tier_..."
+                                      className="h-7 text-xs"
+                                      value={tierConfigForm[program.id].passkitBronzeId}
+                                      onChange={(e) => setTierConfigForm((prev) => ({
+                                        ...prev,
+                                        [program.id]: { ...prev[program.id], passkitBronzeId: e.target.value },
+                                      }))}
+                                      data-testid={`input-passkit-bronze-${program.id}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">Silver Pass ID</Label>
+                                    <Input
+                                      type="text"
+                                      placeholder="pk_tier_..."
+                                      className="h-7 text-xs"
+                                      value={tierConfigForm[program.id].passkitSilverId}
+                                      onChange={(e) => setTierConfigForm((prev) => ({
+                                        ...prev,
+                                        [program.id]: { ...prev[program.id], passkitSilverId: e.target.value },
+                                      }))}
+                                      data-testid={`input-passkit-silver-${program.id}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">Gold Pass ID</Label>
+                                    <Input
+                                      type="text"
+                                      placeholder="pk_tier_..."
+                                      className="h-7 text-xs"
+                                      value={tierConfigForm[program.id].passkitGoldId}
+                                      onChange={(e) => setTierConfigForm((prev) => ({
+                                        ...prev,
+                                        [program.id]: { ...prev[program.id], passkitGoldId: e.target.value },
+                                      }))}
+                                      data-testid={`input-passkit-gold-${program.id}`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">Platinum Pass ID</Label>
+                                    <Input
+                                      type="text"
+                                      placeholder="pk_tier_..."
+                                      className="h-7 text-xs"
+                                      value={tierConfigForm[program.id].passkitPlatinumId}
+                                      onChange={(e) => setTierConfigForm((prev) => ({
+                                        ...prev,
+                                        [program.id]: { ...prev[program.id], passkitPlatinumId: e.target.value },
+                                      }))}
+                                      data-testid={`input-passkit-platinum-${program.id}`}
+                                    />
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Star className="w-4 h-4 text-yellow-500" />
-                                <span className="w-16">Gold</span>
-                                <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1} -</span>
-                                <Input
-                                  type="number"
-                                  min={(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1}
-                                  className="h-7 text-xs"
-                                  value={tierConfigForm[program.id].goldMax}
-                                  onChange={(e) => setTierConfigForm((prev) => ({
-                                    ...prev,
-                                    [program.id]: { ...prev[program.id], goldMax: e.target.value },
-                                  }))}
-                                  data-testid={`input-tier-gold-${program.id}`}
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Gem className="w-4 h-4 text-cyan-400" />
-                                <span className="w-16">Platinum</span>
-                                <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].goldMax) || 0) + 1}+</span>
-                              </div>
+
                               <Button
                                 size="sm"
                                 className="w-full mt-2"
@@ -1433,7 +1532,7 @@ export default function AdminClientDetailsPage() {
                                 ) : (
                                   <>
                                     <Save className="w-3 h-3 mr-1" />
-                                    Save Tiers
+                                    Save Tier Config
                                   </>
                                 )}
                               </Button>

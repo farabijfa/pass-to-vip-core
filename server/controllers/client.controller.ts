@@ -1381,7 +1381,15 @@ class ClientController {
       if (!admin) return;
 
       const { programId } = req.params;
-      const { tierBronzeMax, tierSilverMax, tierGoldMax } = req.body;
+      const { 
+        tierBronzeMax, 
+        tierSilverMax, 
+        tierGoldMax,
+        passkitTierBronzeId,
+        passkitTierSilverId,
+        passkitTierGoldId,
+        passkitTierPlatinumId,
+      } = req.body;
 
       if (!programId) {
         res.status(400).json({
@@ -1420,6 +1428,10 @@ class ClientController {
         tierBronzeMax,
         tierSilverMax,
         tierGoldMax,
+        passkitTierBronzeId,
+        passkitTierSilverId,
+        passkitTierGoldId,
+        passkitTierPlatinumId,
       });
 
       if (!result.success) {
