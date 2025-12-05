@@ -186,6 +186,13 @@ Raw: pub-abc123 → PUB-ABC123
   - Uses SUPABASE_ANON_KEY only (no service role key exposure)
   - Returns 503 if anon key not configured
 
+### PassKit Callbacks (Signature Verification)
+- **POST /api/callbacks/passkit** - PassKit wallet event webhook
+  - No API key required (bypasses POS auth)
+  - Uses HMAC signature verification (`x-passkit-signature` header)
+  - Events: `pass.installed` → ACTIVE, `pass.uninstalled` → CHURNED
+  - Always returns 200 to prevent PassKit retries
+
 ## Role-Based Access Control
 
 | Role | Description | Access |
