@@ -33,7 +33,8 @@ The client dashboard employs a USA Patriotic Color Scheme: Primary Blue (`#2563e
 - **POS Simulator:** Offers dual scanning, supports various member ID prefixes, includes a confirmation modal for redeem actions, and supports "Spend Amount" and "Direct Points" earning modes.
 - **Client Command Center (Admin-Only):** Detailed client profile management for platform administrators, including identity, configuration, billing health, API keys, and PassKit sync retry.
 - **Campaign Launcher (Admin-Only):** Full-featured system for direct mail campaigns via PostGrid, supporting dual client selection, various resource types (postcards, letters), mailing classes, template selection, CSV upload with validation, real-time cost estimation, and campaign history tracking.
-- **API Endpoints:** Categorized into Client Dashboard (JWT), Admin (API key), Internal POS (JWT), External POS Webhooks (API key + idempotency), Public Enrollment (Supabase ANON + RLS), Campaign (JWT + admin role), and PassKit Callbacks (HMAC verified).
+- **Public Enrollment Engine:** Self-service enrollment for strangers via web form (`/enroll/:slug`). Captures firstName, lastName, email without pre-assigned codes. Features duplicate email detection (returns existing pass URL), PassKit soft-fail provisioning, rate limiting (20 requests/15min), and source tracking (`source: PUBLIC_FORM` in passes_master). Available for MEMBERSHIP protocol programs only.
+- **API Endpoints:** Categorized into Client Dashboard (JWT), Admin (API key), Internal POS (JWT), External POS Webhooks (API key + idempotency), Public Enrollment (Zod validation + rate limiting, no auth), Campaign (JWT + admin role), and PassKit Callbacks (HMAC verified).
 - **Role-Based Access Control:** Granular permissions across API endpoints for different user roles.
 
 ## External Dependencies

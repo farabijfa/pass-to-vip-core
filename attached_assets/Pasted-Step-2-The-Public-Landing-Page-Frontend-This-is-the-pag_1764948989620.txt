@@ -1,0 +1,44 @@
+Step 2: The Public Landing Page (Frontend)
+This is the page strangers will see on their phones. It must be mobile-optimized and fast.
+Replit Agent Instruction (Frontend UI):
+"We are building the Public Enrollment Form.
+1. Create Page: client/src/pages/public-enrollment.tsx.
+Route: /join/:slug (Register in App.tsx).
+Design: Mobile-first, centered card.
+Header: 'Join {ProgramName} VIP'. (Fetch name using the public slug API).
+Form: First Name, Last Name, Email.
+Button: 'Get My VIP Pass' (Large, Full Width, Primary Blue).
+Footer: 'Powered by Pass To VIP'.
+2. Logic:
+On Submit, POST to /api/enroll/public.
+Show a spinner: 'Creating your pass...'.
+On Success: window.location.href = response.redirect_url (Instant redirect to Apple Wallet/Google Pay).
+On Error: Show friendly toast (e.g., 'You are already a member!')."
+
+Step 3: The Asset Update (Closing the Loop)
+Now that we have a URL (/join/:slug), the client needs the QR code for it.
+Replit Agent Instruction (Asset Hub Update):
+"Update the Assets Page client/src/pages/assets.tsx to include Vertical C.
+1. Add Tabs: Use shadcn/ui Tabs to separate:
+'In-Store (Vertical B)': (The existing QR code pointing to PassKit directly).
+'Marketing (Vertical C)': (New).
+2. Marketing Tab:
+Generate a QR Code pointing to https://{APP_URL}/join/{dashboard_slug}.
+Label: 'Lead Gen QR'.
+Description: 'Use this for flyers, social media, and EDDM. Captures name/email before issuing pass.'
+Downloads: Allow downloading this specific QR."
+Verification Protocol for Phase 2
+The "Stranger" Test:
+Open an Incognito window.
+Go to http://localhost:5173/join/pizza-palace (use a real slug).
+Fill out "Jane Doe". Click Submit.
+Success: You are redirected to the PassKit landing page with "Jane Doe" pre-filled or the pass ready to install.
+The Data Test:
+Check passes_master table.
+Success: A new row exists with source: 'PUBLIC_FORM' and member_email: 'jane@...'.
+The Asset Test:
+Go to Dashboard > Assets > Marketing Tab.
+Scan that QR with your phone.
+Success: It opens the form you just built.
+Proceed with these instructions to unlock Vertical C.
+
