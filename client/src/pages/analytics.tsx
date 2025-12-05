@@ -7,11 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const COLORS = [
-  "hsl(220, 70%, 50%)",
-  "hsl(160, 60%, 45%)",
-  "hsl(280, 60%, 55%)",
-  "hsl(30, 80%, 50%)",
-  "hsl(0, 60%, 50%)"
+  "#2563eb",
+  "#dc2626",
+  "#3b82f6",
+  "#0ea5e9",
+  "#6366f1"
 ];
 
 export default function AnalyticsPage() {
@@ -133,8 +133,8 @@ export default function AnalyticsPage() {
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
-                        <Cell fill="hsl(160, 60%, 45%)" />
-                        <Cell fill="hsl(0, 60%, 50%)" />
+                        <Cell fill="#2563eb" />
+                        <Cell fill="#dc2626" />
                       </Pie>
                       <Tooltip 
                         contentStyle={{ 
@@ -184,8 +184,8 @@ export default function AnalyticsPage() {
                       labelStyle={{ color: 'hsl(var(--foreground))' }}
                     />
                     <Legend wrapperStyle={{ color: 'hsl(var(--muted-foreground))' }} />
-                    <Bar dataKey="active" name="Active" fill="hsl(160, 60%, 45%)" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="churned" name="Churned" fill="hsl(0, 60%, 50%)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="active" name="Active" fill="#2563eb" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="churned" name="Churned" fill="#dc2626" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
