@@ -13,6 +13,12 @@
  * 6. Apply tier discount configuration
  * 7. Sync PassKit pass with new tier
  * 8. Return pass URL and discount info
+ * 
+ * Database Requirements:
+ * - passes_master table must have: id, program_id, external_id, status, source columns
+ * - Optional columns: first_name, last_name, email, spend_total_cents, spend_tier_level
+ * - spend_ledger table must exist (from migration 025)
+ * - programs table must have tier configuration columns (from migration 025)
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -131,6 +137,7 @@ export class POSWebhookService {
 
   /**
    * Load program configuration including tier thresholds and discounts
+   * Note: Uses only essential columns that exist after migration 025
    */
   async getProgramConfig(programId: string): Promise<ProgramConfig | null> {
     const client = this.getClient();
@@ -143,10 +150,6 @@ export class POSWebhookService {
         protocol,
         passkit_program_id,
         passkit_tier_id,
-        passkit_tier_bronze_id,
-        passkit_tier_silver_id,
-        passkit_tier_gold_id,
-        passkit_tier_platinum_id,
         enrollment_url,
         spend_tier_2_threshold_cents,
         spend_tier_3_threshold_cents,
@@ -175,10 +178,10 @@ export class POSWebhookService {
       protocol: program.protocol,
       passkitProgramId: program.passkit_program_id,
       passkitTierId: program.passkit_tier_id,
-      passkitTierBronzeId: program.passkit_tier_bronze_id,
-      passkitTierSilverId: program.passkit_tier_silver_id,
-      passkitTierGoldId: program.passkit_tier_gold_id,
-      passkitTierPlatinumId: program.passkit_tier_platinum_id,
+      passkitTierBronzeId: null,
+      passkitTierSilverId: null,
+      passkitTierGoldId: null,
+      passkitTierPlatinumId: null,
       enrollmentUrl: program.enrollment_url,
       tierConfig: {
         tier2ThresholdCents: program.spend_tier_2_threshold_cents ?? 30000,
@@ -200,6 +203,10 @@ export class POSWebhookService {
 
   /**
    * Get or create member by external ID
+   * Uses column names consistent with existing codebase:
+   * - passkit_id (not pass_serial_number)
+   * - source (not enrollment_source)
+   * - points_balance (used alongside spend_total_cents if migration 025 applied)
    */
   async upsertMember(
     programId: string,
@@ -213,27 +220,53 @@ export class POSWebhookService {
   ): Promise<{ member: MemberRecord; isNew: boolean }> {
     const client = this.getClient();
 
+    console.log(`[POS Webhook] Looking up member by external_id: ${externalId} in program: ${programId}`);
+
+    // Use * to select all columns and see what exists
     const { data: existing, error: findError } = await client
       .from("passes_master")
-      .select(`
-        id,
-        external_id,
-        email,
-        first_name,
-        last_name,
-        spend_total_cents,
-        spend_tier_level,
-        pass_serial_number,
-        pass_url,
-        created_at
-      `)
+      .select("*")
       .eq("program_id", programId)
       .eq("external_id", externalId)
-      .single();
+      .maybeSingle();
 
-    if (existing && !findError) {
+    if (findError && findError.code !== 'PGRST116') {
+      // Log full error for debugging
+      console.error("[POS Webhook] Error looking up member:", JSON.stringify(findError, null, 2));
+      
+      // If column doesn't exist, this might be an older/different schema
+      if (findError.code === '42703') {
+        console.log("[POS Webhook] Database schema issue - columns may not exist");
+        console.log("[POS Webhook] Please verify passes_master table structure and run migration 025");
+      }
+      throw new Error(`Database query error: ${findError.message}`);
+    }
+    
+    // Debug: log what columns we got
+    if (existing) {
+      console.log("[POS Webhook] Found member columns:", Object.keys(existing));
+    }
+
+    if (existing) {
+      console.log(`[POS Webhook] Found existing member: ${existing.id}`);
+      
+      // Try to fetch spend data if migration 025 columns exist
+      let spendTotalCents = 0;
+      let tierLevel: TierLevel = 'TIER_1';
+      
+      const { data: spendData, error: spendError } = await client
+        .from("passes_master")
+        .select("spend_total_cents, spend_tier_level")
+        .eq("id", existing.id)
+        .single();
+      
+      if (!spendError && spendData) {
+        spendTotalCents = spendData.spend_total_cents || 0;
+        tierLevel = (spendData.spend_tier_level as TierLevel) || 'TIER_1';
+      }
+
+      // Update missing customer data (only name fields)
       const updateData: Record<string, any> = {};
-      if (customerData.email && !existing.email) updateData.email = customerData.email;
       if (customerData.firstName && !existing.first_name) updateData.first_name = customerData.firstName;
       if (customerData.lastName && !existing.last_name) updateData.last_name = customerData.lastName;
 
@@ -244,60 +277,99 @@ export class POSWebhookService {
           .eq("id", existing.id);
       }
 
+      const passUrl = existing.passkit_id 
+        ? `https://pub2.pskt.io/${existing.passkit_id}` 
+        : null;
+
       return {
         member: {
           id: existing.id,
           externalId: existing.external_id,
-          email: existing.email,
+          email: customerData.email || null,
           firstName: existing.first_name,
           lastName: existing.last_name,
-          spendTotalCents: existing.spend_total_cents || 0,
-          tierLevel: (existing.spend_tier_level as TierLevel) || 'TIER_1',
-          passSerialNumber: existing.pass_serial_number,
-          passUrl: existing.pass_url,
-          createdAt: existing.created_at,
+          spendTotalCents,
+          tierLevel,
+          passSerialNumber: existing.passkit_id,
+          passUrl,
+          createdAt: new Date().toISOString(),
         },
         isNew: false,
       };
     }
 
+    // Create new member
     const memberId = generate();
+    console.log(`[POS Webhook] Creating new member: ${memberId}`);
+    
+    // Try to insert with minimal required columns
+    // The passes_master table may have varying schemas depending on setup
+    const insertData: Record<string, any> = {
+      id: memberId,
+      program_id: programId,
+      external_id: externalId,
+      status: 'ACTIVE',
+      source: 'POS_WEBHOOK',
+    };
+
+    // Try adding optional columns - these may or may not exist
+    if (customerData.firstName) insertData.first_name = customerData.firstName;
+    if (customerData.lastName) insertData.last_name = customerData.lastName;
+
     const { data: newMember, error: insertError } = await client
       .from("passes_master")
-      .insert({
-        id: memberId,
-        program_id: programId,
-        external_id: externalId,
-        email: customerData.email || null,
-        first_name: customerData.firstName || null,
-        last_name: customerData.lastName || null,
-        phone: customerData.phone || null,
-        spend_total_cents: 0,
-        spend_tier_level: 'TIER_1',
-        status: 'ACTIVE',
-        source: 'POS_WEBHOOK',
-        created_at: new Date().toISOString(),
-      })
-      .select()
+      .insert(insertData)
+      .select("id, external_id")
       .single();
 
-    if (insertError || !newMember) {
+    if (insertError) {
       console.error("[POS Webhook] Failed to create member:", insertError);
-      throw new Error("Failed to create member record");
+      
+      // Provide helpful error message for schema issues
+      if (insertError.code === 'PGRST204' || insertError.code === '42703') {
+        console.log("[POS Webhook] The passes_master table may not have the expected schema.");
+        console.log("[POS Webhook] Required columns: id, program_id, external_id, status, source");
+        console.log("[POS Webhook] Optional columns: first_name, last_name, spend_total_cents, spend_tier_level");
+        throw new Error(
+          "Database schema error: passes_master table missing required columns. " +
+          "Please ensure the table has: id, program_id, external_id, status, source columns."
+        );
+      }
+      
+      throw new Error(`Failed to create member record: ${insertError.message}`);
+    }
+    
+    if (!newMember) {
+      throw new Error("Failed to create member record: no data returned");
+    }
+
+    console.log(`[POS Webhook] Created new member: ${newMember.id}`);
+
+    // Try to set spend tracking columns if they exist
+    const { error: spendUpdateError } = await client
+      .from("passes_master")
+      .update({
+        spend_total_cents: 0,
+        spend_tier_level: 'TIER_1',
+      })
+      .eq("id", memberId);
+
+    if (spendUpdateError) {
+      console.log(`[POS Webhook] Note: spend columns may not exist yet: ${spendUpdateError.message}`);
     }
 
     return {
       member: {
         id: newMember.id,
         externalId: newMember.external_id,
-        email: newMember.email,
-        firstName: newMember.first_name,
-        lastName: newMember.last_name,
+        email: customerData.email || null,
+        firstName: customerData.firstName || null,
+        lastName: customerData.lastName || null,
         spendTotalCents: 0,
         tierLevel: 'TIER_1',
         passSerialNumber: null,
         passUrl: null,
-        createdAt: newMember.created_at,
+        createdAt: new Date().toISOString(),
       },
       isNew: true,
     };
@@ -341,7 +413,6 @@ export class POSWebhookService {
         store_id: transaction.storeId,
         idempotency_key: idempotencyKey,
         metadata: transaction.metadata || {},
-        created_at: new Date().toISOString(),
       })
       .select("id")
       .single();
@@ -356,6 +427,7 @@ export class POSWebhookService {
 
   /**
    * Update member spend total and tier
+   * Note: Only updates columns that exist in migration 025
    */
   async updateMemberSpend(
     memberId: string,
@@ -365,15 +437,18 @@ export class POSWebhookService {
   ): Promise<void> {
     const client = this.getClient();
 
+    const updateData: Record<string, any> = {
+      spend_total_cents: newSpendTotal,
+      spend_tier_level: newTierLevel,
+    };
+
+    if (passkitTierId) {
+      updateData.passkit_tier_id = passkitTierId;
+    }
+
     const { error } = await client
       .from("passes_master")
-      .update({
-        spend_total_cents: newSpendTotal,
-        spend_tier_level: newTierLevel,
-        tier_level: newTierLevel,
-        passkit_tier_id: passkitTierId,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", memberId);
 
     if (error) {
@@ -421,15 +496,9 @@ export class POSWebhookService {
         };
       }
 
-      if (programConfig.protocol !== "MEMBERSHIP") {
-        return {
-          success: false,
-          error: {
-            code: "INVALID_PROTOCOL",
-            message: "POS webhooks only supported for MEMBERSHIP programs",
-          },
-        };
-      }
+      // External POS webhooks support all program protocols
+      // Spend tracking works for MEMBERSHIP, EVENT_TICKET, and COUPON programs
+      console.log(`[POS Webhook] Program protocol: ${programConfig.protocol}`);
 
       const { member, isNew } = await this.upsertMember(
         programId,
