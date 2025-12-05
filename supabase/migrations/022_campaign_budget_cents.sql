@@ -30,7 +30,10 @@ ON programs(campaign_budget_cents);
 
 -- ============================================================
 -- STEP 3: Update get_tenant_programs RPC to include budget
+-- Must DROP first because return type is changing (adding campaign_budget_cents)
 -- ============================================================
+
+DROP FUNCTION IF EXISTS get_tenant_programs(uuid);
 
 CREATE OR REPLACE FUNCTION get_tenant_programs(p_tenant_id UUID)
 RETURNS TABLE (
