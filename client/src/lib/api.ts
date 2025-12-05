@@ -107,8 +107,8 @@ const mockAnalytics: AnalyticsData = {
 
 const mockMembers: Member[] = [
   { id: "m1", external_id: "PUB-abc123", first_name: "John", last_name: "Doe", email: "john@example.com", phone: "+1555123456", points_balance: 1250, tier_name: "Gold", status: "INSTALLED", enrollment_source: "SMARTPASS", created_at: "2024-10-15T10:30:00Z" },
-  { id: "m2", external_id: "CLM-def456", first_name: "Jane", last_name: "Smith", email: "jane@example.com", phone: "+1555789012", points_balance: 875, tier_name: "Silver", status: "INSTALLED", enrollment_source: "CLAIM_CODE", created_at: "2024-11-02T14:20:00Z" },
-  { id: "m3", external_id: "PUB-ghi789", first_name: "Mike", last_name: "Johnson", email: "mike@example.com", phone: null, points_balance: 2100, tier_name: "Platinum", status: "INSTALLED", enrollment_source: "CSV", created_at: "2024-09-20T09:15:00Z" },
+  { id: "m2", external_id: "CLM-def456", first_name: "Jane", last_name: "Smith", email: "jane@example.com", phone: "+1555789012", points_balance: 500, tier_name: "Silver", status: "INSTALLED", enrollment_source: "CLAIM_CODE", created_at: "2024-11-02T14:20:00Z" },
+  { id: "m3", external_id: "PUB-ghi789", first_name: "Mike", last_name: "Johnson", email: "mike@example.com", phone: null, points_balance: 100, tier_name: "Bronze", status: "INSTALLED", enrollment_source: "CSV", created_at: "2024-09-20T09:15:00Z" },
   { id: "m4", external_id: "PUB-jkl012", first_name: "Sarah", last_name: "Williams", email: "sarah@example.com", phone: "+1555345678", points_balance: 450, tier_name: "Bronze", status: "UNINSTALLED", enrollment_source: "SMARTPASS", created_at: "2024-08-10T16:45:00Z" },
   { id: "m5", external_id: "CLM-mno345", first_name: "David", last_name: "Brown", email: "david@example.com", phone: "+1555901234", points_balance: 3200, tier_name: "Platinum", status: "INSTALLED", enrollment_source: "CLAIM_CODE", created_at: "2024-07-05T11:00:00Z" },
 ];
@@ -295,7 +295,20 @@ export const posApi = {
       }
       return { success: true, data: { member, balance: member.points_balance } };
     }
-    return apiCall<{ member: Member; balance: number }>(`/api/pos/lookup/${encodeURIComponent(externalId)}`);
+    const result = await apiCall<{ member: Member }>("/api/pos/lookup", {
+      method: "POST",
+      body: JSON.stringify({ externalId }),
+    });
+    if (result.success && result.data?.member) {
+      return { 
+        success: true, 
+        data: { 
+          member: result.data.member, 
+          balance: result.data.member.points_balance 
+        } 
+      };
+    }
+    return { success: false, error: result.error || { code: "NOT_FOUND", message: "Member not found" } };
   },
 };
 
