@@ -1,6 +1,6 @@
 # Pass To VIP - Phygital Loyalty Ecosystem
 
-**Version:** 2.5.1  
+**Version:** 2.5.2  
 **Last Updated:** December 5, 2025  
 **Status:** Production Ready
 
@@ -47,6 +47,21 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
   - **POS Tier Display**: Member info section shows current tier with TierBadge component
   - **Tier Upgrade Celebration**: POS earn flow detects tier upgrades and shows animated celebration modal when members cross tier thresholds
   - **Backend Tier Response**: POS earn endpoint returns `newTierName` for frontend tier upgrade detection
+- **Dynamic Tier Naming System (v2.5.2)**: Flexible tier naming with preset and custom options
+  - **Migration 024**: Added `tier_system_type` enum (LOYALTY, OFFICE, GYM, CUSTOM, NONE), tier name columns (`tier_1_name` through `tier_4_name`), and `default_member_label` to programs table
+  - **Tier System Presets**: Three built-in naming conventions:
+    - LOYALTY: Bronze / Silver / Gold / Platinum (default)
+    - OFFICE: Member / Staff / Admin / Executive
+    - GYM: Weekday / 7-Day / 24/7 / Family
+  - **Custom Tier Names**: CUSTOM type allows fully customizable tier names per program
+  - **Non-Tiered Programs**: NONE type uses single member label for programs without tier progression
+  - **Client Command Center UI**: Tier configuration section includes:
+    - Tier system type dropdown with preset auto-fill
+    - Conditional custom name inputs (shown only for CUSTOM type)
+    - Default member label input (shown only for NONE type)
+    - Dynamic labels in tier thresholds and PassKit ID sections
+  - **PassKit Integration**: Tier IDs section automatically hidden when tier system is NONE
+  - **Backward Compatibility**: Existing programs default to LOYALTY preset with standard Bronze/Silver/Gold/Platinum names
 
 ## User Preferences
 - Iterative development preferred
