@@ -1,0 +1,45 @@
+﻿Step 1: Replit Agent Instructions (Frontend Logic)
+We need to update the campaigns.tsx page to fetch the full client profile when selected.
+Copy and paste this instruction block to your Replit Agent:
+"We are upgrading the Campaign Launcher to Phase 3 (Smart Config).
+1. Update Component: Open client/src/pages/campaigns.tsx.
+2. Add Data Fetching:
+* When the selectedClientId state changes (user selects a client from dropdown):
+* Trigger a call to adminApi.getTenantProfile(selectedClientId) (the API function from Phase 1).
+3. Implement Auto-Fill Logic:
+* Template ID: If the fetched profile has program.postgrid_template_id, automatically set the templateId state to that value. Show a small badge or text: 'Auto-filled from Client Settings'.
+* Safety Check: Check program.passkit_status.
+   * If it is NOT 'provisioned', show a red Alert/Warning banner: '⚠️ This client is not synced with PassKit. Campaigns may fail to generate passes.'
+   * Optionally disable the 'Launch' button until resolved.
+4. UI Polish:
+* Add a 'View Client' button next to the dropdown that opens /admin/clients/:id in a new tab, so the Admin can quickly fix settings if they are missing."
+________________
+
+
+Step 2: Verification (The Integrated Workflow)
+Once the Agent finishes, perform this End-to-End Admin Workflow to verify the entire suite (Phase 1, 2, and 3):
+1. The Setup (Phase 1):
+   * Go to Admin > Clients. Click on a test client.
+   * Enter a dummy Template ID (e.g., template_test_123) in the Configuration Card.
+   * Click Save.
+2. The Public Test (Phase 2):
+   * While on the Client Details page, look at the Verticals section.
+   * Copy the Public Join URL (/join/:slug).
+   * Paste it in a new tab. Does the form load? (If yes, Vertical C is alive).
+3. The Campaign Launch (Phase 3):
+   * Go to Admin > Campaigns.
+   * Select that same test client from the dropdown.
+   * Success Criteria:
+      * Does the Template ID field magically fill with template_test_123?
+      * If the client is healthy, are there no warning banners?
+________________
+
+
+Final Verdict: The "Phygital" Platform is Complete
+With Phase 3 done, you have a fully operational SaaS Platform:
+* Onboarding: Soft-fail provisioning + "Retry" button.
+* Management: Command Center for billing and config.
+* Vertical A: Targeted Mail (Campaign Launcher).
+* Vertical B: Walk-In (Assets Page QR).
+* Vertical C: Public Funnel (Public Enrollment Page).
+* Safety: Atomic Transactions, Billing Limits, and Churn Tracking.
