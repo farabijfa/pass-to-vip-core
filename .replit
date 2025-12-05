@@ -85,4 +85,4 @@ waitForPort = 5000
 APP_URL = "https://e87d0c9c-a17e-4072-b82d-6c2df516162d-00-2atv7ax70bk4b.riker.replit.dev"
 
 [userenv.development]
-VITE_MOCK_MODE = "false"
+VITE_MOCK_MODE = "true"
