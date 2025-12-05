@@ -1,0 +1,95 @@
+﻿Based on your confirmation, the system status is now:
+* Core Logic: Hardened & Secure (Gaps A-G closed).
+* Assets: Accessible via Dashboard (Gap H closed).
+* Next Frontier: Gap I - The "Campaign Launcher" (Vertical A).
+"Until Gap I all done" implies we are now standing at the edge of Gap I. This is the most complex operational feature because it involves Bulk Data Processing and Financial Risk (sending real mail costs real money).
+We are not just "sending mail." We are orchestrating a data merge.
+1. Ingest: Client uploads raw customer list (CSV).
+2. Enrich: System generates a unique claim_code for each row.
+3. Dispatch: System sends the enriched data to PostGrid to print physical postcards.
+Here is the Enterprise Execution Plan for Gap I.
+The Strategy: "The Interception Pipeline"
+We cannot simply let the client upload a CSV to PostGrid directly, because PostGrid doesn't know how to generate your CLM- codes. We must intercept the file.
+ Image of data processing pipeline 
+
+Shutterstock
+Explore
+The Flow:
+1. Upload: Frontend sends CSV to your Server.
+2. Parse & Inject: Server reads CSV, creates claim_codes in DB, and adds a column merge_qr_code to the data.
+3. Re-Package: Server converts the data back to CSV.
+4. Handoff: Server uploads the new CSV to PostGrid's "Contact Lists" API and triggers a "Campaign".
+________________
+
+
+Step 1: Backend Dependencies
+We need to handle file uploads and CSV manipulation.
+Instruction for Replit Agent:
+"We are building Gap I: The Campaign Launcher.
+1. Install Dependencies: Install multer (for file uploads), csv-parse, json2csv, and form-data in the server project.
+2. Types: Install @types/multer as a dev dependency.
+3. Configure Multer: Create server/middleware/upload.ts to handle temporary file storage (or memory storage) for CSV uploads. Restrict file type to .csv."
+________________
+
+
+Step 2: The Campaign Service (The Logic Core)
+This service handles the heavy lifting.
+Instruction for Replit Agent:
+"Create server/services/campaign.service.ts. Implement a function processAndLaunchCampaign that takes a programId, campaignName, templateId, and a fileBuffer (the uploaded CSV).
+Logic Steps:
+1. Parse CSV: Read the uploaded CSV. Validate it has headers 'name', 'address', 'city', 'state', 'zip'.
+2. Batch Generation: For each row:
+   * Generate a unique claim_code (e.g., CLM-<random>).
+   * Insert into claim_codes table (linked to programId).
+   * Crucial: Append a new field to the row object: qr_url. The value should be your App URL + the claim code (e.g., https://myapp.com/claim/CLM-123).
+3. Create PostGrid Contact List:
+   * Convert the enriched array (with the new qr_url column) back to a CSV string using json2csv.
+   * Use fetch (with form-data) to POST this new CSV to https://api.postgrid.com/print/v1/contacts.
+4. Create Campaign:
+   * Call PostGrid https://api.postgrid.com/print/v1/campaigns using the contactListId returned from step 3 and the templateId.
+5. Log: Insert a record into your local campaign_logs table."
+________________
+
+
+Step 3: The Campaign Controller & Route
+We need an endpoint for the frontend to hit.
+Instruction for Replit Agent:
+"Create server/controllers/campaign.controller.ts.
+1. Endpoint: launchCampaign.
+2. Input: Multipart form data (file: 'csv', body: 'name', 'templateId').
+3. Validation: Ensure templateId is provided.
+4. Action: Call CampaignService.processAndLaunchCampaign.
+5. Response: Return { success: true, campaign_id: '...', contacts_processed: 500 }.
+Register this route in server/routes/client.routes.ts as POST /campaigns with upload.single('file') middleware."
+________________
+
+
+Step 4: The Frontend Launcher
+A UI to drive this power.
+Instruction for Replit Agent:
+"Create client/src/pages/campaigns.tsx.
+1. UI Layout:
+   * Header: 'Direct Mail Campaigns'.
+   * Action Card: 'Launch New Campaign'.
+   * Inputs:
+      * Campaign Name (Text).
+      * Template ID (Text - for now, later we fetch list).
+      * File Upload Area (Label: 'Upload Customer CSV').
+   * Button: 'Launch & Send' (Primary Blue).
+2. State Management: Use useState to store the file and inputs.
+3. API Call: On submit, create a FormData object, append the file and fields, and POST to /api/client/campaigns.
+4. Feedback: Show a 'Processing...' spinner (this takes time) and a Success Toast upon completion."
+________________
+
+
+Validation Plan for Gap I
+Once the Agent finishes, perform this "Dry Run" test (without spending money):
+1. PostGrid Test Mode: Ensure your .env POSTGRID_API_KEY is the TEST key (starts with test_sk_...). PostGrid will not print or charge you in test mode.
+2. The CSV: Create a file test_contacts.csv:
+3. Code snippet
+name,address,city,state,zip
+Elon Musk,1 Rocket Rd,Hawthorne,CA,90250
+4. 5. The Launch: Upload this file via your new UI.
+6. Verification:
+   * DB: Check claim_codes table. Is there a new CLM- code?
+   * PostGrid: Login to PostGrid Dashboard -> "Campaigns". Do you see the new campaign? Check the "Contacts". Does Elon Musk have a merge variable qr_url?
