@@ -254,6 +254,7 @@ migrations/010_dashboard_slug.sql
 migrations/011_pos_integration.sql
 migrations/012_secure_public_access.sql  # CRITICAL: Locks down anon key access
 migrations/013_passkit_status_tracking.sql  # Adds passkit_status and timezone columns
+migrations/014_nullable_passkit_fields.sql  # CRITICAL: Enables soft-fail provisioning
 ```
 
 ## Development Commands
@@ -285,6 +286,11 @@ npx tsx scripts/prod-validation.ts
 - **Template Management:** Dynamic content
 
 ## Recent Changes
+- **Protocol Selection:** POST `/api/admin/provision` now accepts `protocol` field (MEMBERSHIP, EVENT_TICKET, COUPON)
+  - MEMBERSHIP: Triggers PassKit auto-provisioning for digital wallet passes
+  - EVENT_TICKET/COUPON: Sets passkit_status to "skipped" (no PassKit provisioning)
+- **Soft-Fail Provisioning:** Migration 014 makes passkit_program_id nullable, enabling client onboarding even when PassKit is unavailable
+- **E2E Test Suite:** `scripts/test-provisioning.ts` validates health check, protocol-based provisioning, duplicate detection
 - **PassKit Retry Provisioning:** POST `/api/admin/tenants/:programId/retry-passkit` to retry failed provisioning
 - **PassKit Settings Update:** PATCH `/api/admin/tenants/:programId/passkit` to manually configure PassKit IDs with duplicate detection
 - **PassKit Health Check:** GET `/api/admin/passkit/status` to verify PassKit API credentials
