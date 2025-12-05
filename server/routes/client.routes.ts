@@ -63,4 +63,25 @@ router.post(
   clientController.retryPassKitSyncAsAdmin.bind(clientController)
 );
 
+// Multi-Program Management Routes (Admin)
+router.get(
+  "/admin/tenants/:userId/programs",
+  clientController.listTenantProgramsAsAdmin.bind(clientController)
+);
+
+router.post(
+  "/admin/tenants/:userId/programs",
+  clientController.addProgramToTenantAsAdmin.bind(clientController)
+);
+
+router.delete(
+  "/admin/tenants/:userId/programs/:programId",
+  clientController.removeProgramAsAdmin.bind(clientController)
+);
+
+router.patch(
+  "/admin/tenants/:userId/programs/:programId/primary",
+  clientController.setPrimaryProgramAsAdmin.bind(clientController)
+);
+
 export default router;

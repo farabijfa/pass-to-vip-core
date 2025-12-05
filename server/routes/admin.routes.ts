@@ -58,4 +58,29 @@ router.get(
   adminController.getPassKitHealth.bind(adminController)
 );
 
+// Multi-Program Management Routes
+router.get(
+  "/tenants/:userId/programs",
+  checkApiKey,
+  adminController.listTenantPrograms.bind(adminController)
+);
+
+router.post(
+  "/tenants/:userId/programs",
+  checkApiKey,
+  adminController.addProgramToTenant.bind(adminController)
+);
+
+router.delete(
+  "/tenants/:userId/programs/:programId",
+  checkApiKey,
+  adminController.removeProgram.bind(adminController)
+);
+
+router.patch(
+  "/tenants/:userId/programs/:programId/primary",
+  checkApiKey,
+  adminController.setPrimaryProgram.bind(adminController)
+);
+
 export default router;

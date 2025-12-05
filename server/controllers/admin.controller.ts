@@ -524,6 +524,240 @@ class AdminController {
       });
     }
   }
+
+  // ============================================================
+  // MULTI-PROGRAM MANAGEMENT ENDPOINTS
+  // ============================================================
+
+  async listTenantPrograms(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_USER_ID",
+            message: "User ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.listTenantPrograms(userId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "LIST_PROGRAMS_FAILED",
+            message: result.error || "Failed to list programs",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          programs: result.programs,
+          count: result.programs?.length || 0,
+        },
+      });
+
+    } catch (error) {
+      console.error("List tenant programs error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async addProgramToTenant(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_USER_ID",
+            message: "User ID is required",
+          },
+        });
+        return;
+      }
+
+      const addProgramSchema = z.object({
+        name: z.string().min(1, "Program name is required"),
+        protocol: z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]),
+        passkitProgramId: z.string().optional(),
+        passkitTierId: z.string().optional(),
+        timezone: z.string().default("America/New_York"),
+        autoProvision: z.boolean().default(true),
+        earnRateMultiplier: z.number().int().min(1).max(1000).default(10),
+      });
+
+      const validation = addProgramSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.addProgramToTenant({
+        tenantId: userId,
+        ...validation.data,
+      });
+
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        const isDuplicate = result.error?.includes("already has");
+        res.status(isDuplicate ? 409 : 400).json({
+          success: false,
+          error: {
+            code: isDuplicate ? "DUPLICATE_PROTOCOL" : "ADD_PROGRAM_FAILED",
+            message: result.error || "Failed to add program",
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          programId: result.programId,
+          dashboardSlug: result.dashboardSlug,
+          passkit: {
+            status: result.passkitStatus,
+            programId: result.passkitProgramId,
+            tierId: result.passkitTierId,
+            enrollmentUrl: result.enrollmentUrl,
+          },
+        },
+        message: `${validation.data.protocol} program added successfully`,
+        metadata: { processingTime },
+      });
+
+    } catch (error) {
+      console.error("Add program to tenant error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async removeProgram(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, programId } = req.params;
+
+      if (!userId || !programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "User ID and Program ID are required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.removeProgram(userId, programId);
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        const isForbidden = result.error?.includes("Cannot delete");
+        res.status(isNotFound ? 404 : isForbidden ? 403 : 400).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : isForbidden ? "FORBIDDEN" : "REMOVE_FAILED",
+            message: result.error || "Failed to remove program",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Program removed successfully",
+      });
+
+    } catch (error) {
+      console.error("Remove program error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async setPrimaryProgram(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId, programId } = req.params;
+
+      if (!userId || !programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "User ID and Program ID are required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.setPrimaryProgram(userId, programId);
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        res.status(isNotFound ? 404 : 400).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : "SET_PRIMARY_FAILED",
+            message: result.error || "Failed to set primary program",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Primary program updated successfully",
+      });
+
+    } catch (error) {
+      console.error("Set primary program error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
 }
 
 export const adminController = new AdminController();

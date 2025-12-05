@@ -51,6 +51,53 @@ interface Program {
   created_at: string;
 }
 
+// Multi-Program Support Interfaces
+interface AddProgramParams {
+  tenantId: string;
+  name: string;
+  protocol: "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
+  passkitProgramId?: string;
+  passkitTierId?: string;
+  timezone?: string;
+  autoProvision?: boolean;
+  earnRateMultiplier?: number;
+}
+
+interface AddProgramResult {
+  success: boolean;
+  programId?: string;
+  passkitStatus?: "provisioned" | "manual_required" | "skipped";
+  passkitProgramId?: string;
+  passkitTierId?: string;
+  enrollmentUrl?: string;
+  dashboardSlug?: string;
+  error?: string;
+}
+
+interface TenantProgram {
+  id: string;
+  name: string;
+  protocol: string;
+  passkitProgramId: string | null;
+  passkitTierId: string | null;
+  passkitStatus: string;
+  enrollmentUrl: string | null;
+  dashboardSlug: string | null;
+  timezone: string;
+  earnRateMultiplier: number;
+  isSuspended: boolean;
+  isPrimary: boolean;
+  postgridTemplateId: string | null;
+  memberLimit: number | null;
+  createdAt: string;
+}
+
+interface ListTenantProgramsResult {
+  success: boolean;
+  programs?: TenantProgram[];
+  error?: string;
+}
+
 class AdminService {
   private client: SupabaseClient | null = null;
 
@@ -216,6 +263,8 @@ class AdminService {
         timezone: timezone,
         protocol: protocol,
         earn_rate_multiplier: earnRateMultiplier,
+        tenant_id: userId,
+        is_primary: true,
       };
       
       if (hasDashboardSlug) {
@@ -964,6 +1013,420 @@ class AdminService {
 
     } catch (error) {
       console.error("❌ Update tenant config error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  // ============================================================
+  // MULTI-PROGRAM MANAGEMENT METHODS
+  // ============================================================
+
+  async addProgramToTenant(params: AddProgramParams): Promise<AddProgramResult> {
+    const {
+      tenantId,
+      name,
+      protocol,
+      passkitProgramId: providedProgramId,
+      passkitTierId: providedTierId,
+      timezone = "America/New_York",
+      autoProvision = true,
+      earnRateMultiplier = 10,
+    } = params;
+
+    console.log(`➕ Adding new program to tenant: ${tenantId}`);
+    console.log(`   Program Name: ${name}`);
+    console.log(`   Protocol: ${protocol}`);
+
+    let passkitData = {
+      programId: providedProgramId || null as string | null,
+      tierId: providedTierId || null as string | null,
+      enrollmentUrl: null as string | null,
+      status: "skipped" as "provisioned" | "manual_required" | "skipped",
+    };
+
+    try {
+      const client = this.getClient();
+
+      // Verify tenant exists
+      const { data: authUser, error: authError } = await client.auth.admin.getUserById(tenantId);
+      if (authError || !authUser?.user) {
+        return { success: false, error: "Tenant not found" };
+      }
+
+      // Check for duplicate protocol
+      const { data: existingPrograms, error: dupError } = await client
+        .from("programs")
+        .select("id, protocol")
+        .eq("tenant_id", tenantId)
+        .eq("protocol", protocol);
+
+      if (dupError) {
+        return { success: false, error: `Check failed: ${dupError.message}` };
+      }
+
+      if (existingPrograms && existingPrograms.length > 0) {
+        return { 
+          success: false, 
+          error: `Tenant already has a ${protocol} program. Each tenant can only have one program per protocol type.` 
+        };
+      }
+
+      // Auto-provision PassKit for MEMBERSHIP if requested
+      if (autoProvision && !providedProgramId && protocol === "MEMBERSHIP") {
+        console.log("🚀 Attempting auto-provision of PassKit program...");
+        try {
+          const pkResult = await passKitProvisionService.createMembershipProgram({
+            clientName: name,
+            timezone,
+          });
+          
+          if (pkResult.success && pkResult.programId) {
+            passkitData.programId = pkResult.programId;
+            passkitData.tierId = pkResult.tierId || null;
+            passkitData.enrollmentUrl = pkResult.enrollmentUrl || null;
+            passkitData.status = "provisioned";
+            console.log(`✅ PassKit auto-provisioned: ${pkResult.programId}`);
+          } else {
+            console.warn("⚠️ PassKit provisioning failed (soft-fail):", pkResult.error);
+            passkitData.status = "manual_required";
+          }
+        } catch (pkError) {
+          console.warn("⚠️ PassKit error (soft-fail):", pkError);
+          passkitData.status = "manual_required";
+        }
+      } else if (providedProgramId) {
+        passkitData.programId = providedProgramId;
+        passkitData.tierId = providedTierId || null;
+        passkitData.status = "provisioned";
+      }
+
+      // Check if this is the first program for this tenant
+      const { data: programCount } = await client
+        .from("programs")
+        .select("id", { count: "exact" })
+        .eq("tenant_id", tenantId);
+
+      const isFirst = !programCount || programCount.length === 0;
+
+      // Create the program
+      const dashboardSlug = short.generate();
+      const programInsert: Record<string, any> = {
+        name,
+        tenant_id: tenantId,
+        protocol,
+        passkit_program_id: passkitData.programId,
+        passkit_tier_id: passkitData.tierId,
+        enrollment_url: passkitData.enrollmentUrl,
+        passkit_status: passkitData.status,
+        dashboard_slug: dashboardSlug,
+        timezone,
+        earn_rate_multiplier: earnRateMultiplier,
+        is_primary: isFirst,
+      };
+
+      const { data: programData, error: programError } = await client
+        .from("programs")
+        .insert(programInsert)
+        .select()
+        .single();
+
+      if (programError) {
+        return { success: false, error: `Program error: ${programError.message}` };
+      }
+
+      const programId = programData.id;
+      console.log(`✅ Program added: ${programId} (${protocol})`);
+
+      return {
+        success: true,
+        programId,
+        passkitStatus: passkitData.status,
+        passkitProgramId: passkitData.programId || undefined,
+        passkitTierId: passkitData.tierId || undefined,
+        enrollmentUrl: passkitData.enrollmentUrl || undefined,
+        dashboardSlug,
+      };
+
+    } catch (error) {
+      console.error("❌ Add program error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async listTenantPrograms(tenantId: string): Promise<ListTenantProgramsResult> {
+    console.log(`📋 Listing programs for tenant: ${tenantId}`);
+
+    try {
+      const client = this.getClient();
+
+      const { data: programs, error } = await client
+        .from("programs")
+        .select(`
+          id,
+          name,
+          protocol,
+          passkit_program_id,
+          passkit_tier_id,
+          passkit_status,
+          enrollment_url,
+          dashboard_slug,
+          timezone,
+          earn_rate_multiplier,
+          is_suspended,
+          is_primary,
+          postgrid_template_id,
+          member_limit,
+          created_at
+        `)
+        .eq("tenant_id", tenantId)
+        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      const formattedPrograms: TenantProgram[] = (programs || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        protocol: p.protocol,
+        passkitProgramId: p.passkit_program_id,
+        passkitTierId: p.passkit_tier_id,
+        passkitStatus: p.passkit_status || "skipped",
+        enrollmentUrl: p.enrollment_url,
+        dashboardSlug: p.dashboard_slug,
+        timezone: p.timezone || "America/New_York",
+        earnRateMultiplier: p.earn_rate_multiplier || 10,
+        isSuspended: p.is_suspended || false,
+        isPrimary: p.is_primary || false,
+        postgridTemplateId: p.postgrid_template_id,
+        memberLimit: p.member_limit,
+        createdAt: p.created_at,
+      }));
+
+      console.log(`✅ Found ${formattedPrograms.length} programs`);
+      return { success: true, programs: formattedPrograms };
+
+    } catch (error) {
+      console.error("❌ List programs error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async setPrimaryProgram(tenantId: string, programId: string): Promise<{ success: boolean; error?: string }> {
+    console.log(`🔄 Setting primary program: ${programId} for tenant: ${tenantId}`);
+
+    try {
+      const client = this.getClient();
+
+      // Verify the program belongs to this tenant
+      const { data: program, error: fetchError } = await client
+        .from("programs")
+        .select("id, tenant_id")
+        .eq("id", programId)
+        .single();
+
+      if (fetchError || !program) {
+        return { success: false, error: "Program not found" };
+      }
+
+      if (program.tenant_id !== tenantId) {
+        return { success: false, error: "Program does not belong to this tenant" };
+      }
+
+      // Clear existing primary
+      await client
+        .from("programs")
+        .update({ is_primary: false })
+        .eq("tenant_id", tenantId);
+
+      // Set new primary
+      const { error: updateError } = await client
+        .from("programs")
+        .update({ is_primary: true })
+        .eq("id", programId);
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      console.log(`✅ Primary program set: ${programId}`);
+      return { success: true };
+
+    } catch (error) {
+      console.error("❌ Set primary program error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async removeProgram(tenantId: string, programId: string): Promise<{ success: boolean; error?: string }> {
+    console.log(`🗑️ Removing program: ${programId} from tenant: ${tenantId}`);
+
+    try {
+      const client = this.getClient();
+
+      // Verify the program belongs to this tenant
+      const { data: program, error: fetchError } = await client
+        .from("programs")
+        .select("id, tenant_id, is_primary, protocol")
+        .eq("id", programId)
+        .single();
+
+      if (fetchError || !program) {
+        return { success: false, error: "Program not found" };
+      }
+
+      if (program.tenant_id !== tenantId) {
+        return { success: false, error: "Program does not belong to this tenant" };
+      }
+
+      // Check if this is the only program
+      const { data: allPrograms, error: countError } = await client
+        .from("programs")
+        .select("id")
+        .eq("tenant_id", tenantId);
+
+      if (countError) {
+        return { success: false, error: countError.message };
+      }
+
+      if (allPrograms && allPrograms.length <= 1) {
+        return { 
+          success: false, 
+          error: "Cannot delete the only program. Each tenant must have at least one program." 
+        };
+      }
+
+      // Check for active passes
+      const { data: activePasses, error: passError } = await client
+        .from("passes_master")
+        .select("id")
+        .eq("program_id", programId)
+        .eq("is_active", true)
+        .limit(1);
+
+      if (passError) {
+        return { success: false, error: `Check failed: ${passError.message}` };
+      }
+
+      if (activePasses && activePasses.length > 0) {
+        return { 
+          success: false, 
+          error: "Cannot delete program with active passes. Deactivate all passes first." 
+        };
+      }
+
+      // Delete the program
+      const { error: deleteError } = await client
+        .from("programs")
+        .delete()
+        .eq("id", programId);
+
+      if (deleteError) {
+        return { success: false, error: deleteError.message };
+      }
+
+      // If this was the primary, set another one as primary
+      if (program.is_primary) {
+        const { data: remaining } = await client
+          .from("programs")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .order("created_at", { ascending: true })
+          .limit(1);
+
+        if (remaining && remaining.length > 0) {
+          await client
+            .from("programs")
+            .update({ is_primary: true })
+            .eq("id", remaining[0].id);
+        }
+      }
+
+      console.log(`✅ Program removed: ${programId}`);
+      return { success: true };
+
+    } catch (error) {
+      console.error("❌ Remove program error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async getTenantProgramsByProtocol(tenantId: string, protocol: string): Promise<{ 
+    success: boolean; 
+    program?: TenantProgram;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data: program, error } = await client
+        .from("programs")
+        .select(`
+          id,
+          name,
+          protocol,
+          passkit_program_id,
+          passkit_tier_id,
+          passkit_status,
+          enrollment_url,
+          dashboard_slug,
+          timezone,
+          earn_rate_multiplier,
+          is_suspended,
+          is_primary,
+          postgrid_template_id,
+          member_limit,
+          created_at
+        `)
+        .eq("tenant_id", tenantId)
+        .eq("protocol", protocol)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") {
+          return { success: false, error: `No ${protocol} program found for this tenant` };
+        }
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: true,
+        program: {
+          id: program.id,
+          name: program.name,
+          protocol: program.protocol,
+          passkitProgramId: program.passkit_program_id,
+          passkitTierId: program.passkit_tier_id,
+          passkitStatus: program.passkit_status || "skipped",
+          enrollmentUrl: program.enrollment_url,
+          dashboardSlug: program.dashboard_slug,
+          timezone: program.timezone || "America/New_York",
+          earnRateMultiplier: program.earn_rate_multiplier || 10,
+          isSuspended: program.is_suspended || false,
+          isPrimary: program.is_primary || false,
+          postgridTemplateId: program.postgrid_template_id,
+          memberLimit: program.member_limit,
+          createdAt: program.created_at,
+        },
+      };
+
+    } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

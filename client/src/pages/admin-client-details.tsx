@@ -12,6 +12,22 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient } from "@/lib/queryClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   ArrowLeft, 
   Copy, 
@@ -22,7 +38,12 @@ import {
   Settings,
   CreditCard,
   Key,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  Star,
+  Ticket,
+  Tag,
+  Package
 } from "lucide-react";
 
 const MOCK_PROFILES: Record<string, TenantProfile> = {
@@ -324,6 +345,119 @@ async function retryPassKitSync(programId: string): Promise<{ enrollmentUrl?: st
   return result.data?.passkit || {};
 }
 
+interface TenantProgram {
+  id: string;
+  name: string;
+  protocol: string;
+  passkitProgramId: string | null;
+  passkitTierId: string | null;
+  passkitStatus: string;
+  enrollmentUrl: string | null;
+  dashboardSlug: string | null;
+  timezone: string;
+  earnRateMultiplier: number;
+  isSuspended: boolean;
+  isPrimary: boolean;
+  postgridTemplateId: string | null;
+  memberLimit: number | null;
+  createdAt: string;
+}
+
+async function fetchTenantPrograms(userId: string): Promise<TenantProgram[]> {
+  const token = getAuthToken();
+  const response = await fetch(`/api/client/admin/tenants/${userId}/programs`, {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+    },
+  });
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.error?.message || "Failed to fetch programs");
+  }
+  return result.data?.programs || [];
+}
+
+async function addProgramToTenant(userId: string, params: {
+  name: string;
+  protocol: string;
+  passkitProgramId?: string;
+  timezone?: string;
+  earnRateMultiplier?: number;
+}): Promise<{ programId: string }> {
+  const token = getAuthToken();
+  const response = await fetch(`/api/client/admin/tenants/${userId}/programs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify(params),
+  });
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.error?.message || "Failed to add program");
+  }
+  return result.data;
+}
+
+const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
+  "mock-user-001-aaaa-bbbb-cccc": [
+    {
+      id: "prog-001",
+      name: "Joe's Pizza VIP Club",
+      protocol: "MEMBERSHIP",
+      passkitProgramId: "pk_pizza_vip_001",
+      passkitTierId: "tier_gold_001",
+      passkitStatus: "provisioned",
+      enrollmentUrl: "https://pub1.pskt.io/c/joespizza",
+      dashboardSlug: "joes-pizza",
+      timezone: "America/New_York",
+      earnRateMultiplier: 10,
+      isSuspended: false,
+      isPrimary: true,
+      postgridTemplateId: "template_pizza_001",
+      memberLimit: 500,
+      createdAt: "2024-11-15T10:30:00Z",
+    },
+  ],
+  "mock-user-002-dddd-eeee-ffff": [
+    {
+      id: "prog-002",
+      name: "Downtown Deli Rewards",
+      protocol: "MEMBERSHIP",
+      passkitProgramId: "pk_deli_rewards_002",
+      passkitTierId: "tier_silver_002",
+      passkitStatus: "provisioned",
+      enrollmentUrl: "https://pub1.pskt.io/c/downtowndeli",
+      dashboardSlug: "downtown-deli",
+      timezone: "America/Chicago",
+      earnRateMultiplier: 15,
+      isSuspended: false,
+      isPrimary: true,
+      postgridTemplateId: null,
+      memberLimit: null,
+      createdAt: "2024-12-01T14:15:00Z",
+    },
+    {
+      id: "prog-002b",
+      name: "Downtown Deli Events",
+      protocol: "EVENT_TICKET",
+      passkitProgramId: null,
+      passkitTierId: null,
+      passkitStatus: "manual_required",
+      enrollmentUrl: null,
+      dashboardSlug: "downtown-deli-events",
+      timezone: "America/Chicago",
+      earnRateMultiplier: 1,
+      isSuspended: false,
+      isPrimary: false,
+      postgridTemplateId: null,
+      memberLimit: null,
+      createdAt: "2024-12-05T10:00:00Z",
+    },
+  ],
+};
+
 export default function AdminClientDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const { toast } = useToast();
@@ -401,6 +535,96 @@ export default function AdminClientDetailsPage() {
       });
     },
   });
+
+  const { data: fetchedPrograms, isLoading: programsLoading, refetch: refetchPrograms } = useQuery({
+    queryKey: ["admin-tenant-programs", userId],
+    queryFn: () => fetchTenantPrograms(userId!),
+    enabled: isAdmin && !!userId && !mockMode,
+  });
+
+  const programs = useMemo(() => {
+    if (mockMode && userId) {
+      return MOCK_PROGRAMS[userId] || [];
+    }
+    return fetchedPrograms || [];
+  }, [mockMode, userId, fetchedPrograms]);
+
+  const [addProgramDialogOpen, setAddProgramDialogOpen] = useState(false);
+  const [newProgram, setNewProgram] = useState({
+    name: "",
+    protocol: "MEMBERSHIP",
+    timezone: "America/New_York",
+    earnRateMultiplier: "10",
+  });
+
+  const addProgramMutation = useMutation({
+    mutationFn: () => addProgramToTenant(userId!, {
+      name: newProgram.name,
+      protocol: newProgram.protocol,
+      timezone: newProgram.timezone,
+      earnRateMultiplier: parseInt(newProgram.earnRateMultiplier) || 10,
+    }),
+    onSuccess: () => {
+      toast({
+        title: "Program Added",
+        description: `New ${newProgram.protocol} program has been created successfully.`,
+      });
+      setAddProgramDialogOpen(false);
+      setNewProgram({
+        name: "",
+        protocol: "MEMBERSHIP",
+        timezone: "America/New_York",
+        earnRateMultiplier: "10",
+      });
+      refetchPrograms();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to Add Program",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddProgram = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProgram.name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Program name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    addProgramMutation.mutate();
+  };
+
+  const getProtocolIcon = (protocol: string) => {
+    switch (protocol) {
+      case "MEMBERSHIP":
+        return <Star className="h-4 w-4" />;
+      case "EVENT_TICKET":
+        return <Ticket className="h-4 w-4" />;
+      case "COUPON":
+        return <Tag className="h-4 w-4" />;
+      default:
+        return <Package className="h-4 w-4" />;
+    }
+  };
+
+  const getProtocolColor = (protocol: string) => {
+    switch (protocol) {
+      case "MEMBERSHIP":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "EVENT_TICKET":
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+      case "COUPON":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+    }
+  };
 
   const handleCopySlug = () => {
     if (profile?.program.dashboardSlug) {
@@ -768,6 +992,208 @@ export default function AdminClientDetailsPage() {
                 <Key className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No API keys configured</p>
                 <p className="text-xs mt-1">POS API keys will appear here when created</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3" data-testid="card-programs">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Package className="w-5 h-5" />
+                  Programs
+                </CardTitle>
+                <CardDescription>All verticals (MEMBERSHIP, EVENT_TICKET, COUPON) for this tenant</CardDescription>
+              </div>
+              <Dialog open={addProgramDialogOpen} onOpenChange={setAddProgramDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" data-testid="button-add-program">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Program
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <form onSubmit={handleAddProgram}>
+                    <DialogHeader>
+                      <DialogTitle>Add New Program</DialogTitle>
+                      <DialogDescription>
+                        Create a new program (vertical) for this tenant. Each protocol can only have one program.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="program-name">Program Name</Label>
+                        <Input
+                          id="program-name"
+                          placeholder="e.g., Summer VIP Event 2025"
+                          value={newProgram.name}
+                          onChange={(e) => setNewProgram({ ...newProgram, name: e.target.value })}
+                          data-testid="input-program-name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="program-protocol">Protocol</Label>
+                        <Select 
+                          value={newProgram.protocol}
+                          onValueChange={(value) => setNewProgram({ ...newProgram, protocol: value })}
+                        >
+                          <SelectTrigger data-testid="select-program-protocol">
+                            <SelectValue placeholder="Select protocol" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MEMBERSHIP">
+                              <span className="flex items-center gap-2">
+                                <Star className="w-4 h-4" /> MEMBERSHIP (Loyalty)
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="EVENT_TICKET">
+                              <span className="flex items-center gap-2">
+                                <Ticket className="w-4 h-4" /> EVENT_TICKET (Events)
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="COUPON">
+                              <span className="flex items-center gap-2">
+                                <Tag className="w-4 h-4" /> COUPON (Offers)
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="program-timezone">Timezone</Label>
+                        <Select
+                          value={newProgram.timezone}
+                          onValueChange={(value) => setNewProgram({ ...newProgram, timezone: value })}
+                        >
+                          <SelectTrigger data-testid="select-program-timezone">
+                            <SelectValue placeholder="Select timezone" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="America/New_York">America/New_York (Eastern)</SelectItem>
+                            <SelectItem value="America/Chicago">America/Chicago (Central)</SelectItem>
+                            <SelectItem value="America/Denver">America/Denver (Mountain)</SelectItem>
+                            <SelectItem value="America/Los_Angeles">America/Los_Angeles (Pacific)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="earn-rate">Earn Rate Multiplier</Label>
+                        <Input
+                          id="earn-rate"
+                          type="number"
+                          min="1"
+                          max="1000"
+                          value={newProgram.earnRateMultiplier}
+                          onChange={(e) => setNewProgram({ ...newProgram, earnRateMultiplier: e.target.value })}
+                          data-testid="input-earn-rate"
+                        />
+                        <p className="text-xs text-muted-foreground">Points = Amount x Multiplier (default: 10)</p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setAddProgramDialogOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={addProgramMutation.isPending}
+                        data-testid="button-submit-program"
+                      >
+                        {addProgramMutation.isPending ? "Creating..." : "Create Program"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {programsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : programs.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {programs.map((program) => (
+                  <Card 
+                    key={program.id}
+                    className={`relative ${program.isPrimary ? "ring-2 ring-primary" : ""}`}
+                    data-testid={`program-card-${program.id}`}
+                  >
+                    {program.isPrimary && (
+                      <div className="absolute -top-2 -right-2">
+                        <Badge className="bg-primary text-primary-foreground">
+                          <Star className="w-3 h-3 mr-1" />
+                          Primary
+                        </Badge>
+                      </div>
+                    )}
+                    <CardContent className="pt-6 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-foreground truncate" data-testid={`text-program-name-${program.id}`}>
+                          {program.name}
+                        </h4>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className={getProtocolColor(program.protocol)}>
+                          {getProtocolIcon(program.protocol)}
+                          <span className="ml-1">{program.protocol}</span>
+                        </Badge>
+                        
+                        {program.isSuspended && (
+                          <Badge variant="destructive">Suspended</Badge>
+                        )}
+                        
+                        {program.passkitStatus === "provisioned" ? (
+                          <Badge variant="outline" className="border-green-500 text-green-600">
+                            <Check className="w-3 h-3 mr-1" />
+                            Synced
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-amber-500 text-amber-600">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            {program.passkitStatus}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        {program.dashboardSlug && (
+                          <p>Slug: <code className="bg-muted px-1 rounded">{program.dashboardSlug}</code></p>
+                        )}
+                        <p>Timezone: {program.timezone}</p>
+                        <p>Earn Rate: {program.earnRateMultiplier}x</p>
+                      </div>
+                      
+                      {program.enrollmentUrl && (
+                        <a 
+                          href={program.enrollmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                          data-testid={`link-program-enrollment-${program.id}`}
+                        >
+                          Open Enrollment
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No additional programs</p>
+                <p className="text-xs mt-1">Add MEMBERSHIP, EVENT_TICKET, or COUPON programs for this tenant</p>
               </div>
             )}
           </CardContent>
