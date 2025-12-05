@@ -6,6 +6,30 @@ import { jwtAuth } from "../middleware/auth.middleware";
 
 const router = Router();
 
+const requireAdminRole = (req: Request, res: Response, next: NextFunction) => {
+  const user = (req as any).user;
+  
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: { code: "UNAUTHORIZED", message: "Authentication required" },
+    });
+  }
+
+  const allowedRoles = ["SUPER_ADMIN", "PLATFORM_ADMIN"];
+  if (!allowedRoles.includes(user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { 
+        code: "FORBIDDEN", 
+        message: "Access denied. Campaign management requires SUPER_ADMIN or PLATFORM_ADMIN role." 
+      },
+    });
+  }
+
+  next();
+};
+
 const VALID_POSTCARD_SIZES = ["4x6", "6x4", "6x9", "9x6", "6x11", "11x6"] as const;
 const VALID_LETTER_SIZES = ["us_letter", "us_legal", "a4"] as const;
 const VALID_MAILING_CLASSES = ["standard_class", "first_class"] as const;
@@ -116,6 +140,7 @@ const validateCampaignOptions = (req: Request, res: Response, next: NextFunction
 router.post(
   "/preview-csv",
   jwtAuth,
+  requireAdminRole,
   upload.single("file"),
   campaignController.previewCsv.bind(campaignController)
 );
@@ -123,6 +148,7 @@ router.post(
 router.post(
   "/upload-csv",
   jwtAuth,
+  requireAdminRole,
   upload.single("file"),
   validateCampaignOptions,
   campaignController.uploadCsv.bind(campaignController)
@@ -131,18 +157,21 @@ router.post(
 router.get(
   "/templates",
   jwtAuth,
+  requireAdminRole,
   campaignController.getTemplates.bind(campaignController)
 );
 
 router.post(
   "/validate-client",
   jwtAuth,
+  requireAdminRole,
   campaignController.validateClient.bind(campaignController)
 );
 
 router.post(
   "/estimate-cost",
   jwtAuth,
+  requireAdminRole,
   validateCampaignOptions,
   campaignController.estimateCost.bind(campaignController)
 );
@@ -150,18 +179,21 @@ router.post(
 router.get(
   "/history",
   jwtAuth,
+  requireAdminRole,
   campaignController.getCampaignHistory.bind(campaignController)
 );
 
 router.get(
   "/:campaignId",
   jwtAuth,
+  requireAdminRole,
   campaignController.getCampaignDetails.bind(campaignController)
 );
 
 router.get(
   "/config/options",
   jwtAuth,
+  requireAdminRole,
   (_req: Request, res: Response) => {
     res.json({
       success: true,
