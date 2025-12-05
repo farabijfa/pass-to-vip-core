@@ -1,0 +1,82 @@
+﻿Based on the schemas and documentation provided (specifically v2.5.0 changes), I have performed a deep-dive analysis of the Client Management and Campaign Launcher modules.
+While the "Happy Path" is solid, the introduction of the Multi-Program Architecture (one client = multiple verticals) has introduced specific logic gaps in the Campaign Launcher that could lead to operational errors (e.g., enrolling users into the wrong vertical).
+Here is the critical analysis and the execution plan for the Replit Agent.
+1. Critical Gap Analysis
+Gap K: The "Program Ambiguity" in Campaign Launcher
+ * The Issue: Currently, the Campaign Launcher likely selects a Client (Tenant). However, since v2.5.0 allows a client to have a MEMBERSHIP program AND an EVENT_TICKET program, selecting just the "Client" is insufficient.
+ * The Risk: You might launch a "Summer Concert" postcard campaign, but the QR codes generated resolve to the client's default "Loyalty Membership" enrollment flow instead of the specific "Event Ticket" flow.
+ * The Fix: The Campaign Launcher UI must be a Two-Step Selector:
+   * Select Client (e.g., "Pizza Palace").
+   * Select Target Program (e.g., "Summer Bash - EVENT_TICKET").
+   * The claim_codes generated must be linked to that specific program_id.
+Gap L: Template-Protocol Mismatch
+ * The Issue: PostGrid templates are physically designed for specific outcomes. A "Membership Card" template usually looks different from a "Coupon" template.
+ * The Risk: The Admin might accidentally select a "Coupon" template for a "Membership" campaign.
+ * The Fix: We need to tag or filter PostGrid templates. Since PostGrid metadata is limited, the easier fix is Smart Defaults in the "Program Config" (Client Command Center). Each Program (Vertical) should store its own default postgrid_template_id, not just one per tenant.
+Gap M: The "Fronting Costs" Risk (Financial)
+ * The Issue: The campaign_runs table tracks estimated_cost_cents, but there is no ledger system. You are paying PostGrid immediately, but the client isn't billed until you manually invoice them.
+ * The Fix: While a full Stripe integration is heavy, we need a "Campaign Budget Limit" per client in the database to prevent an Admin from accidentally launching a $5,000 campaign for a client who only pays $500/month.
+2. Execution Plan for Replit Agent
+We will focus on upgrading the Campaign Launcher to be "Program-Aware" and enhancing Client Management to handle the Multi-Program setup.
+Step 1: Upgrade Client Command Center (Programs Management)
+We need to visualize and manage the multiple programs per tenant.
+Copy/Paste Instructions for Replit Agent:
+> "We are upgrading the Client Command Center for v2.5.0 Multi-Program support.
+> 1. Update Backend (server/controllers/admin.controller.ts):
+>  * Update getTenantProfile: Ensure it returns an array of programs associated with the userId (owner).
+>  * Create endpoint POST /api/client/admin/tenants/:userId/programs:
+>    * Input: name, protocol (MEMBERSHIP, EVENT_TICKET, COUPON), timezone.
+>    * Logic: Create a new row in programs table linked to this owner.
+>    * Auto-Provision: If protocol is MEMBERSHIP, call PassKitProvisionService.
+> 2. Update Frontend (client/src/pages/admin-client-details.tsx):
+>  * Add a 'Programs' Card: A list view showing all programs for this client.
+>  * Columns: Name, Protocol (use Badges: Blue for Membership, Orange for Ticket, Green for Coupon), Member Count, Status.
+>  * Action: Add a 'New Program' button that opens a modal to create a new vertical for this client.
+>  * Logic: When a user clicks a program in this list, open a 'Program Settings' drawer/modal to edit that specific program's earn_rate_multiplier or postgrid_template_id.
+>    "
+> 
+Step 2: Refactor Campaign Launcher (Gap K Fix)
+We must ensure the campaign targets the correct vertical.
+Copy/Paste Instructions for Replit Agent:
+> "We are fixing Gap K in the Campaign Launcher. The launcher must select a specific Program, not just a Client.
+> 1. Update Frontend (client/src/pages/campaigns.tsx):
+>  * State Change: Instead of just selectedClientId, add selectedProgramId.
+>  * UI Flow:
+>    * Dropdown 1: Select Client (fetches list of tenants).
+>    * Dropdown 2: Select Target Program (enabled only after Client is selected). Fetches programs for that client.
+>    * Display: Show the Protocol Badge (e.g., 'EVENT_TICKET') in the dropdown so the Admin knows what they are picking.
+> 2. Update Backend (server/services/campaign.service.ts):
+>  * Validation: Verify that the programId passed in the body actually belongs to the clientId (owner).
+>  * Logic: Ensure the generated claim_codes are inserted with the specific program_id.
+>  * QR Generation: The qr_url generated for the CSV must point to the specific enrollment_url of that selected program.
+>    "
+> 
+Step 3: Implement Safety Budgets (Gap M Fix)
+Copy/Paste Instructions for Replit Agent:
+> "We are adding financial safety rails (Gap M).
+> 1. Database Schema:
+>  * Check if admin_profiles or users table has a campaign_budget_cents column. If not, ask me to generate a migration. (Assume we will use a hardcoded safe limit of $500.00 for now in code).
+> 2. Update Logic (server/controllers/campaign.controller.ts):
+>  * In estimateCost, compare the total_estimated_cost against a safety limit (e.g., $1000).
+>  * Warning: If cost > $1000, require a specific confirmation string in the frontend modal (e.g., type 'CONFIRM CHARGE').
+>    "
+> 
+3. Visual Reference for the Agent
+When implementing the Campaign CSV Processor, the Agent should visualize the flow as:
+ * Ingestion: Admin Uploads CSV.
+ * Enrichment: System iterates rows -> Generates CLM code -> Assigns to Selected Program ID.
+ * Merge: System creates qr_url string (https://app.../claim/CLM-123).
+ * Handoff: System sends enriched CSV to PostGrid.
+4. Verification Checklist (Post-Code)
+Once the Replit Agent completes these tasks, verify:
+ * Multi-Vertical Test:
+   * Create a Client "Oakmont Events".
+   * Add Program A: "VIP Club" (Membership).
+   * Add Program B: "Summer Fest" (Event Ticket).
+   * Verify: Do they have different enrollment_urls in the database?
+ * Campaign Targeting:
+   * Go to Campaign Launcher.
+   * Select "Oakmont Events".
+   * Select "Summer Fest".
+   * Launch a 1-person campaign.
+   * Verify: Scan the resulting QR code. Does it take you to the "Summer Fest" pass, NOT the "VIP Club" pass?
