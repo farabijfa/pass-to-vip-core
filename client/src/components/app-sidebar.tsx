@@ -20,12 +20,12 @@ const menuItems = [
   { title: "Analytics", path: "/analytics", testId: "link-analytics" },
   { title: "Members", path: "/members", testId: "link-members" },
   { title: "Assets", path: "/assets", testId: "link-assets" },
-  { title: "Campaigns", path: "/campaigns", testId: "link-campaigns" },
   { title: "POS Simulator", path: "/pos", testId: "link-pos" },
 ];
 
 const adminItems = [
   { title: "Client Management", path: "/admin/clients", testId: "link-admin-clients" },
+  { title: "Campaign Launcher", path: "/admin/campaigns", testId: "link-admin-campaigns" },
 ];
 
 export function AppSidebar() {

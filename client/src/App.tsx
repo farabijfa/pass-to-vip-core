@@ -99,11 +99,6 @@ function Router() {
           <ProtectedRoute component={AssetsPage} />
         </AuthenticatedLayout>
       </Route>
-      <Route path="/campaigns">
-        <AuthenticatedLayout>
-          <ProtectedRoute component={CampaignsPage} />
-        </AuthenticatedLayout>
-      </Route>
       <Route path="/pos">
         <AuthenticatedLayout>
           <ProtectedRoute component={POSPage} />
@@ -112,6 +107,11 @@ function Router() {
       <Route path="/admin/clients">
         <AuthenticatedLayout>
           <ProtectedRoute component={AdminClientsPage} />
+        </AuthenticatedLayout>
+      </Route>
+      <Route path="/admin/campaigns">
+        <AuthenticatedLayout>
+          <ProtectedRoute component={CampaignsPage} />
         </AuthenticatedLayout>
       </Route>
       <Route path="/enroll/:slug" component={EnrollPage} />

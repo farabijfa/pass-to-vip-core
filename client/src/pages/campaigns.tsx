@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { isMockMode } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+
+interface ClientProgram {
+  id: string;
+  name: string;
+  passkit_program_id: string;
+  protocol: string;
+}
 
 interface PreviewData {
   total: number;
@@ -45,11 +54,42 @@ const POSTCARD_PRICING: Record<string, number> = {
   "11x6": 1.49,
 };
 
+async function fetchClients(): Promise<{ programs: ClientProgram[] }> {
+  if (isMockMode()) {
+    return {
+      programs: [
+        { id: "prog-1", name: "Demo Pizza Rewards", passkit_program_id: "pk_demo_1", protocol: "MEMBERSHIP" },
+        { id: "prog-2", name: "Coffee Club VIP", passkit_program_id: "pk_demo_2", protocol: "MEMBERSHIP" },
+        { id: "prog-3", name: "Stadium Events", passkit_program_id: "pk_demo_3", protocol: "EVENT_TICKET" },
+      ],
+    };
+  }
+  const token = localStorage.getItem("auth_token");
+  const response = await fetch("/api/client/admin/tenants", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const result = await response.json();
+  if (!result.success) throw new Error(result.error?.message || "Failed to fetch clients");
+  
+  const tenants = result.data?.tenants || [];
+  const programs: ClientProgram[] = tenants
+    .filter((t: any) => t.programs && t.programs.id && t.programs.name)
+    .map((t: any) => ({
+      id: t.programs.id,
+      name: t.programs.name,
+      passkit_program_id: t.programs.passkit_program_id || "",
+      protocol: t.programs.protocol || "MEMBERSHIP",
+    }));
+  
+  return { programs };
+}
+
 export default function CampaignsPage() {
-  const { user, mockMode } = useAuth();
+  const { user, mockMode, isAdmin } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [selectedClient, setSelectedClient] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -59,9 +99,31 @@ export default function CampaignsPage() {
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchResult, setLaunchResult] = useState<CampaignResult | null>(null);
 
+  const { data: clientsData, isLoading: isLoadingClients } = useQuery({
+    queryKey: ["admin-clients-for-campaigns"],
+    queryFn: fetchClients,
+    enabled: isAdmin,
+  });
+
+  const selectedProgram = clientsData?.programs.find(p => p.id === selectedClient);
+
   const estimatedCost = preview 
     ? (preview.valid * POSTCARD_PRICING[postcardSize]).toFixed(2)
     : "0.00";
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+          <LockIcon className="w-8 h-8 text-destructive" />
+        </div>
+        <h1 className="text-xl font-semibold text-foreground mb-2">Access Denied</h1>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Campaign Launcher is an admin-only feature. Please contact your administrator for access.
+        </p>
+      </div>
+    );
+  }
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -162,7 +224,7 @@ export default function CampaignsPage() {
   };
 
   const handleLaunchCampaign = async () => {
-    if (!file || !preview || !user) return;
+    if (!file || !preview || !selectedClient || !selectedProgram) return;
 
     setShowConfirmModal(false);
     setIsLaunching(true);
@@ -188,18 +250,18 @@ export default function CampaignsPage() {
         setLaunchResult(mockResult);
         toast({
           title: "Campaign Launched (Mock Mode)",
-          description: `${mockResult.summary.success} postcards simulated`,
+          description: `${mockResult.summary.success} postcards simulated for ${selectedProgram.name}`,
         });
         return;
       }
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("program_id", user.programId);
+      formData.append("program_id", selectedClient);
       formData.append("resource_type", "postcard");
       formData.append("size", postcardSize);
       formData.append("front_template_id", "tmpl_demo");
-      formData.append("description", `Campaign from ${file.name}`);
+      formData.append("description", `Campaign from ${file.name} for ${selectedProgram.name}`);
 
       const token = localStorage.getItem("auth_token");
       const response = await fetch("/api/campaign/upload-csv", {
@@ -249,15 +311,66 @@ export default function CampaignsPage() {
             Campaign Launcher
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Upload your customer list and send personalized postcards
+            Admin-only: Select a client and send personalized postcards
           </p>
         </div>
-        {mockMode && (
-          <Badge variant="outline" data-testid="badge-mock-mode">Test Mode</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {mockMode && (
+            <Badge variant="outline" data-testid="badge-mock-mode">Test Mode</Badge>
+          )}
+          <Badge variant="secondary">Admin</Badge>
+        </div>
       </div>
 
-      {launchResult ? (
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-foreground text-base">Select Client</CardTitle>
+          <CardDescription className="text-muted-foreground text-sm">
+            Choose which client program to launch the campaign for
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingClients ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <Select value={selectedClient} onValueChange={setSelectedClient}>
+              <SelectTrigger className="w-full" data-testid="select-client">
+                <SelectValue placeholder="Select a client program..." />
+              </SelectTrigger>
+              <SelectContent>
+                {clientsData?.programs.map((program) => (
+                  <SelectItem key={program.id} value={program.id}>
+                    {program.name} ({program.protocol})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {selectedProgram && (
+            <div className="mt-3 p-3 rounded-md bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">{selectedProgram.protocol}</Badge>
+                <span className="text-xs text-muted-foreground">
+                  PassKit ID: {selectedProgram.passkit_program_id}
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {!selectedClient && (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 mx-auto rounded-full bg-muted flex items-center justify-center mb-4">
+            <TargetIcon className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Select a client above to begin uploading a campaign
+          </p>
+        </div>
+      )}
+
+      {selectedClient && (launchResult ? (
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="text-foreground text-lg flex items-center gap-2">
@@ -508,7 +621,7 @@ export default function CampaignsPage() {
             </CardContent>
           </Card>
         </div>
-      )}
+      ))}
 
       <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
         <DialogContent>
@@ -562,6 +675,25 @@ function MailIcon({ className }: { className?: string }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <rect width="20" height="16" x="2" y="4" rx="2" />
       <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </svg>
+  );
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function TargetIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
     </svg>
   );
 }

@@ -20,6 +20,7 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Migration 018:** Billing and quotas system for Gap G (revenue leakage prevention)
 - **Gap H:** Program Assets page - QR code downloads, social sharing links (no backend changes needed)
 - **Gap I:** Campaign Launcher page - CSV upload with preview, cost estimation, and PostGrid integration
+- **Admin Campaign Launcher:** Moved Campaign Launcher to admin-only access with client selector dropdown for SUPER_ADMIN and PLATFORM_ADMIN roles
 
 ## System Architecture
 
@@ -47,6 +48,7 @@ Branding includes a "Pass To VIP" logo in the header and "Operated by Oakmont Lo
 - **Client Dashboard:** Features include a login page, a program overview dashboard, analytics (enrollment charts, retention), member management, program assets (QR codes, social links), a POS simulator, and an admin interface for client management (for `PLATFORM_ADMIN`).
 - **Program Assets Page:** Displays master enrollment QR code with high-res PNG (1024x1024) and SVG (vector) downloads. Includes copy-to-clipboard functionality for enrollment URLs for social media sharing.
 - **POS Simulator:** Offers dual scanning modes, supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`), includes a confirmation modal for redeem actions (Protocol C), and supports both "Spend Amount" (currency with multiplier) and "Direct Points" earning modes.
+- **Campaign Launcher (Admin-Only):** Admin interface at `/admin/campaigns` for launching direct mail campaigns. Admin selects client from dropdown, uploads CSV with customer addresses, previews contacts, estimates costs, and launches campaigns via PostGrid. Only accessible to SUPER_ADMIN and PLATFORM_ADMIN roles.
 - **API Endpoints:** Separated into Client Dashboard API (JWT protected), Admin API (API key protected), Internal POS API (JWT protected), External POS Webhooks (API key protected with idempotency), Public Enrollment API (Supabase ANON key with RLS), and PassKit Callbacks (HMAC signature verified).
 - **Role-Based Access Control:** Granular permissions define access levels for different user roles across various API endpoints.
 
@@ -124,7 +126,7 @@ Automation options:
 - `client/src/pages/dashboard.tsx` - Program overview
 - `client/src/pages/members.tsx` - Member management
 - `client/src/pages/assets.tsx` - Program Assets (QR codes, downloads, social links)
-- `client/src/pages/campaigns.tsx` - Campaign Launcher (CSV upload, preview, cost estimation, launch)
+- `client/src/pages/campaigns.tsx` - Campaign Launcher (admin-only with client selector, CSV upload, preview, cost estimation, launch)
 
 ### Documentation
 - `docs/SECURITY_VALIDATION.md` - Protocol D test procedures
