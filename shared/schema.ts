@@ -303,3 +303,123 @@ export type ApiResponse<T> = {
     processingTime?: number;
   };
 };
+
+// Campaign Tracking Types
+export const postcardSizeSchema = z.enum(["4x6", "6x4", "6x9", "9x6", "6x11", "11x6"]);
+export const letterSizeSchema = z.enum(["us_letter", "us_legal", "a4"]);
+export const mailingClassSchema = z.enum(["standard_class", "first_class"]);
+export const campaignResourceTypeSchema = z.enum(["postcard", "letter"]);
+export const campaignStatusSchema = z.enum(["pending", "processing", "completed", "failed", "cancelled"]);
+export const contactStatusSchema = z.enum(["pending", "processing", "sent", "delivered", "failed", "cancelled"]);
+export const campaignProtocolSchema = z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]);
+
+export type PostcardSize = z.infer<typeof postcardSizeSchema>;
+export type LetterSize = z.infer<typeof letterSizeSchema>;
+export type MailingClass = z.infer<typeof mailingClassSchema>;
+export type CampaignResourceType = z.infer<typeof campaignResourceTypeSchema>;
+export type CampaignStatus = z.infer<typeof campaignStatusSchema>;
+export type ContactStatus = z.infer<typeof contactStatusSchema>;
+export type CampaignProtocol = z.infer<typeof campaignProtocolSchema>;
+
+export const campaignRunSchema = z.object({
+  id: z.string().uuid(),
+  programId: z.string(),
+  clientId: z.string().optional(),
+  resourceType: campaignResourceTypeSchema,
+  size: z.union([postcardSizeSchema, letterSizeSchema]).optional(),
+  mailingClass: mailingClassSchema.default("standard_class"),
+  templateId: z.string().optional(),
+  frontTemplateId: z.string().optional(),
+  backTemplateId: z.string().optional(),
+  protocol: campaignProtocolSchema.optional(),
+  passkitCampaignId: z.string().optional(),
+  passkitOfferId: z.string().optional(),
+  description: z.string().optional(),
+  name: z.string().optional(),
+  status: campaignStatusSchema.default("pending"),
+  totalContacts: z.number().int().default(0),
+  successCount: z.number().int().default(0),
+  failedCount: z.number().int().default(0),
+  estimatedCostCents: z.number().int().optional(),
+  actualCostCents: z.number().int().optional(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+});
+
+export type CampaignRun = z.infer<typeof campaignRunSchema>;
+
+export const campaignContactSchema = z.object({
+  id: z.string().uuid(),
+  campaignRunId: z.string().uuid(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  addressLine1: z.string(),
+  addressLine2: z.string().optional(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  country: z.string().default("US"),
+  status: contactStatusSchema.default("pending"),
+  errorMessage: z.string().optional(),
+  postgridMailId: z.string().optional(),
+  postgridStatus: z.string().optional(),
+  estimatedDeliveryDate: z.string().optional(),
+  claimCode: z.string().optional(),
+  claimUrl: z.string().optional(),
+  passkitPassId: z.string().optional(),
+  passkitStatus: z.string().optional(),
+  createdAt: z.string(),
+  processedAt: z.string().optional(),
+  deliveredAt: z.string().optional(),
+});
+
+export type CampaignContact = z.infer<typeof campaignContactSchema>;
+
+export const createCampaignRequestSchema = z.object({
+  programId: z.string().min(1, "Program ID is required"),
+  clientId: z.string().optional(),
+  resourceType: campaignResourceTypeSchema,
+  size: z.string().optional(),
+  mailingClass: mailingClassSchema.default("standard_class"),
+  templateId: z.string().optional(),
+  frontTemplateId: z.string().optional(),
+  backTemplateId: z.string().optional(),
+  protocol: campaignProtocolSchema.optional(),
+  passkitCampaignId: z.string().optional(),
+  passkitOfferId: z.string().optional(),
+  description: z.string().optional(),
+  name: z.string().optional(),
+});
+
+export type CreateCampaignRequest = z.infer<typeof createCampaignRequestSchema>;
+
+export const postGridTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  type: z.enum(["letter", "postcard", "cheque"]).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export type PostGridTemplate = z.infer<typeof postGridTemplateSchema>;
+
+export const campaignCostEstimateSchema = z.object({
+  contactCount: z.number().int(),
+  resourceType: campaignResourceTypeSchema,
+  size: z.string().optional(),
+  mailingClass: mailingClassSchema,
+  unitCostCents: z.number().int(),
+  totalCostCents: z.number().int(),
+  breakdown: z.object({
+    printing: z.number().int(),
+    postage: z.number().int(),
+    processing: z.number().int(),
+  }).optional(),
+});
+
+export type CampaignCostEstimate = z.infer<typeof campaignCostEstimateSchema>;
