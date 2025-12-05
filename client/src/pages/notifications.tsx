@@ -259,7 +259,7 @@ function getSegmentColor(segment: string): string {
 }
 
 export default function NotificationsPage() {
-  const { mockMode } = useAuth();
+  const { mockMode, isAdmin, isLoading: authLoading, isLoggedIn } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -277,7 +277,7 @@ export default function NotificationsPage() {
   const [previewData, setPreviewData] = useState<SegmentPreview | null>(null);
   const [tierThresholds, setTierThresholds] = useState<TierThresholds | null>(null);
 
-  const tenantsQuery = useQuery<{ success: boolean; data: Tenant[] }>({
+  const tenantsQuery = useQuery<{ success: boolean; data: Tenant[]; error?: { code: string; message: string } }>({
     queryKey: ["/api/client/admin/tenants-with-programs"],
     queryFn: async () => {
       const res = await fetch("/api/client/admin/tenants-with-programs", {
@@ -285,9 +285,14 @@ export default function NotificationsPage() {
           Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
         },
       });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData?.error?.message || `HTTP ${res.status}`);
+      }
       return res.json();
     },
-    enabled: !mockMode,
+    enabled: !mockMode && isLoggedIn && isAdmin,
+    retry: 1,
   });
 
   const tenants = tenantsQuery.data?.data || [];
@@ -309,24 +314,8 @@ export default function NotificationsPage() {
       });
       return res.json();
     },
-    enabled: !!selectedTenantId && !!selectedProgram?.id,
+    enabled: !!selectedTenantId && !!selectedProgram?.id && isLoggedIn && isAdmin,
   });
-
-  useEffect(() => {
-    if (segmentsQuery.data?.data?.tierThresholds) {
-      setTierThresholds(segmentsQuery.data.data.tierThresholds);
-    }
-  }, [segmentsQuery.data]);
-
-  useEffect(() => {
-    if (selectedProgram) {
-      const segments = segmentsQuery.data?.data?.segments || [];
-      const firstSegment = segments[0];
-      if (firstSegment) {
-        setSelectedSegment(firstSegment.type);
-      }
-    }
-  }, [selectedProgram, segmentsQuery.data]);
 
   const logsQuery = useQuery<{ success: boolean; data: { logs: CampaignLog[] } }>({
     queryKey: ["/api/client/admin/notifications/logs"],
@@ -338,7 +327,7 @@ export default function NotificationsPage() {
       });
       return res.json();
     },
-    enabled: !mockMode,
+    enabled: !mockMode && isLoggedIn && isAdmin,
   });
 
   const previewMutation = useMutation({
@@ -411,6 +400,79 @@ export default function NotificationsPage() {
       });
     },
   });
+
+  useEffect(() => {
+    if (segmentsQuery.data?.data?.tierThresholds) {
+      setTierThresholds(segmentsQuery.data.data.tierThresholds);
+    }
+  }, [segmentsQuery.data]);
+
+  useEffect(() => {
+    if (selectedProgram) {
+      const segments = segmentsQuery.data?.data?.segments || [];
+      const firstSegment = segments[0];
+      if (firstSegment) {
+        setSelectedSegment(firstSegment.type);
+      }
+    }
+  }, [selectedProgram, segmentsQuery.data]);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <Shield className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Authentication Required</CardTitle>
+            <CardDescription>
+              Please log in to access the notifications page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button onClick={() => window.location.href = "/login"} data-testid="button-go-login">
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <Shield className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Admin Access Required</CardTitle>
+            <CardDescription>
+              This page is only available to Platform Administrators. Your current role does not have permission to access the notification system.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Button variant="outline" onClick={() => window.location.href = "/dashboard"} data-testid="button-go-dashboard">
+              Return to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -522,25 +584,60 @@ export default function NotificationsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="tenant">Select Tenant</Label>
-              <Select
-                value={selectedTenantId}
-                onValueChange={(value) => {
-                  setSelectedTenantId(value);
-                  setSelectedProgramId("");
-                  setSelectedSegment("ALL");
-                }}
-              >
-                <SelectTrigger id="tenant" data-testid="select-tenant">
-                  <SelectValue placeholder="Choose a tenant..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {tenantsQuery.isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-10 w-full" />
+                  <p className="text-xs text-muted-foreground">Loading tenants...</p>
+                </div>
+              ) : tenantsQuery.isError ? (
+                <div className="flex flex-col gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30">
+                  <div className="flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="text-sm font-medium">Failed to load tenants</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {tenantsQuery.error instanceof Error ? tenantsQuery.error.message : "An error occurred"}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => tenantsQuery.refetch()}
+                    data-testid="button-retry-tenants"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : tenants.length === 0 ? (
+                <div className="flex flex-col gap-2 p-3 rounded-md bg-muted/50 border border-border">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Building className="h-4 w-4" />
+                    <span className="text-sm">No tenants available</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Create a tenant first to send notifications.
+                  </p>
+                </div>
+              ) : (
+                <Select
+                  value={selectedTenantId}
+                  onValueChange={(value) => {
+                    setSelectedTenantId(value);
+                    setSelectedProgramId("");
+                    setSelectedSegment("ALL");
+                  }}
+                >
+                  <SelectTrigger id="tenant" data-testid="select-tenant">
+                    <SelectValue placeholder="Choose a tenant..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenants.map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {selectedTenant && (
