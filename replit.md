@@ -60,9 +60,16 @@ The system includes a React client portal with the following authenticated endpo
 - **GET /api/client/campaigns** - Returns campaign/notification history with success rates
 
 ### Admin API Endpoints (Requires SUPER_ADMIN or PLATFORM_ADMIN role)
-- **GET /api/client/admin/tenants** - Lists all client accounts and their programs
-- **POST /api/client/admin/provision** - Creates new client account with Supabase Auth user, program, and admin_profiles link
+- **GET /api/client/admin/tenants** - Lists all client accounts and their programs (includes dashboard_slug for unique URLs)
+- **POST /api/client/admin/provision** - Creates new client account with Supabase Auth user, program, admin_profiles link, and unique dashboard_slug
 - **DELETE /api/client/admin/tenants/:userId** - Removes client account and associated data
+
+### Public Enrollment API
+- **GET /api/enroll/:slug** - Public endpoint for enrollment via unique dashboard URL
+  - Returns program info (id, name, protocol, enrollment_url, is_suspended)
+  - Uses anon key only (no service role key for security)
+  - Returns 503 if anon key not configured or dashboard_slug column missing
+  - Returns 404 if slug not found
 
 ### Role-Based Access Control
 The system implements server-side role validation for admin operations:
@@ -86,6 +93,8 @@ The project includes an admin dashboard (located in `public/`) and a React clien
 - **Input Validation:** Prevents common vulnerabilities like SQL injection.
 - **Duplicate Prevention:** Ensures unique program and business name creation.
 - **Kill Switch:** Allows suspension of programs for immediate halting of POS transactions.
+- **Legacy Admin Pages:** HTML admin pages (`/admin/*`) are disabled in production mode; use React dashboard at `/admin/clients` instead.
+- **Anon Key for Public Endpoints:** Public enrollment API uses Supabase anon key only (no service role key exposure).
 
 ### Webhook Architecture (Vertical B/C)
 The PassKit enrollment webhook (`/api/webhooks/passkit/enrollment`) handles high-volume EDDM campaigns:
