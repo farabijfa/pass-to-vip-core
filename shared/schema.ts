@@ -426,3 +426,61 @@ export const campaignCostEstimateSchema = z.object({
 });
 
 export type CampaignCostEstimate = z.infer<typeof campaignCostEstimateSchema>;
+
+// ==========================================
+// External POS Webhook Types (v2.6.0)
+// For integrating external POS systems like Levi's
+// ==========================================
+
+export const posWebhookTransactionSchema = z.object({
+  externalMemberId: z.string().min(1, "External member ID is required"),
+  amountCents: z.number().int().positive("Amount must be positive (in cents)"),
+  currency: z.string().length(3).default("USD"),
+  customerEmail: z.string().email().optional(),
+  customerFirstName: z.string().optional(),
+  customerLastName: z.string().optional(),
+  customerPhone: z.string().optional(),
+  transactionId: z.string().optional(),
+  storeId: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+export type POSWebhookTransaction = z.infer<typeof posWebhookTransactionSchema>;
+
+export const posWebhookResponseSchema = z.object({
+  success: z.boolean(),
+  memberId: z.string().optional(),
+  externalMemberId: z.string().optional(),
+  tierLevel: z.enum(["TIER_1", "TIER_2", "TIER_3", "TIER_4"]).optional(),
+  tierName: z.string().optional(),
+  discountPercent: z.number().optional(),
+  spendTotalCents: z.number().int().optional(),
+  passUrl: z.string().url().optional(),
+  isNewMember: z.boolean().optional(),
+  tierUpgraded: z.boolean().optional(),
+  previousTier: z.string().optional(),
+  transactionId: z.string().optional(),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+  }).optional(),
+});
+
+export type POSWebhookResponse = z.infer<typeof posWebhookResponseSchema>;
+
+export const tierDiscountConfigSchema = z.object({
+  tier1DiscountPercent: z.number().min(0).max(100).default(0),
+  tier2DiscountPercent: z.number().min(0).max(100).default(5),
+  tier3DiscountPercent: z.number().min(0).max(100).default(10),
+  tier4DiscountPercent: z.number().min(0).max(100).default(15),
+});
+
+export type TierDiscountConfig = z.infer<typeof tierDiscountConfigSchema>;
+
+export const spendTierThresholdsSchema = z.object({
+  tier2ThresholdCents: z.number().int().positive().default(30000),
+  tier3ThresholdCents: z.number().int().positive().default(100000),
+  tier4ThresholdCents: z.number().int().positive().default(250000),
+});
+
+export type SpendTierThresholds = z.infer<typeof spendTierThresholdsSchema>;

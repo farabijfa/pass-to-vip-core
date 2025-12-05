@@ -83,4 +83,34 @@ router.patch(
   adminController.setPrimaryProgram.bind(adminController)
 );
 
+router.post(
+  "/programs/:programId/api-keys",
+  checkApiKey,
+  adminController.createPosApiKey.bind(adminController)
+);
+
+router.get(
+  "/programs/:programId/api-keys",
+  checkApiKey,
+  adminController.listPosApiKeys.bind(adminController)
+);
+
+router.delete(
+  "/programs/:programId/api-keys/:keyId",
+  checkApiKey,
+  adminController.revokePosApiKey.bind(adminController)
+);
+
+router.get(
+  "/programs/:programId/spend-tier-config",
+  checkApiKey,
+  adminController.getSpendTierConfig.bind(adminController)
+);
+
+router.patch(
+  "/programs/:programId/spend-tier-config",
+  checkApiKey,
+  adminController.updateSpendTierConfig.bind(adminController)
+);
+
 export default router;

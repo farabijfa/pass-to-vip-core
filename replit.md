@@ -1,13 +1,31 @@
 # Pass To VIP - Phygital Loyalty Ecosystem
 
-**Version:** 2.5.2  
+**Version:** 2.6.0  
 **Last Updated:** December 5, 2025  
 **Status:** Production Ready
 
 ## Overview
 Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge physical mail campaigns with digital wallet technology. It enables businesses in Retail, Hospitality, and Event Management to manage loyalty programs, engage with customers via direct mail, and integrate with Apple Wallet and Google Pay. The platform has undergone rigorous production validation, ensuring its commercial readiness. Its core purpose is to provide a robust, secure, and scalable solution for modern loyalty and customer engagement.
 
-## Recent Changes (v2.5.0)
+## Recent Changes (v2.6.0)
+- **External POS Webhook System**: API for external POS systems (e.g., Levi's) to trigger spend-based tier upgrades
+  - **Spend-Based Tier System**: Separate from points-based, uses cumulative purchase amounts (e.g., >$300 = Silver, >$1000 = Gold)
+  - **Migration 025**: Added spend tier thresholds (`spend_tier_2_threshold_cents`, `spend_tier_3_threshold_cents`, `spend_tier_4_threshold_cents`) and discount columns (`tier_1_discount_percent` through `tier_4_discount_percent`) to programs table; Added `spend_total_cents`, `spend_tier_level`, and `external_id` to passes_master table; Created `spend_ledger` table for transaction audit trail
+  - **POS API Key Management**: Admin endpoints to create, list, and revoke API keys per program
+  - **Idempotency Support**: Transaction webhook supports idempotency keys to prevent duplicate processing
+  - **Rate Limiting**: 100 requests per minute per API key
+- **External POS Webhook Endpoints** (API key authenticated via `x-api-key` header):
+  - `GET /api/pos/external/health` - Health check (no auth required)
+  - `POST /api/pos/external/transactions` - Process purchase transaction with amount, triggers tier recalculation
+  - `GET /api/pos/external/members/:externalId` - Lookup member by external ID
+- **Admin API Key Endpoints** (API key authenticated):
+  - `POST /api/admin/programs/:programId/api-keys` - Create new POS API key
+  - `GET /api/admin/programs/:programId/api-keys` - List all API keys for program
+  - `DELETE /api/admin/programs/:programId/api-keys/:keyId` - Revoke API key
+  - `GET /api/admin/programs/:programId/spend-tier-config` - Get spend tier thresholds and discounts
+  - `PATCH /api/admin/programs/:programId/spend-tier-config` - Update tier configuration
+
+## Previous Changes (v2.5.0)
 - **Multi-Program Architecture**: One client can now manage multiple programs (MEMBERSHIP, EVENT_TICKET, COUPON) simultaneously
 - **Programs Management UI**: New "Programs" section in Client Command Center with add/remove/set-primary capabilities
 - **Protocol-Specific Badges**: Visual differentiation of program types with icons and colors

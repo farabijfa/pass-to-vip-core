@@ -758,6 +758,263 @@ class AdminController {
       });
     }
   }
+
+  async createPosApiKey(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+      const { label } = req.body;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.createPosApiKey(programId, label);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "CREATE_KEY_FAILED",
+            message: result.error || "Failed to create API key",
+          },
+        });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          keyId: result.keyId,
+          apiKey: result.apiKey,
+          label: result.label,
+          message: "Store this API key securely. It will not be shown again.",
+        },
+      });
+
+    } catch (error) {
+      console.error("Create POS API key error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async listPosApiKeys(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.listPosApiKeys(programId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "LIST_KEYS_FAILED",
+            message: result.error || "Failed to list API keys",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          keys: result.keys,
+        },
+      });
+
+    } catch (error) {
+      console.error("List POS API keys error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async revokePosApiKey(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId, keyId } = req.params;
+
+      if (!programId || !keyId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "Program ID and Key ID are required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.revokePosApiKey(programId, keyId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "REVOKE_KEY_FAILED",
+            message: result.error || "Failed to revoke API key",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "API key revoked successfully",
+      });
+
+    } catch (error) {
+      console.error("Revoke POS API key error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async updateSpendTierConfig(req: Request, res: Response): Promise<void> {
+    const spendTierConfigSchema = z.object({
+      spendTier2ThresholdCents: z.number().int().positive().optional(),
+      spendTier3ThresholdCents: z.number().int().positive().optional(),
+      spendTier4ThresholdCents: z.number().int().positive().optional(),
+      tier1DiscountPercent: z.number().min(0).max(100).optional(),
+      tier2DiscountPercent: z.number().min(0).max(100).optional(),
+      tier3DiscountPercent: z.number().min(0).max(100).optional(),
+      tier4DiscountPercent: z.number().min(0).max(100).optional(),
+    });
+
+    try {
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const validation = spendTierConfigSchema.safeParse(req.body);
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid tier configuration",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.updateSpendTierConfig(programId, validation.data);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "UPDATE_CONFIG_FAILED",
+            message: result.error || "Failed to update tier configuration",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Spend tier configuration updated successfully",
+        data: result.config,
+      });
+
+    } catch (error) {
+      console.error("Update spend tier config error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getSpendTierConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.getSpendTierConfig(programId);
+
+      if (!result.success) {
+        res.status(404).json({
+          success: false,
+          error: {
+            code: "NOT_FOUND",
+            message: result.error || "Program not found",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.config,
+      });
+
+    } catch (error) {
+      console.error("Get spend tier config error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
 }
 
 export const adminController = new AdminController();

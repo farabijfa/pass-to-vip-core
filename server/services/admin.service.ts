@@ -1738,6 +1738,288 @@ class AdminService {
       };
     }
   }
+
+  async createPosApiKey(programId: string, label?: string): Promise<{
+    success: boolean;
+    keyId?: string;
+    apiKey?: string;
+    label?: string;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+      const crypto = await import("crypto");
+
+      const apiKey = `pk_live_${crypto.randomBytes(24).toString("hex")}`;
+      const keyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
+      const keyPrefix = apiKey.substring(0, 12);
+      const keyLabel = label || `API Key ${Date.now()}`;
+
+      const { data, error } = await client
+        .from("pos_api_keys")
+        .insert({
+          program_id: programId,
+          key_hash: keyHash,
+          key_prefix: keyPrefix,
+          label: keyLabel,
+          is_active: true,
+          created_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("❌ Create POS API key error:", error);
+        return { success: false, error: error.message };
+      }
+
+      console.log(`✅ POS API key created for program: ${programId}`);
+      return {
+        success: true,
+        keyId: data.id,
+        apiKey: apiKey,
+        label: keyLabel,
+      };
+    } catch (error) {
+      console.error("❌ Create POS API key error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async listPosApiKeys(programId: string): Promise<{
+    success: boolean;
+    keys?: Array<{
+      id: string;
+      keyPrefix: string;
+      label: string;
+      isActive: boolean;
+      lastUsedAt: string | null;
+      createdAt: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("pos_api_keys")
+        .select("id, key_prefix, label, is_active, last_used_at, created_at")
+        .eq("program_id", programId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("❌ List POS API keys error:", error);
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: true,
+        keys: (data || []).map(k => ({
+          id: k.id,
+          keyPrefix: k.key_prefix,
+          label: k.label,
+          isActive: k.is_active,
+          lastUsedAt: k.last_used_at,
+          createdAt: k.created_at,
+        })),
+      };
+    } catch (error) {
+      console.error("❌ List POS API keys error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async revokePosApiKey(programId: string, keyId: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { error } = await client
+        .from("pos_api_keys")
+        .update({ is_active: false })
+        .eq("id", keyId)
+        .eq("program_id", programId);
+
+      if (error) {
+        console.error("❌ Revoke POS API key error:", error);
+        return { success: false, error: error.message };
+      }
+
+      console.log(`✅ POS API key revoked: ${keyId}`);
+      return { success: true };
+    } catch (error) {
+      console.error("❌ Revoke POS API key error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async updateSpendTierConfig(programId: string, config: {
+    spendTier2ThresholdCents?: number;
+    spendTier3ThresholdCents?: number;
+    spendTier4ThresholdCents?: number;
+    tier1DiscountPercent?: number;
+    tier2DiscountPercent?: number;
+    tier3DiscountPercent?: number;
+    tier4DiscountPercent?: number;
+  }): Promise<{
+    success: boolean;
+    config?: any;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+      const updateData: Record<string, any> = {};
+
+      if (config.spendTier2ThresholdCents !== undefined) {
+        updateData.spend_tier_2_threshold_cents = config.spendTier2ThresholdCents;
+      }
+      if (config.spendTier3ThresholdCents !== undefined) {
+        updateData.spend_tier_3_threshold_cents = config.spendTier3ThresholdCents;
+      }
+      if (config.spendTier4ThresholdCents !== undefined) {
+        updateData.spend_tier_4_threshold_cents = config.spendTier4ThresholdCents;
+      }
+      if (config.tier1DiscountPercent !== undefined) {
+        updateData.tier_1_discount_percent = config.tier1DiscountPercent;
+      }
+      if (config.tier2DiscountPercent !== undefined) {
+        updateData.tier_2_discount_percent = config.tier2DiscountPercent;
+      }
+      if (config.tier3DiscountPercent !== undefined) {
+        updateData.tier_3_discount_percent = config.tier3DiscountPercent;
+      }
+      if (config.tier4DiscountPercent !== undefined) {
+        updateData.tier_4_discount_percent = config.tier4DiscountPercent;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return { success: false, error: "No valid config fields to update" };
+      }
+
+      const { data, error } = await client
+        .from("programs")
+        .update(updateData)
+        .eq("id", programId)
+        .select(`
+          spend_tier_2_threshold_cents,
+          spend_tier_3_threshold_cents,
+          spend_tier_4_threshold_cents,
+          tier_1_discount_percent,
+          tier_2_discount_percent,
+          tier_3_discount_percent,
+          tier_4_discount_percent
+        `)
+        .single();
+
+      if (error) {
+        console.error("❌ Update spend tier config error:", error);
+        return { success: false, error: error.message };
+      }
+
+      console.log(`✅ Spend tier config updated for program: ${programId}`);
+      return {
+        success: true,
+        config: {
+          spendTier2ThresholdCents: data.spend_tier_2_threshold_cents,
+          spendTier3ThresholdCents: data.spend_tier_3_threshold_cents,
+          spendTier4ThresholdCents: data.spend_tier_4_threshold_cents,
+          tier1DiscountPercent: data.tier_1_discount_percent,
+          tier2DiscountPercent: data.tier_2_discount_percent,
+          tier3DiscountPercent: data.tier_3_discount_percent,
+          tier4DiscountPercent: data.tier_4_discount_percent,
+        },
+      };
+    } catch (error) {
+      console.error("❌ Update spend tier config error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async getSpendTierConfig(programId: string): Promise<{
+    success: boolean;
+    config?: {
+      spendTier2ThresholdCents: number;
+      spendTier3ThresholdCents: number;
+      spendTier4ThresholdCents: number;
+      tier1DiscountPercent: number;
+      tier2DiscountPercent: number;
+      tier3DiscountPercent: number;
+      tier4DiscountPercent: number;
+      tierNames: {
+        tier1: string;
+        tier2: string;
+        tier3: string;
+        tier4: string;
+      };
+    };
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("programs")
+        .select(`
+          spend_tier_2_threshold_cents,
+          spend_tier_3_threshold_cents,
+          spend_tier_4_threshold_cents,
+          tier_1_discount_percent,
+          tier_2_discount_percent,
+          tier_3_discount_percent,
+          tier_4_discount_percent,
+          tier_1_name,
+          tier_2_name,
+          tier_3_name,
+          tier_4_name
+        `)
+        .eq("id", programId)
+        .single();
+
+      if (error) {
+        console.error("❌ Get spend tier config error:", error);
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: true,
+        config: {
+          spendTier2ThresholdCents: data.spend_tier_2_threshold_cents ?? 30000,
+          spendTier3ThresholdCents: data.spend_tier_3_threshold_cents ?? 100000,
+          spendTier4ThresholdCents: data.spend_tier_4_threshold_cents ?? 250000,
+          tier1DiscountPercent: data.tier_1_discount_percent ?? 0,
+          tier2DiscountPercent: data.tier_2_discount_percent ?? 5,
+          tier3DiscountPercent: data.tier_3_discount_percent ?? 10,
+          tier4DiscountPercent: data.tier_4_discount_percent ?? 15,
+          tierNames: {
+            tier1: data.tier_1_name || 'Bronze',
+            tier2: data.tier_2_name || 'Silver',
+            tier3: data.tier_3_name || 'Gold',
+            tier4: data.tier_4_name || 'Platinum',
+          },
+        },
+      };
+    } catch (error) {
+      console.error("❌ Get spend tier config error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 }
 
 export const adminService = new AdminService();

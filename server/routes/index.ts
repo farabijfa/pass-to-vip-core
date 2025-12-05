@@ -4,6 +4,7 @@ import passKitRoutes from "./passkit.routes";
 import postGridRoutes from "./postgrid.routes";
 import healthRoutes from "./health.routes";
 import posRoutes from "./pos.routes";
+import posWebhookRoutes from "./pos-webhook.routes";
 import campaignRoutes from "./campaign.routes";
 import adminRoutes from "./admin.routes";
 import notificationRoutes from "./notification.routes";
@@ -19,6 +20,8 @@ import { posRateLimiter, notifyRateLimiter } from "../middleware";
 const router = Router();
 
 router.use("/pos", posRateLimiter, posRoutes);
+
+router.use("/pos/external", posWebhookRoutes);
 
 router.use("/loyalty", loyaltyRoutes);
 
