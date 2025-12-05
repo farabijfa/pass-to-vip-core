@@ -58,6 +58,8 @@ export default function POSPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const startTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
   const handleLookup = useCallback(async (idToLookup?: string) => {
     const lookupId = idToLookup || externalId.trim();
@@ -193,14 +195,23 @@ export default function POSPage() {
   };
 
   const stopScanner = useCallback(async () => {
+    if (startTimeoutRef.current) {
+      clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+    }
+    
     if (scannerRef.current) {
       try {
         const state = scannerRef.current.getState();
-        if (state === 2) {
+        if (state !== 0) {
           await scannerRef.current.stop();
         }
       } catch (err) {
         console.log("Scanner stop error (likely already stopped):", err);
+      }
+      try {
+        scannerRef.current.clear();
+      } catch {
       }
       scannerRef.current = null;
     }
@@ -208,6 +219,11 @@ export default function POSPage() {
   }, []);
 
   const startScanner = useCallback(async () => {
+    const element = document.getElementById("qr-reader");
+    if (!element || !isMountedRef.current) {
+      return;
+    }
+    
     setCameraError(null);
     setIsScanning(true);
 
@@ -235,6 +251,7 @@ export default function POSPage() {
       );
     } catch (err) {
       console.error("Scanner error:", err);
+      if (!isMountedRef.current) return;
       setIsScanning(false);
       
       if (err instanceof Error) {
@@ -252,10 +269,10 @@ export default function POSPage() {
   }, [stopScanner, toast, handleLookup]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      if (scannerRef.current) {
-        stopScanner();
-      }
+      isMountedRef.current = false;
+      stopScanner();
     };
   }, [stopScanner]);
 
@@ -271,10 +288,16 @@ export default function POSPage() {
 
   useEffect(() => {
     if (isScannerOpen && !isScanning && !cameraError) {
-      const timer = setTimeout(() => {
+      startTimeoutRef.current = setTimeout(() => {
+        startTimeoutRef.current = null;
         startScanner();
       }, 300);
-      return () => clearTimeout(timer);
+      return () => {
+        if (startTimeoutRef.current) {
+          clearTimeout(startTimeoutRef.current);
+          startTimeoutRef.current = null;
+        }
+      };
     }
   }, [isScannerOpen, isScanning, cameraError, startScanner]);
 
