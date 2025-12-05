@@ -1,38 +1,28 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { enrollController } from "../controllers/enroll.controller";
-import { publicEnrollController } from "../controllers/public-enroll.controller";
-import rateLimit from "express-rate-limit";
 
 const router = Router();
-
-const enrollRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: {
-    success: false,
-    error: {
-      code: "RATE_LIMIT_EXCEEDED",
-      message: "Too many enrollment attempts. Please try again later.",
-    },
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 router.get(
   "/:slug",
   enrollController.getBySlug.bind(enrollController)
 );
 
-router.get(
-  "/program/:slug",
-  publicEnrollController.getProgramInfo.bind(publicEnrollController)
-);
-
 router.post(
   "/public",
-  enrollRateLimiter,
-  publicEnrollController.handlePublicEnrollment.bind(publicEnrollController)
+  (_req: Request, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error: {
+        code: "ENDPOINT_DEPRECATED",
+        message: "This enrollment method has been deprecated. Please use the PassKit enrollment form directly via the program's enrollment URL.",
+      },
+      metadata: {
+        deprecatedAt: "2025-12-05",
+        alternativeMethod: "Use GET /api/enroll/:slug to retrieve the program's enrollment_url, then redirect users to that PassKit-hosted form.",
+      },
+    });
+  }
 );
 
 export default router;
