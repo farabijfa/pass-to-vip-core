@@ -1,0 +1,57 @@
+﻿Based on your specific requirements and the provided schema/logic, here is the execution plan.
+We will split this into Phase 1: The Engine (Backend & Database) and Phase 2: The Interface & Automation (Frontend & Scripts).
+________________
+
+
+Phase 1: The Engine (Backend & Database)
+This phase builds the "Muscle." We will create the tables, the batch processing logic, and the "Birthday Bot" intelligence.
+Copy and paste the following instructions to your Replit Agent:
+"We are building the Notification Engine (Phase 1).
+1. Database Migration:
+* Create migrations/021_notification_system.sql.
+* Create notification_logs table: id (uuid), program_id (uuid), campaign_name (text), recipient_count (int), success_count (int), failed_count (int), message_content (text), target_segment (text), created_at (timestamp).
+* Create birthday_logs table: id (uuid), pass_id (uuid, FK to passes_master), program_id (uuid), year (int), created_at (timestamp). Add a unique constraint on (pass_id, year) to prevent double-gifting.
+* Add birthday_bot_enabled (bool, default false), birthday_reward_points (int, default 0), and birthday_message (text) columns to the programs table if they don't exist.
+2. Notification Service:
+* Create server/services/notification.service.ts.
+* Implement sendBroadcast(programId, message, segment, isDryRun):
+   * Query passes_master for ACTIVE members in the program. (If segment='VIP', filter by points_balance > 1000 or similar logic).
+   * Batching: Process in chunks of 50. Use a for...of loop with a slight delay (100ms) between batches.
+   * PassKit Call: For each member, call PassKitService.pushMessage(memberExternalId, message).
+   * Audit: Insert a record into notification_logs.
+   * Return: The JSON response format specified in the specs.
+* Implement runBirthdayBot(programId, dateOverride):
+   * Find all members in the program whose birth_date matches today (MM-DD).
+   * Filter out members who already exist in birthday_logs for the current year.
+   * Loop:
+      1. Call RPC process_membership_transaction (Atomic Earn) to award points.
+      2. Call PassKitService.pushMessage with the birthday_message.
+      3. Insert into birthday_logs.
+   * Return: Stats (eligible, processed, skipped).
+3. Controllers & Routes:
+* Create server/controllers/notification.controller.ts matching the defined endpoints (/broadcast, /broadcast/test, /birthday-run).
+* Create server/routes/notification.routes.ts.
+* Security: Use the existing verifyApiKey middleware for these routes (System-to-System access)."
+________________
+
+
+Critical Logic for notification.service.ts 
+The Replit agent might need help with the batching logic. Ensure the generated code looks like this:
+// Helper: Chunk array
+const chunk = (arr, size) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
+
+
+// Inside sendBroadcast
+const batches = chunk(members, 50);
+for (const batch of batches) {
+  await Promise.all(batch.map(async (member) => {
+    try {
+      await passKitService.pushMessage(member.external_id, message);
+      successCount++;
+    } catch (e) {
+      failedCount++;
+    }
+  }));
+  // Rate Limiting Delay
+  await new Promise(resolve => setTimeout(resolve, 200)); 
+}

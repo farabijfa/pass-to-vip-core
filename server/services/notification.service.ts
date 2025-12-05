@@ -3,6 +3,9 @@ import { config, isSupabaseConfigured } from "../config";
 import { passKitService } from "./passkit.service";
 
 const BATCH_SIZE = 50;
+const RATE_LIMIT_DELAY_MS = 200;
+
+type SegmentType = "ALL" | "VIP" | "DORMANT" | "GEO" | "CSV";
 
 interface PassRecord {
   id: string;
@@ -27,7 +30,13 @@ interface BirthdayUser {
 interface BroadcastOptions {
   programId: string;
   message: string;
-  segment?: "ALL" | "VIP";
+  segment?: SegmentType;
+  segmentConfig?: {
+    vipThreshold?: number;
+    dormantDays?: number;
+    zipCodes?: string[];
+    memberIds?: string[];
+  };
   campaignName?: string;
   dryRun?: boolean;
 }
@@ -42,11 +51,15 @@ interface BroadcastResult {
   dryRun?: boolean;
   messagePreview?: string;
   targetSegment?: string;
+  segmentDescription?: string;
   sampleRecipients?: Array<{
     id: string;
     email: string;
     firstName: string;
     lastName: string;
+    externalId?: string;
+    pointsBalance?: number;
+    lastUpdated?: string;
   }>;
 }
 
@@ -94,6 +107,21 @@ interface EligiblePass {
   birth_date: string;
 }
 
+interface SegmentStats {
+  segment: SegmentType;
+  description: string;
+  count: number;
+  sampleMembers: Array<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    pointsBalance?: number;
+    lastUpdated?: string;
+    zipCode?: string;
+  }>;
+}
+
 class NotificationService {
   private client: SupabaseClient | null = null;
 
@@ -110,49 +138,187 @@ class NotificationService {
     return this.client;
   }
 
-  private async processBatch<T, R>(
-    items: T[],
-    processor: (item: T) => Promise<R>
-  ): Promise<{ results: R[]; successCount: number; failedCount: number }> {
-    const results: R[] = [];
-    let successCount = 0;
-    let failedCount = 0;
+  private getSegmentDescription(segment: SegmentType, segmentConfig?: BroadcastOptions["segmentConfig"]): string {
+    switch (segment) {
+      case "ALL":
+        return "All active members with installed passes";
+      case "VIP":
+        return `High-value members (${segmentConfig?.vipThreshold || 500}+ points)`;
+      case "DORMANT":
+        return `Inactive members (no activity for ${segmentConfig?.dormantDays || 30}+ days)`;
+      case "GEO":
+        const zips = segmentConfig?.zipCodes?.join(", ") || "specified ZIP codes";
+        return `Members in ZIP codes: ${zips}`;
+      case "CSV":
+        return `Targeted list (${segmentConfig?.memberIds?.length || 0} member IDs)`;
+      default:
+        return "Custom segment";
+    }
+  }
 
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      const batch = items.slice(i, i + BATCH_SIZE);
-      console.log(`📦 Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(items.length / BATCH_SIZE)} (${batch.length} items)`);
+  async getSegmentPreview(
+    programId: string,
+    segment: SegmentType,
+    segmentConfig?: BroadcastOptions["segmentConfig"]
+  ): Promise<{ success: boolean; stats?: SegmentStats; error?: string }> {
+    try {
+      const client = this.getClient();
 
-      const batchResults = await Promise.all(
-        batch.map(async (item) => {
-          try {
-            const result = await processor(item);
-            successCount++;
-            return result;
-          } catch (error) {
-            failedCount++;
-            console.error("Batch item failed:", error);
-            return null as unknown as R;
-          }
-        })
-      );
+      const { data: programs, error: programError } = await client
+        .from("programs")
+        .select("id, passkit_program_id")
+        .eq("passkit_program_id", programId)
+        .limit(1);
 
-      results.push(...batchResults);
+      const program = programs?.[0];
 
-      if (i + BATCH_SIZE < items.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      if (programError || !program) {
+        return { success: false, error: `Program not found: ${programId}` };
       }
+
+      const passes = await this.getTargetedPasses(client, program.id, segment, segmentConfig);
+
+      const sampleMembers = passes.slice(0, 10).map((pass: any) => ({
+        id: pass.id,
+        email: pass.users?.email || pass.email || "unknown",
+        firstName: pass.users?.first_name || pass.first_name || "Unknown",
+        lastName: pass.users?.last_name || pass.last_name || "",
+        pointsBalance: pass.protocol_membership?.points_balance,
+        lastUpdated: pass.last_updated,
+        zipCode: pass.users?.zip,
+      }));
+
+      return {
+        success: true,
+        stats: {
+          segment,
+          description: this.getSegmentDescription(segment, segmentConfig),
+          count: passes.length,
+          sampleMembers,
+        },
+      };
+    } catch (error) {
+      console.error("Segment preview error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  private async getTargetedPasses(
+    client: SupabaseClient,
+    programInternalId: string,
+    segment: SegmentType,
+    segmentConfig?: BroadcastOptions["segmentConfig"]
+  ): Promise<any[]> {
+    const baseQuery = `
+      id,
+      passkit_internal_id,
+      external_id,
+      email,
+      first_name,
+      last_name,
+      last_updated,
+      programs:program_id (
+        passkit_program_id
+      ),
+      users:user_id (
+        email,
+        first_name,
+        last_name,
+        zip
+      ),
+      protocol_membership (
+        points_balance,
+        tier_points,
+        lifetime_points
+      )
+    `;
+
+    let query = client
+      .from("passes_master")
+      .select(baseQuery)
+      .eq("program_id", programInternalId)
+      .eq("status", "INSTALLED")
+      .eq("is_active", true);
+
+    const { data: allPasses, error } = await query;
+
+    if (error) {
+      throw new Error(`Database query error: ${error.message}`);
     }
 
-    return { results, successCount, failedCount };
+    if (!allPasses || allPasses.length === 0) {
+      return [];
+    }
+
+    switch (segment) {
+      case "VIP": {
+        const threshold = segmentConfig?.vipThreshold || 500;
+        return allPasses.filter((pass: any) => {
+          const points = pass.protocol_membership?.points_balance || 0;
+          return points >= threshold;
+        });
+      }
+
+      case "DORMANT": {
+        const days = segmentConfig?.dormantDays || 30;
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+
+        return allPasses.filter((pass: any) => {
+          if (!pass.last_updated) return true;
+          const lastUpdated = new Date(pass.last_updated);
+          return lastUpdated < cutoffDate;
+        });
+      }
+
+      case "GEO": {
+        const zipCodes = segmentConfig?.zipCodes || [];
+        if (zipCodes.length === 0) return allPasses;
+
+        return allPasses.filter((pass: any) => {
+          const userZip = pass.users?.zip || "";
+          return zipCodes.some((zip) => userZip.startsWith(zip));
+        });
+      }
+
+      case "CSV": {
+        const memberIds = segmentConfig?.memberIds || [];
+        if (memberIds.length === 0) return [];
+
+        const memberIdSet = new Set(memberIds.map((id) => id.toLowerCase().trim()));
+        return allPasses.filter((pass: any) => {
+          const externalId = (pass.external_id || "").toLowerCase().trim();
+          const passId = (pass.id || "").toLowerCase().trim();
+          return memberIdSet.has(externalId) || memberIdSet.has(passId);
+        });
+      }
+
+      case "ALL":
+      default:
+        return allPasses;
+    }
   }
 
   async sendBroadcast(options: BroadcastOptions): Promise<BroadcastResult> {
-    const { programId, message, segment = "ALL", campaignName, dryRun = false } = options;
-    
+    const {
+      programId,
+      message,
+      segment = "ALL",
+      segmentConfig,
+      campaignName,
+      dryRun = false,
+    } = options;
+
     console.log(`📢 Broadcast Request${dryRun ? " [DRY RUN]" : ""}`);
     console.log(`   Program: ${programId}`);
     console.log(`   Message: "${message}"`);
     console.log(`   Segment: ${segment}`);
+    if (segmentConfig) {
+      console.log(`   Config: ${JSON.stringify(segmentConfig)}`);
+    }
     if (dryRun) {
       console.log("   ⚠️ DRY RUN MODE - No messages will be sent");
     }
@@ -180,11 +346,9 @@ class NotificationService {
 
       const client = this.getClient();
 
-      // First, lookup the program by passkit_program_id to get internal ID
-      // Use .limit(1) instead of .single() to handle multiple programs with same passkit_program_id
       const { data: programs, error: programError } = await client
         .from("programs")
-        .select("id, passkit_program_id")
+        .select("id, passkit_program_id, name")
         .eq("passkit_program_id", programId)
         .limit(1);
 
@@ -201,50 +365,12 @@ class NotificationService {
         };
       }
 
-      console.log(`   Found program: ${program.id} (PassKit: ${program.passkit_program_id})`);
+      console.log(`   Found program: ${program.name} (${program.id})`);
 
-      // Query passes_master using program_id (internal ID) and join to get passkit_program_id
-      // Status should be "INSTALLED" (not "ACTIVE") and is_active should be true
-      // Note: tier_points is in protocol_membership, not passes_master - VIP filtering removed for now
-      let query = client
-        .from("passes_master")
-        .select(`
-          id,
-          passkit_internal_id,
-          external_id,
-          programs:program_id (
-            passkit_program_id
-          ),
-          users:user_id (
-            email,
-            first_name,
-            last_name
-          )
-        `)
-        .eq("program_id", program.id)
-        .eq("status", "INSTALLED")
-        .eq("is_active", true);
+      const passes = await this.getTargetedPasses(client, program.id, segment, segmentConfig);
 
-      // TODO: VIP segment filtering needs to join protocol_membership table
-      if (segment === "VIP") {
-        console.log("   ⚠️ VIP filtering not implemented - processing all members");
-      }
-
-      const { data: passes, error: queryError } = await query;
-
-      if (queryError) {
-        console.error("❌ Failed to query passes:", queryError.message);
-        return {
-          success: false,
-          totalRecipients: 0,
-          successCount: 0,
-          failedCount: 0,
-          error: `Database error: ${queryError.message}`,
-        };
-      }
-
-      if (!passes || passes.length === 0) {
-        console.log("⚠️ No active passes found for this program/segment");
+      if (passes.length === 0) {
+        console.log("⚠️ No members found for this segment");
         return {
           success: true,
           totalRecipients: 0,
@@ -253,22 +379,24 @@ class NotificationService {
           dryRun,
           messagePreview: message,
           targetSegment: segment,
+          segmentDescription: this.getSegmentDescription(segment, segmentConfig),
         };
       }
 
-      console.log(`📬 Found ${passes.length} eligible recipients`);
+      console.log(`📬 Found ${passes.length} eligible recipients for ${segment} segment`);
 
       if (dryRun) {
         const sampleRecipients = passes.slice(0, 5).map((pass: any) => ({
           id: pass.id,
           externalId: pass.external_id,
-          email: pass.users?.email || "unknown",
-          firstName: pass.users?.first_name || "Unknown",
-          lastName: pass.users?.last_name || "",
+          email: pass.users?.email || pass.email || "unknown",
+          firstName: pass.users?.first_name || pass.first_name || "Unknown",
+          lastName: pass.users?.last_name || pass.last_name || "",
+          pointsBalance: pass.protocol_membership?.points_balance,
+          lastUpdated: pass.last_updated,
         }));
 
         console.log(`✅ Dry run complete - ${passes.length} would receive the message`);
-        console.log(`   Sample recipients: ${sampleRecipients.map(r => r.externalId || r.email).join(", ")}`);
 
         return {
           success: true,
@@ -278,6 +406,7 @@ class NotificationService {
           dryRun: true,
           messagePreview: message,
           targetSegment: segment,
+          segmentDescription: this.getSegmentDescription(segment, segmentConfig),
           sampleRecipients,
         };
       }
@@ -302,7 +431,8 @@ class NotificationService {
               );
               return result.success;
             } catch (error) {
-              console.error(`   ❌ Failed to send to ${pass.email}:`, error);
+              const email = pass.users?.email || pass.email || pass.external_id;
+              console.error(`   ❌ Failed to send to ${email}:`, error);
               return false;
             }
           })
@@ -312,7 +442,7 @@ class NotificationService {
         failedCount += results.filter((r) => r === false).length;
 
         if (i + BATCH_SIZE < passes.length) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_DELAY_MS));
         }
       }
 
@@ -320,7 +450,7 @@ class NotificationService {
         .from("notification_logs")
         .insert({
           program_id: program.id,
-          campaign_name: campaignName || "Manual Broadcast",
+          campaign_name: campaignName || `${segment} Broadcast`,
           recipient_count: passes.length,
           success_count: successCount,
           failed_count: failedCount,
@@ -345,8 +475,8 @@ class NotificationService {
         dryRun: false,
         messagePreview: message,
         targetSegment: segment,
+        segmentDescription: this.getSegmentDescription(segment, segmentConfig),
       };
-
     } catch (error) {
       console.error("❌ Broadcast error:", error);
       return {
@@ -359,11 +489,28 @@ class NotificationService {
     }
   }
 
+  async sendToMemberIds(
+    programId: string,
+    memberIds: string[],
+    message: string,
+    campaignName?: string,
+    dryRun = false
+  ): Promise<BroadcastResult> {
+    return this.sendBroadcast({
+      programId,
+      message,
+      segment: "CSV",
+      segmentConfig: { memberIds },
+      campaignName: campaignName || "Targeted Campaign (CSV)",
+      dryRun,
+    });
+  }
+
   async runBirthdayBot(options: { dryRun?: boolean; testDate?: string } = {}): Promise<BirthdayBotResult> {
     const { dryRun = false, testDate } = options;
-    
+
     console.log(`🎂 Running Birthday Bot (Configuration-Driven)${dryRun ? " [DRY RUN]" : ""}...`);
-    
+
     const today = testDate ? new Date(testDate) : new Date();
     const month = today.getMonth() + 1;
     const day = today.getDate();
@@ -420,8 +567,6 @@ class NotificationService {
         console.log(`   Reward: ${program.birthday_reward_points} points`);
         console.log(`   Message: "${program.birthday_message}"`);
 
-        // Query passes using program_id FK, not passkit_program_id
-        // Also use status "INSTALLED" and is_active = true
         const { data: passes, error: passError } = await client
           .from("passes_master")
           .select(`
@@ -452,16 +597,18 @@ class NotificationService {
           continue;
         }
 
-        const eligiblePasses = passes.filter((pass: any) => {
-          const user = pass.users;
-          if (!user?.birth_date) return false;
-          const birthDate = new Date(user.birth_date);
-          return birthDate.getMonth() + 1 === month && birthDate.getDate() === day;
-        }).map((pass: any) => ({
-          ...pass,
-          birth_date: pass.users.birth_date,
-          user_id: pass.users.id,
-        }));
+        const eligiblePasses = passes
+          .filter((pass: any) => {
+            const user = pass.users;
+            if (!user?.birth_date) return false;
+            const birthDate = new Date(user.birth_date);
+            return birthDate.getMonth() + 1 === month && birthDate.getDate() === day;
+          })
+          .map((pass: any) => ({
+            ...pass,
+            birth_date: pass.users.birth_date,
+            user_id: pass.users.id,
+          }));
 
         if (eligiblePasses.length === 0) {
           console.log(`   🎈 No birthdays today for ${program.name}`);
@@ -485,7 +632,9 @@ class NotificationService {
 
           try {
             if (dryRun) {
-              console.log(`   🔍 [DRY RUN] Would gift ${pass.first_name} ${pass.last_name} (${pass.email}) - ${program.birthday_reward_points} points`);
+              console.log(
+                `   🔍 [DRY RUN] Would gift ${pass.first_name} ${pass.last_name} (${pass.email}) - ${program.birthday_reward_points} points`
+              );
               detail.status = "success";
               detail.reason = "Dry run - would be processed";
               details.push(detail);
@@ -554,7 +703,6 @@ class NotificationService {
             detail.reason = "Points awarded and notification sent";
             details.push(detail);
             totalSuccess++;
-
           } catch (error) {
             console.error(`   ❌ Error processing ${pass.email}:`, error);
             detail.reason = `Error: ${error instanceof Error ? error.message : "Unknown"}`;
@@ -565,7 +713,7 @@ class NotificationService {
       }
 
       let campaignLogId: string | undefined;
-      
+
       if (!dryRun) {
         const { data: logData, error: logError } = await client
           .from("notification_logs")
@@ -604,7 +752,6 @@ class NotificationService {
         dryRun,
         details: dryRun ? details : undefined,
       };
-
     } catch (error) {
       console.error("❌ Birthday Bot error:", error);
       return {
@@ -621,13 +768,22 @@ class NotificationService {
     }
   }
 
-  async getCampaignLogs(programId?: string, limit = 50): Promise<{ success: boolean; logs?: any[]; error?: string }> {
+  async getCampaignLogs(
+    programId?: string,
+    limit = 50
+  ): Promise<{ success: boolean; logs?: any[]; error?: string }> {
     try {
       const client = this.getClient();
 
       let query = client
         .from("notification_logs")
-        .select("*")
+        .select(`
+          *,
+          programs:program_id (
+            name,
+            passkit_program_id
+          )
+        `)
         .order("created_at", { ascending: false })
         .limit(limit);
 
@@ -642,7 +798,78 @@ class NotificationService {
       }
 
       return { success: true, logs: data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 
+  async getAvailableSegments(programId: string): Promise<{
+    success: boolean;
+    segments?: Array<{
+      type: SegmentType;
+      name: string;
+      description: string;
+      estimatedCount?: number;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data: programs, error: programError } = await client
+        .from("programs")
+        .select("id")
+        .eq("passkit_program_id", programId)
+        .limit(1);
+
+      const program = programs?.[0];
+
+      if (programError || !program) {
+        return { success: false, error: `Program not found: ${programId}` };
+      }
+
+      const allPasses = await this.getTargetedPasses(client, program.id, "ALL");
+      const vipPasses = await this.getTargetedPasses(client, program.id, "VIP", { vipThreshold: 500 });
+      const dormantPasses = await this.getTargetedPasses(client, program.id, "DORMANT", { dormantDays: 30 });
+
+      return {
+        success: true,
+        segments: [
+          {
+            type: "ALL",
+            name: "All Members",
+            description: "All active members with installed passes",
+            estimatedCount: allPasses.length,
+          },
+          {
+            type: "VIP",
+            name: "VIP Members",
+            description: "High-value members with 500+ points",
+            estimatedCount: vipPasses.length,
+          },
+          {
+            type: "DORMANT",
+            name: "Dormant Members",
+            description: "Members with no activity for 30+ days",
+            estimatedCount: dormantPasses.length,
+          },
+          {
+            type: "GEO",
+            name: "Geographic",
+            description: "Target members by ZIP code",
+            estimatedCount: undefined,
+          },
+          {
+            type: "CSV",
+            name: "Upload List",
+            description: "Target specific member IDs from CSV",
+            estimatedCount: undefined,
+          },
+        ],
+      };
     } catch (error) {
       return {
         success: false,

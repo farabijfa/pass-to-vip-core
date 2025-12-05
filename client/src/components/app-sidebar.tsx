@@ -26,6 +26,7 @@ const menuItems = [
 const adminItems = [
   { title: "Client Management", path: "/admin/clients", testId: "link-admin-clients" },
   { title: "Campaign Launcher", path: "/admin/campaigns", testId: "link-admin-campaigns" },
+  { title: "Push Notifications", path: "/admin/notifications", testId: "link-admin-notifications" },
 ];
 
 export function AppSidebar() {

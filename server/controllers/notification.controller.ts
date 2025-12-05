@@ -2,17 +2,41 @@ import type { Request, Response } from "express";
 import { notificationService } from "../services/notification.service";
 import { z } from "zod";
 
+const segmentSchema = z.enum(["ALL", "VIP", "DORMANT", "GEO", "CSV"]);
+
+const segmentConfigSchema = z.object({
+  vipThreshold: z.number().min(0).optional(),
+  dormantDays: z.number().min(1).max(365).optional(),
+  zipCodes: z.array(z.string()).optional(),
+  memberIds: z.array(z.string()).optional(),
+});
+
 const broadcastSchema = z.object({
   programId: z.string().min(1, "Program ID is required"),
   message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
-  segment: z.enum(["ALL", "VIP"]).optional(),
+  segment: segmentSchema.optional(),
+  segmentConfig: segmentConfigSchema.optional(),
   campaignName: z.string().optional(),
 });
 
 const broadcastTestSchema = z.object({
   programId: z.string().min(1, "Program ID is required"),
   message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
-  segment: z.enum(["ALL", "VIP"]).optional(),
+  segment: segmentSchema.optional(),
+  segmentConfig: segmentConfigSchema.optional(),
+});
+
+const csvBroadcastSchema = z.object({
+  programId: z.string().min(1, "Program ID is required"),
+  message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
+  memberIds: z.array(z.string()).min(1, "At least one member ID required"),
+  campaignName: z.string().optional(),
+});
+
+const segmentPreviewSchema = z.object({
+  programId: z.string().min(1, "Program ID is required"),
+  segment: segmentSchema,
+  segmentConfig: segmentConfigSchema.optional(),
 });
 
 class NotificationController {
@@ -34,7 +58,7 @@ class NotificationController {
         return;
       }
 
-      const { programId, message, segment, campaignName } = validation.data;
+      const { programId, message, segment, segmentConfig, campaignName } = validation.data;
 
       console.log(`📢 Broadcast request received for program: ${programId}`);
 
@@ -42,6 +66,7 @@ class NotificationController {
         programId,
         message,
         segment,
+        segmentConfig,
         campaignName,
         dryRun: false,
       });
@@ -67,12 +92,81 @@ class NotificationController {
           successCount: result.successCount,
           failedCount: result.failedCount,
           campaignLogId: result.campaignLogId,
+          segment: result.targetSegment,
+          segmentDescription: result.segmentDescription,
         },
         metadata: { processingTime },
       });
-
     } catch (error) {
       console.error("Broadcast controller error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+    }
+  }
+
+  async sendCsvBroadcast(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const validation = csvBroadcastSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { programId, message, memberIds, campaignName } = validation.data;
+
+      console.log(`📢 CSV Broadcast request for ${memberIds.length} members in program: ${programId}`);
+
+      const result = await notificationService.sendToMemberIds(
+        programId,
+        memberIds,
+        message,
+        campaignName,
+        false
+      );
+
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "CSV_BROADCAST_FAILED",
+            message: result.error,
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          totalRecipients: result.totalRecipients,
+          successCount: result.successCount,
+          failedCount: result.failedCount,
+          campaignLogId: result.campaignLogId,
+          targetedCount: memberIds.length,
+          matchedCount: result.totalRecipients,
+        },
+        metadata: { processingTime },
+      });
+    } catch (error) {
+      console.error("CSV Broadcast controller error:", error);
       res.status(500).json({
         success: false,
         error: {
@@ -117,7 +211,6 @@ class NotificationController {
         },
         metadata: { processingTime },
       });
-
     } catch (error) {
       console.error("Birthday Bot controller error:", error);
       res.status(500).json({
@@ -148,7 +241,7 @@ class NotificationController {
         return;
       }
 
-      const { programId, message, segment } = validation.data;
+      const { programId, message, segment, segmentConfig } = validation.data;
 
       console.log(`🧪 Broadcast TEST (Dry Run) for program: ${programId}`);
 
@@ -156,6 +249,7 @@ class NotificationController {
         programId,
         message,
         segment,
+        segmentConfig,
         dryRun: true,
       });
 
@@ -180,11 +274,11 @@ class NotificationController {
           totalRecipients: result.totalRecipients,
           messagePreview: result.messagePreview,
           targetSegment: result.targetSegment,
+          segmentDescription: result.segmentDescription,
           sampleRecipients: result.sampleRecipients,
         },
         metadata: { processingTime, dryRun: true },
       });
-
     } catch (error) {
       console.error("Broadcast test error:", error);
       res.status(500).json({
@@ -202,9 +296,9 @@ class NotificationController {
 
     try {
       const { testDate } = req.query;
-      
+
       console.log("🧪 Birthday Bot TEST (Dry Run) triggered via API");
-      
+
       let validatedTestDate: string | undefined;
       if (testDate) {
         const parsed = new Date(testDate as string);
@@ -240,13 +334,12 @@ class NotificationController {
           alreadyGifted: result.alreadyGifted,
           details: result.details,
         },
-        metadata: { 
+        metadata: {
           processingTime,
           dryRun: true,
           testDate: testDate || new Date().toISOString().split("T")[0],
         },
       });
-
     } catch (error) {
       console.error("Birthday Bot test error:", error);
       res.status(500).json({
@@ -286,9 +379,106 @@ class NotificationController {
           count: result.logs?.length || 0,
         },
       });
-
     } catch (error) {
       console.error("Get campaign logs error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+    }
+  }
+
+  async getSegmentPreview(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const validation = segmentPreviewSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { programId, segment, segmentConfig } = validation.data;
+
+      const result = await notificationService.getSegmentPreview(programId, segment, segmentConfig);
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "SEGMENT_PREVIEW_FAILED",
+            message: result.error,
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.stats,
+        metadata: { processingTime },
+      });
+    } catch (error) {
+      console.error("Segment preview error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+    }
+  }
+
+  async getAvailableSegments(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.query;
+
+      if (!programId || typeof programId !== "string") {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "programId query parameter is required",
+          },
+        });
+        return;
+      }
+
+      const result = await notificationService.getAvailableSegments(programId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "FETCH_SEGMENTS_FAILED",
+            message: result.error,
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          segments: result.segments,
+        },
+      });
+    } catch (error) {
+      console.error("Get available segments error:", error);
       res.status(500).json({
         success: false,
         error: {

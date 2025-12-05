@@ -18,6 +18,7 @@ import CampaignsPage from "@/pages/campaigns";
 import POSPage from "@/pages/pos";
 import AdminClientsPage from "@/pages/admin-clients";
 import AdminClientDetailsPage from "@/pages/admin-client-details";
+import NotificationsPage from "@/pages/notifications";
 import EnrollPage from "@/pages/enroll";
 import NotFound from "@/pages/not-found";
 
@@ -118,6 +119,11 @@ function Router() {
       <Route path="/admin/campaigns">
         <AuthenticatedLayout>
           <ProtectedRoute component={CampaignsPage} />
+        </AuthenticatedLayout>
+      </Route>
+      <Route path="/admin/notifications">
+        <AuthenticatedLayout>
+          <ProtectedRoute component={NotificationsPage} />
         </AuthenticatedLayout>
       </Route>
       <Route path="/enroll/:slug" component={EnrollPage} />

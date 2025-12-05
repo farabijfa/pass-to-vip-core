@@ -1,0 +1,122 @@
+﻿Based on your current system architecture and the schemas provided, here is the strategic analysis and execution plan for the Notification Engine.
+This is indeed the "money-making" layer. Once a pass is in a wallet (Apple/Google), you have a free, direct marketing channel that bypasses email spam filters and SMS costs.
+1. The Strategy: "Surgical" Push Notifications
+You correctly identified that the Replit engine should not do heavy data analysis. Its job is to be the Executioner, not the Analyst. We will leverage Supabase's SQL power to segment users and PassKit's infrastructure to deliver the payload.
+Core Capabilities Needed:
+1. Audience Builder (The "Who"): Using SQL to slice your passes_master and users tables.
+2. Campaign Manager (The "What"): Defining the message content and lock-screen alerts.
+3. Execution Engine (The "How"): A batch processor that tells PassKit "Update these 5,000 passes."
+________________
+
+
+2. High-Value Targeting Scenarios (Money Makers)
+Based on your schema, here are the three most profitable segmentation strategies you can implement immediately:
+Scenario
+	Segment Logic (SQL)
+	Notification Message
+	Revenue Goal
+	The "Slumber" Wake-up
+	last_updated < NOW() - INTERVAL '30 days'
+	"We miss you! 🥺 You have {points} points waiting. Visit us this weekend for double points!"
+	Reactivate churn risk customers.
+	The "Whale" Reward
+	points_balance > 500
+	"VIP Status Unlocked: Show this pass at the bar for a complimentary appetizer tonight."
+	Reward high spenders (retention).
+	The "Local" Blast
+	zip = '90210' (from Vertical A data)
+	"Flash Sale in Beverly Hills! 50% off until 5 PM today only."
+	Drive foot traffic to specific locations.
+	________________
+
+
+3. Architecture for the Notification Engine
+We will build a "Batch Notification Service" that accepts a target list and a message, then processes it.
+The Gap in Current Schema
+Your current campaign_runs table is designed for Physical Mail (PostGrid). We need a lightweight structure for Digital Pushes.
+Proposed Schema Addition (Migration 021):
+SQL
+CREATE TABLE push_campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  message_text TEXT NOT NULL, -- The text on the lock screen
+  target_query TEXT, -- Description of who (e.g., "All Active Members")
+  csv_upload_url TEXT, -- If manual CSV used
+  status TEXT DEFAULT 'PENDING', -- PENDING, PROCESSING, COMPLETED
+  sent_count INTEGER DEFAULT 0,
+  failed_count INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+________________
+
+
+4. Execution Plan for Replit Agent
+We will keep this simple: Upload CSV -> Send Push. This avoids building a complex UI Query Builder for now.
+Phase 1: The CSV "Hit List" Processor
+The Admin uploads a CSV containing just external_id (Member ID). The system sends the message to those specific IDs.
+Step 1: Backend Service (server/services/notification.service.ts)
+"Create a Notification Service.
+1. Function: sendBatchPush(programId, memberIds[], message).
+2. Logic:
+   * Loop through the memberIds.
+   * For each, look up their passkit_internal_id from passes_master.
+   * Call PassKit API to update the pass.
+   * Crucial: PassKit updates are usually silent. To force a notification, you must update a field and set the changeMessage.
+   * Technical Detail: Update a 'marketing_message' field on the pass payload and set changeMessage: "%@" so the dynamic text appears on the lock screen.
+3. Rate Limiting: Use p-limit or batching (e.g., 50 requests per second) to avoid hitting PassKit limits."
+Step 2: The Controller (server/controllers/notification.controller.ts)
+"Create sendTargetedPush endpoint.
+* Input: CSV file (Column A: member_id) + message (Body).
+* Process: Parse CSV, extract IDs, call the Service.
+* Response: { success: true, targeted: 500 }."
+Phase 2: The "Smart" Segment (SQL-Based)
+Instead of a CSV, we run a query.
+Step 3: Frontend UI (client/src/pages/notifications.tsx)
+"Create a Notification Manager.
+* Input: 'Notification Message' (Text Area).
+* Targeting Radio Group:
+   * [x] All Active Members
+   * [ ] Upload CSV (Show file input)
+* Button: 'Send Push Blast'.
+* Safety: Add a confirmation modal showing 'This will buzz X phones. Are you sure?'"
+________________
+
+
+5. Replit Agent Instruction Block
+Copy this to Replit to build the engine:
+Plaintext
+We are building the "Money Maker" feature: Digital Push Notifications.
+
+
+1.  **Database Migration:**
+    * Create `migrations/021_push_campaigns.sql`.
+    * Create table `push_campaigns` (id, program_id, name, message, status, recipient_count, created_at).
+
+
+2.  **Backend Service (server/services/notification.service.ts):**
+    * Implement `sendPushToMembers(programId, memberIds[], message)`.
+    * **PassKit Integration:** Use the PassKit Members API. You need to update the member record.
+    * **The Trick:** To trigger a notification on the phone, update the `metaData` or a designated `marketingMessage` field on the pass, and ensure the push payload includes the change message string.
+    * **Batching:** Process requests in chunks of 10 to prevent API throttling.
+
+
+3.  **Controller (server/controllers/notification.controller.ts):**
+    * `POST /api/notifications/blast`.
+    * Accepts `programId`, `message`, and optional `csvFile`.
+    * If `csvFile` is present, parse `member_id` from it.
+    * If `csvFile` is missing, query Supabase for ALL members with `status = 'ACTIVE'` for that program.
+    * Insert record into `push_campaigns`.
+    * Trigger the service asynchronously (fire and forget, or use a worker if possible).
+
+
+4.  **Frontend (client/src/pages/notifications.tsx):**
+    * Simple UI: Message Input, toggle for "All Members" vs "Upload CSV", and a history table showing previous pushes from `push_campaigns`.
+
+
+6. Operational Note (The "Gotcha")
+PassKit Logic: Simply "updating a pass" doesn't always buzz the phone. Apple Wallet is strict.
+* To guarantee a buzz: You often need to update a field that is visible on the pass (like a "Latest News" back-field) and set the changeMessage in the API call to something like New Offer: %@.
+* Recommendation: In your PassKit Template Design, add a text field on the back called "Latest Offer". Your API call will update that field with your message text. This ensures the user sees the notification AND can find the details on the back of the pass later.

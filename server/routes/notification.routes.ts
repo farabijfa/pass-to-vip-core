@@ -17,6 +17,24 @@ router.post(
 );
 
 router.post(
+  "/broadcast/csv",
+  checkApiKey,
+  notificationController.sendCsvBroadcast.bind(notificationController)
+);
+
+router.post(
+  "/segment/preview",
+  checkApiKey,
+  notificationController.getSegmentPreview.bind(notificationController)
+);
+
+router.get(
+  "/segments",
+  checkApiKey,
+  notificationController.getAvailableSegments.bind(notificationController)
+);
+
+router.post(
   "/birthday-run",
   checkApiKey,
   notificationController.runBirthdayBot.bind(notificationController)
