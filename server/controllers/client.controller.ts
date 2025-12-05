@@ -1373,6 +1373,83 @@ class ClientController {
       });
     }
   }
+
+  async updateProgramTierThresholdsAsAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { programId } = req.params;
+      const { tierBronzeMax, tierSilverMax, tierGoldMax } = req.body;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      if (tierBronzeMax === undefined || tierSilverMax === undefined || tierGoldMax === undefined) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "All tier thresholds are required (tierBronzeMax, tierSilverMax, tierGoldMax)",
+          },
+        });
+        return;
+      }
+
+      if (tierBronzeMax >= tierSilverMax || tierSilverMax >= tierGoldMax) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_THRESHOLDS",
+            message: "Tier thresholds must be ascending: Bronze < Silver < Gold",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.updateProgramTierThresholds(programId, {
+        tierBronzeMax,
+        tierSilverMax,
+        tierGoldMax,
+      });
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        res.status(isNotFound ? 404 : 400).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : "UPDATE_FAILED",
+            message: result.error || "Failed to update tier thresholds",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Tier thresholds updated successfully",
+        data: result.data,
+      });
+
+    } catch (error) {
+      console.error("Update tier thresholds error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
 }
 
 export const clientController = new ClientController();

@@ -90,6 +90,9 @@ interface TenantProgram {
   postgridTemplateId: string | null;
   memberLimit: number | null;
   campaignBudgetCents: number;
+  tierBronzeMax: number;
+  tierSilverMax: number;
+  tierGoldMax: number;
   createdAt: string;
 }
 
@@ -1197,6 +1200,9 @@ class AdminService {
           postgrid_template_id,
           member_limit,
           campaign_budget_cents,
+          tier_bronze_max,
+          tier_silver_max,
+          tier_gold_max,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1223,6 +1229,9 @@ class AdminService {
         postgridTemplateId: p.postgrid_template_id,
         memberLimit: p.member_limit,
         campaignBudgetCents: p.campaign_budget_cents ?? 50000,
+        tierBronzeMax: p.tier_bronze_max ?? 999,
+        tierSilverMax: p.tier_silver_max ?? 4999,
+        tierGoldMax: p.tier_gold_max ?? 14999,
         createdAt: p.created_at,
       }));
 
@@ -1409,6 +1418,9 @@ class AdminService {
           postgrid_template_id,
           member_limit,
           campaign_budget_cents,
+          tier_bronze_max,
+          tier_silver_max,
+          tier_gold_max,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1440,11 +1452,80 @@ class AdminService {
           postgridTemplateId: program.postgrid_template_id,
           memberLimit: program.member_limit,
           campaignBudgetCents: program.campaign_budget_cents ?? 50000,
+          tierBronzeMax: program.tier_bronze_max ?? 999,
+          tierSilverMax: program.tier_silver_max ?? 4999,
+          tierGoldMax: program.tier_gold_max ?? 14999,
           createdAt: program.created_at,
         },
       };
 
     } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async updateProgramTierThresholds(
+    programId: string,
+    thresholds: {
+      tierBronzeMax: number;
+      tierSilverMax: number;
+      tierGoldMax: number;
+    }
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
+    console.log(`🔄 Updating tier thresholds for program: ${programId}`);
+
+    try {
+      const client = this.getClient();
+
+      // Verify the program exists and is MEMBERSHIP protocol
+      const { data: program, error: fetchError } = await client
+        .from("programs")
+        .select("id, protocol")
+        .eq("id", programId)
+        .single();
+
+      if (fetchError || !program) {
+        return { success: false, error: "Program not found" };
+      }
+
+      if (program.protocol !== "MEMBERSHIP") {
+        return { 
+          success: false, 
+          error: "Tier thresholds can only be set for MEMBERSHIP programs" 
+        };
+      }
+
+      // Update tier thresholds
+      const { data: updated, error: updateError } = await client
+        .from("programs")
+        .update({
+          tier_bronze_max: thresholds.tierBronzeMax,
+          tier_silver_max: thresholds.tierSilverMax,
+          tier_gold_max: thresholds.tierGoldMax,
+        })
+        .eq("id", programId)
+        .select("tier_bronze_max, tier_silver_max, tier_gold_max")
+        .single();
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      console.log(`✅ Tier thresholds updated for program: ${programId}`, updated);
+      return { 
+        success: true, 
+        data: {
+          tierBronzeMax: updated.tier_bronze_max,
+          tierSilverMax: updated.tier_silver_max,
+          tierGoldMax: updated.tier_gold_max,
+        }
+      };
+
+    } catch (error) {
+      console.error("❌ Update tier thresholds error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

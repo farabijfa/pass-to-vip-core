@@ -43,7 +43,14 @@ import {
   Star,
   Ticket,
   Tag,
-  Package
+  Package,
+  Medal,
+  Award,
+  Gem,
+  Crown,
+  ChevronDown,
+  ChevronUp,
+  Save
 } from "lucide-react";
 
 const MOCK_PROFILES: Record<string, TenantProfile> = {
@@ -367,6 +374,10 @@ interface TenantProgram {
   isPrimary: boolean;
   postgridTemplateId: string | null;
   memberLimit: number | null;
+  tierBronzeMax: number;
+  tierSilverMax: number;
+  tierGoldMax: number;
+  campaignBudgetCents: number;
   createdAt: string;
 }
 
@@ -424,6 +435,26 @@ async function addProgramToTenant(userId: string, params: {
   return result.data;
 }
 
+async function updateProgramTierThresholds(programId: string, params: {
+  tierBronzeMax: number;
+  tierSilverMax: number;
+  tierGoldMax: number;
+}): Promise<void> {
+  const token = getAuthToken();
+  const response = await fetch(`/api/client/admin/programs/${programId}/tier-thresholds`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify(params),
+  });
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.error?.message || "Failed to update tier thresholds");
+  }
+}
+
 const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
   "mock-user-001-aaaa-bbbb-cccc": [
     {
@@ -441,6 +472,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       isPrimary: true,
       postgridTemplateId: "template_pizza_001",
       memberLimit: 500,
+      tierBronzeMax: 999,
+      tierSilverMax: 4999,
+      tierGoldMax: 14999,
+      campaignBudgetCents: 50000,
       createdAt: "2024-11-15T10:30:00Z",
     },
   ],
@@ -460,6 +495,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       isPrimary: true,
       postgridTemplateId: null,
       memberLimit: null,
+      tierBronzeMax: 999,
+      tierSilverMax: 4999,
+      tierGoldMax: 14999,
+      campaignBudgetCents: 100000,
       createdAt: "2024-12-01T14:15:00Z",
     },
     {
@@ -477,6 +516,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       isPrimary: false,
       postgridTemplateId: null,
       memberLimit: null,
+      tierBronzeMax: 999,
+      tierSilverMax: 4999,
+      tierGoldMax: 14999,
+      campaignBudgetCents: 50000,
       createdAt: "2024-12-05T10:00:00Z",
     },
   ],
@@ -588,6 +631,53 @@ export default function AdminClientDetailsPage() {
     protocol: "MEMBERSHIP",
     timezone: "America/New_York",
     earnRateMultiplier: "10",
+  });
+
+  const [expandedTierConfig, setExpandedTierConfig] = useState<string | null>(null);
+  const [tierConfigForm, setTierConfigForm] = useState<Record<string, {
+    bronzeMax: string;
+    silverMax: string;
+    goldMax: string;
+  }>>({});
+
+  const initTierConfig = (program: TenantProgram) => {
+    if (!tierConfigForm[program.id]) {
+      setTierConfigForm((prev) => ({
+        ...prev,
+        [program.id]: {
+          bronzeMax: program.tierBronzeMax?.toString() || "999",
+          silverMax: program.tierSilverMax?.toString() || "4999",
+          goldMax: program.tierGoldMax?.toString() || "14999",
+        },
+      }));
+    }
+  };
+
+  const updateTierMutation = useMutation({
+    mutationFn: async (programId: string) => {
+      const config = tierConfigForm[programId];
+      if (!config) throw new Error("No tier config found");
+      return updateProgramTierThresholds(programId, {
+        tierBronzeMax: parseInt(config.bronzeMax) || 999,
+        tierSilverMax: parseInt(config.silverMax) || 4999,
+        tierGoldMax: parseInt(config.goldMax) || 14999,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Tier Thresholds Updated",
+        description: "Tier boundaries have been saved successfully.",
+      });
+      refetchPrograms();
+      setExpandedTierConfig(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const addProgramMutation = useMutation({
@@ -1251,6 +1341,105 @@ export default function AdminClientDetailsPage() {
                           Open Enrollment
                           <ExternalLink className="w-3 h-3" />
                         </a>
+                      )}
+
+                      {program.protocol === "MEMBERSHIP" && (
+                        <div className="border-t border-border pt-3 mt-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-between text-xs"
+                            onClick={() => {
+                              initTierConfig(program);
+                              setExpandedTierConfig(expandedTierConfig === program.id ? null : program.id);
+                            }}
+                            data-testid={`button-tier-config-${program.id}`}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Crown className="w-3.5 h-3.5" />
+                              Tier Thresholds
+                            </span>
+                            {expandedTierConfig === program.id ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </Button>
+
+                          {expandedTierConfig === program.id && tierConfigForm[program.id] && (
+                            <div className="mt-3 space-y-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <Medal className="w-4 h-4 text-amber-600" />
+                                <span className="w-16">Bronze</span>
+                                <span className="text-muted-foreground">0 -</span>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-7 text-xs"
+                                  value={tierConfigForm[program.id].bronzeMax}
+                                  onChange={(e) => setTierConfigForm((prev) => ({
+                                    ...prev,
+                                    [program.id]: { ...prev[program.id], bronzeMax: e.target.value },
+                                  }))}
+                                  data-testid={`input-tier-bronze-${program.id}`}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Award className="w-4 h-4 text-slate-400" />
+                                <span className="w-16">Silver</span>
+                                <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1} -</span>
+                                <Input
+                                  type="number"
+                                  min={(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1}
+                                  className="h-7 text-xs"
+                                  value={tierConfigForm[program.id].silverMax}
+                                  onChange={(e) => setTierConfigForm((prev) => ({
+                                    ...prev,
+                                    [program.id]: { ...prev[program.id], silverMax: e.target.value },
+                                  }))}
+                                  data-testid={`input-tier-silver-${program.id}`}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Star className="w-4 h-4 text-yellow-500" />
+                                <span className="w-16">Gold</span>
+                                <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1} -</span>
+                                <Input
+                                  type="number"
+                                  min={(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1}
+                                  className="h-7 text-xs"
+                                  value={tierConfigForm[program.id].goldMax}
+                                  onChange={(e) => setTierConfigForm((prev) => ({
+                                    ...prev,
+                                    [program.id]: { ...prev[program.id], goldMax: e.target.value },
+                                  }))}
+                                  data-testid={`input-tier-gold-${program.id}`}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Gem className="w-4 h-4 text-cyan-400" />
+                                <span className="w-16">Platinum</span>
+                                <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].goldMax) || 0) + 1}+</span>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="w-full mt-2"
+                                onClick={() => updateTierMutation.mutate(program.id)}
+                                disabled={updateTierMutation.isPending}
+                                data-testid={`button-save-tiers-${program.id}`}
+                              >
+                                {updateTierMutation.isPending ? (
+                                  "Saving..."
+                                ) : (
+                                  <>
+                                    <Save className="w-3 h-3 mr-1" />
+                                    Save Tiers
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </CardContent>
                   </Card>

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -29,30 +29,51 @@ import {
   Upload,
   History,
   Sparkles,
+  Medal,
+  Award,
+  Star,
+  Gem,
+  Ticket,
+  TicketCheck,
+  UserX,
+  UserCheck,
+  Shield,
 } from "lucide-react";
 
-type SegmentType = "ALL" | "VIP" | "DORMANT" | "GEO" | "CSV";
+type ProtocolType = "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
+type SegmentType = string;
 
 interface SegmentInfo {
   type: SegmentType;
   name: string;
   description: string;
+  icon: string;
   estimatedCount?: number;
+  requiresConfig?: boolean;
+  configType?: string;
 }
 
 interface SegmentPreview {
   segment: SegmentType;
   description: string;
   count: number;
+  protocol: ProtocolType;
   sampleMembers: Array<{
     id: string;
     email: string;
     firstName: string;
     lastName: string;
     pointsBalance?: number;
+    tierPoints?: number;
     lastUpdated?: string;
     zipCode?: string;
   }>;
+}
+
+interface TierThresholds {
+  bronze: number;
+  silver: number;
+  gold: number;
 }
 
 interface CampaignLog {
@@ -68,6 +89,7 @@ interface CampaignLog {
   programs?: {
     name: string;
     passkit_program_id: string;
+    protocol?: string;
   };
 }
 
@@ -77,30 +99,64 @@ interface Tenant {
   programs: Array<{
     id: string;
     name: string;
-    protocol: string;
+    protocol: ProtocolType;
     passkit_program_id: string;
     is_primary: boolean;
   }>;
 }
 
-const segmentIcons: Record<SegmentType, React.ReactNode> = {
-  ALL: <Users className="h-4 w-4" />,
-  VIP: <Crown className="h-4 w-4" />,
-  DORMANT: <Clock className="h-4 w-4" />,
-  GEO: <MapPin className="h-4 w-4" />,
-  CSV: <FileSpreadsheet className="h-4 w-4" />,
+const iconComponents: Record<string, typeof Users> = {
+  Users,
+  Medal,
+  Award,
+  Star,
+  Crown,
+  Gem,
+  Clock,
+  MapPin,
+  FileSpreadsheet,
+  Ticket,
+  TicketCheck,
+  AlertTriangle,
+  UserX,
+  UserCheck,
 };
 
-const segmentColors: Record<SegmentType, string> = {
-  ALL: "bg-primary/20 text-primary",
-  VIP: "bg-yellow-500/20 text-yellow-500",
-  DORMANT: "bg-orange-500/20 text-orange-500",
-  GEO: "bg-green-500/20 text-green-500",
-  CSV: "bg-purple-500/20 text-purple-500",
+const protocolColors: Record<ProtocolType, string> = {
+  MEMBERSHIP: "bg-blue-500/20 text-blue-500 border-blue-500/30",
+  COUPON: "bg-green-500/20 text-green-500 border-green-500/30",
+  EVENT_TICKET: "bg-purple-500/20 text-purple-500 border-purple-500/30",
 };
+
+const protocolIcons: Record<ProtocolType, typeof Shield> = {
+  MEMBERSHIP: Users,
+  COUPON: Ticket,
+  EVENT_TICKET: TicketCheck,
+};
+
+function getSegmentColor(segment: string): string {
+  const colorMap: Record<string, string> = {
+    ALL: "bg-primary/20 text-primary",
+    TIER_BRONZE: "bg-amber-600/20 text-amber-600",
+    TIER_SILVER: "bg-slate-400/20 text-slate-400",
+    TIER_GOLD: "bg-yellow-500/20 text-yellow-500",
+    TIER_PLATINUM: "bg-cyan-400/20 text-cyan-400",
+    VIP: "bg-yellow-500/20 text-yellow-500",
+    DORMANT: "bg-orange-500/20 text-orange-500",
+    GEO: "bg-green-500/20 text-green-500",
+    CSV: "bg-purple-500/20 text-purple-500",
+    ALL_ACTIVE: "bg-primary/20 text-primary",
+    UNREDEEMED: "bg-blue-500/20 text-blue-500",
+    EXPIRING_SOON: "bg-red-500/20 text-red-500",
+    ALL_TICKETED: "bg-primary/20 text-primary",
+    NOT_CHECKED_IN: "bg-orange-500/20 text-orange-500",
+    CHECKED_IN: "bg-green-500/20 text-green-500",
+  };
+  return colorMap[segment] || "bg-muted text-muted-foreground";
+}
 
 export default function NotificationsPage() {
-  const { user, mockMode } = useAuth();
+  const { mockMode } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +171,7 @@ export default function NotificationsPage() {
   const [csvMemberIds, setCsvMemberIds] = useState<string[]>([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [previewData, setPreviewData] = useState<SegmentPreview | null>(null);
+  const [tierThresholds, setTierThresholds] = useState<TierThresholds | null>(null);
 
   const tenantsQuery = useQuery<Tenant[]>({
     queryKey: ["/api/admin/tenants"],
@@ -124,10 +181,35 @@ export default function NotificationsPage() {
   const selectedTenant = tenantsQuery.data?.find((t) => t.id === selectedTenantId);
   const selectedProgram = selectedTenant?.programs.find((p) => p.id === selectedProgramId);
 
-  const segmentsQuery = useQuery<{ success: boolean; data: { segments: SegmentInfo[] } }>({
-    queryKey: ["/api/notifications/segments", selectedProgram?.passkit_program_id],
-    enabled: !!selectedProgram?.passkit_program_id,
+  const segmentsQuery = useQuery<{ success: boolean; data: { segments: SegmentInfo[]; tierThresholds?: TierThresholds } }>({
+    queryKey: ["/api/notifications/segments", selectedTenantId, selectedProgram?.passkit_program_id, selectedProgram?.protocol],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        tenantId: selectedTenantId,
+        programId: selectedProgram?.passkit_program_id || "",
+        protocol: selectedProgram?.protocol || "",
+      });
+      const res = await fetch(`/api/notifications/segments?${params}`);
+      return res.json();
+    },
+    enabled: !!selectedTenantId && !!selectedProgram?.passkit_program_id,
   });
+
+  useEffect(() => {
+    if (segmentsQuery.data?.data?.tierThresholds) {
+      setTierThresholds(segmentsQuery.data.data.tierThresholds);
+    }
+  }, [segmentsQuery.data]);
+
+  useEffect(() => {
+    if (selectedProgram) {
+      const segments = segmentsQuery.data?.data?.segments || [];
+      const firstSegment = segments[0];
+      if (firstSegment) {
+        setSelectedSegment(firstSegment.type);
+      }
+    }
+  }, [selectedProgram, segmentsQuery.data]);
 
   const logsQuery = useQuery<{ success: boolean; data: { logs: CampaignLog[] } }>({
     queryKey: ["/api/notifications/logs"],
@@ -143,7 +225,9 @@ export default function NotificationsPage() {
       if (selectedSegment === "CSV") segmentConfig.memberIds = csvMemberIds;
 
       const res = await apiRequest("POST", "/api/notifications/segment/preview", {
+        tenantId: selectedTenantId,
         programId: selectedProgram?.passkit_program_id,
+        protocol: selectedProgram?.protocol,
         segment: selectedSegment,
         segmentConfig,
       });
@@ -171,7 +255,9 @@ export default function NotificationsPage() {
       if (selectedSegment === "CSV") segmentConfig.memberIds = csvMemberIds;
 
       const res = await apiRequest("POST", "/api/notifications/broadcast", {
+        tenantId: selectedTenantId,
         programId: selectedProgram?.passkit_program_id,
+        protocol: selectedProgram?.protocol,
         message,
         segment: selectedSegment,
         segmentConfig,
@@ -226,7 +312,7 @@ export default function NotificationsPage() {
   };
 
   const handlePreview = () => {
-    if (!selectedProgram?.passkit_program_id) {
+    if (!selectedTenantId || !selectedProgram) {
       toast({
         title: "Select Program",
         description: "Please select a tenant and program first",
@@ -261,6 +347,13 @@ export default function NotificationsPage() {
   };
 
   const segments = segmentsQuery.data?.data?.segments || [];
+
+  const renderSegmentIcon = (iconName: string) => {
+    const IconComponent = iconComponents[iconName] || Users;
+    return <IconComponent className="h-4 w-4" />;
+  };
+
+  const ProtocolIcon = selectedProgram ? protocolIcons[selectedProgram.protocol] : Shield;
 
   return (
     <div className="space-y-6">
@@ -298,6 +391,7 @@ export default function NotificationsPage() {
                 onValueChange={(value) => {
                   setSelectedTenantId(value);
                   setSelectedProgramId("");
+                  setSelectedSegment("ALL");
                 }}
               >
                 <SelectTrigger id="tenant" data-testid="select-tenant">
@@ -316,19 +410,50 @@ export default function NotificationsPage() {
             {selectedTenant && (
               <div className="space-y-2">
                 <Label htmlFor="program">Select Program</Label>
-                <Select value={selectedProgramId} onValueChange={setSelectedProgramId}>
+                <Select
+                  value={selectedProgramId}
+                  onValueChange={(value) => {
+                    setSelectedProgramId(value);
+                    setSelectedSegment("ALL");
+                  }}
+                >
                   <SelectTrigger id="program" data-testid="select-program">
                     <SelectValue placeholder="Choose a program..." />
                   </SelectTrigger>
                   <SelectContent>
                     {selectedTenant.programs.map((program) => (
                       <SelectItem key={program.id} value={program.id}>
-                        {program.name} ({program.protocol})
-                        {program.is_primary && " [Primary]"}
+                        <div className="flex items-center gap-2">
+                          {program.name}
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${protocolColors[program.protocol]}`}>
+                            {program.protocol}
+                          </Badge>
+                          {program.is_primary && <span className="text-xs text-muted-foreground">[Primary]</span>}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {selectedProgram && (
+              <div className="flex items-center gap-2 p-3 rounded-md bg-muted/30 border border-border">
+                <ProtocolIcon className="h-5 w-5 text-primary" />
+                <div className="flex-1">
+                  <div className="font-medium text-sm">{selectedProgram.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Protocol: <span className="font-medium">{selectedProgram.protocol}</span>
+                    {tierThresholds && (
+                      <span className="ml-2">
+                        (Tiers: Bronze 0-{tierThresholds.bronze}, Silver {tierThresholds.bronze + 1}-{tierThresholds.silver}, Gold {tierThresholds.silver + 1}-{tierThresholds.gold}, Platinum {tierThresholds.gold + 1}+)
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Badge className={protocolColors[selectedProgram.protocol]}>
+                  {selectedProgram.protocol}
+                </Badge>
               </div>
             )}
 
@@ -360,40 +485,52 @@ export default function NotificationsPage() {
             </div>
 
             <div className="space-y-3">
-              <Label>Target Segment</Label>
-              <RadioGroup
-                value={selectedSegment}
-                onValueChange={(v) => setSelectedSegment(v as SegmentType)}
-                className="grid grid-cols-2 gap-2 sm:grid-cols-3"
-              >
-                {(["ALL", "VIP", "DORMANT", "GEO", "CSV"] as SegmentType[]).map((seg) => {
-                  const segmentInfo = segments.find((s) => s.type === seg);
-                  return (
-                    <div key={seg} className="relative">
+              <Label>
+                Target Segment
+                {selectedProgram && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({segments.length} available for {selectedProgram.protocol})
+                  </span>
+                )}
+              </Label>
+              {segmentsQuery.isLoading ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <RadioGroup
+                  value={selectedSegment}
+                  onValueChange={(v) => setSelectedSegment(v)}
+                  className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+                >
+                  {segments.map((seg) => (
+                    <div key={seg.type} className="relative">
                       <RadioGroupItem
-                        value={seg}
-                        id={seg}
+                        value={seg.type}
+                        id={seg.type}
                         className="peer sr-only"
-                        data-testid={`radio-segment-${seg.toLowerCase()}`}
+                        data-testid={`radio-segment-${seg.type.toLowerCase()}`}
                       />
                       <Label
-                        htmlFor={seg}
+                        htmlFor={seg.type}
                         className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-card/50 p-3 hover:bg-card hover:border-muted-foreground/50 peer-data-[state=checked]:border-primary cursor-pointer transition-colors"
                       >
-                        <span className={`mb-1 rounded-full p-1.5 ${segmentColors[seg]}`}>
-                          {segmentIcons[seg]}
+                        <span className={`mb-1 rounded-full p-1.5 ${getSegmentColor(seg.type)}`}>
+                          {renderSegmentIcon(seg.icon)}
                         </span>
-                        <span className="text-xs font-medium">{seg}</span>
-                        {segmentInfo?.estimatedCount !== undefined && (
+                        <span className="text-xs font-medium">{seg.name}</span>
+                        {seg.estimatedCount !== undefined && (
                           <span className="text-[10px] text-muted-foreground mt-0.5">
-                            ~{segmentInfo.estimatedCount.toLocaleString()}
+                            ~{seg.estimatedCount.toLocaleString()}
                           </span>
                         )}
                       </Label>
                     </div>
-                  );
-                })}
-              </RadioGroup>
+                  ))}
+                </RadioGroup>
+              )}
             </div>
 
             {selectedSegment === "VIP" && (
@@ -529,14 +666,19 @@ export default function NotificationsPage() {
                           <div className="font-medium text-foreground truncate max-w-[150px]">
                             {log.campaign_name}
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
                             {formatDate(log.created_at)}
+                            {log.programs?.protocol && (
+                              <Badge variant="outline" className={`text-[9px] px-1 py-0 ml-1 ${protocolColors[log.programs.protocol as ProtocolType] || ""}`}>
+                                {log.programs.protocol}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge
                             variant="outline"
-                            className={segmentColors[log.target_segment as SegmentType] || ""}
+                            className={getSegmentColor(log.target_segment)}
                           >
                             {log.target_segment}
                           </Badge>
@@ -582,6 +724,13 @@ export default function NotificationsPage() {
 
           {previewData && (
             <div className="space-y-4 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge className={protocolColors[previewData.protocol]}>
+                  {previewData.protocol}
+                </Badge>
+                <span className="text-sm text-muted-foreground">Protocol</span>
+              </div>
+
               <div className="p-3 rounded-md bg-muted/50 border border-border">
                 <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Message Preview
@@ -594,8 +743,7 @@ export default function NotificationsPage() {
                   <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
                     Segment
                   </div>
-                  <Badge className={segmentColors[previewData.segment]}>
-                    {segmentIcons[previewData.segment]}
+                  <Badge className={getSegmentColor(previewData.segment)}>
                     <span className="ml-1">{previewData.segment}</span>
                   </Badge>
                 </div>
@@ -618,8 +766,11 @@ export default function NotificationsPage() {
                     <div key={member.id} className="text-sm flex items-center justify-between">
                       <span className="text-foreground">
                         {member.firstName} {member.lastName}
+                        {member.tierPoints !== undefined && (
+                          <span className="text-xs text-muted-foreground ml-1">({member.tierPoints} pts)</span>
+                        )}
                       </span>
-                      <span className="text-xs text-muted-foreground">{member.email}</span>
+                      <span className="text-xs text-muted-foreground truncate max-w-[120px]">{member.email}</span>
                     </div>
                   ))}
                   {previewData.sampleMembers.length > 3 && (

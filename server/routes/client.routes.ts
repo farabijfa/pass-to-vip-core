@@ -84,4 +84,10 @@ router.patch(
   clientController.setPrimaryProgramAsAdmin.bind(clientController)
 );
 
+// Tier Threshold Management (MEMBERSHIP programs only)
+router.patch(
+  "/admin/programs/:programId/tier-thresholds",
+  clientController.updateProgramTierThresholdsAsAdmin.bind(clientController)
+);
+
 export default router;
