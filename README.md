@@ -121,9 +121,16 @@ migrations/011_pos_integration.sql         # POS API keys & transactions
 migrations/012_secure_public_access.sql    # CRITICAL: RLS for anon key
 migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
 migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
+migrations/015_earn_rate_multiplier.sql    # Integer-based point system
+migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixes
+migrations/018_billing_and_quotas.sql      # Gap G: Revenue leakage prevention
+migrations/019_campaign_tracking.sql       # Campaign runs & contacts tracking
 ```
 
-**Important:** Migrations 012 and 014 are critical for production security and resilient client provisioning.
+**Important:** 
+- Migrations 012 and 014 are critical for production security and resilient client provisioning.
+- Migrations 017-018 add security hardening for atomic transactions and billing quotas.
+- Migration 019 is idempotent and can be safely re-run.
 
 ### 4. Start Development Server
 
@@ -160,7 +167,7 @@ See `docs/SECURITY_VALIDATION.md` for the complete security test suite.
 
 ## Production Validation Protocols
 
-This system has been hardened with four validation protocols designed to break the system under stress:
+This system has been hardened with **seven validation protocols** designed to break the system under stress:
 
 | Protocol | Name | Test Objective | Success Criteria |
 |----------|------|----------------|------------------|
@@ -168,6 +175,9 @@ This system has been hardened with four validation protocols designed to break t
 | **B** | Churn Loop | Webhook updates member status | `pass.uninstalled` → status changes to `CHURNED` |
 | **C** | Clerk Proof POS | Redeem action blocked until confirmed | Modal appears, Enter key confirms, no premature API call |
 | **D** | Security Tunnel | Anon key data access | Direct SELECT fails, RPC returns only public data |
+| **E** | Double-Claim Prevention | Same claim code processed twice | Atomic RPC with FOR UPDATE locks prevents duplicate |
+| **F** | Race Condition Prevention | Concurrent point updates | Atomic transaction processing prevents data corruption |
+| **G** | Revenue Leakage Prevention | Member quota enforcement | Billing audit monitors and alerts on quota overages |
 
 ### Protocol Details
 
@@ -186,6 +196,21 @@ This system has been hardened with four validation protocols designed to break t
 **D: RLS Security**
 - Use anon key to attempt `SELECT * FROM programs` → must fail with 42501
 - Use RPC `get_public_program_info('slug')` → must return only name and URL
+
+**E: Double-Claim Prevention**
+- Attempt to claim same code twice simultaneously
+- Expected: First claim succeeds, second returns "Already claimed" error
+- Implementation: Atomic RPC `process_claim_attempt` with FOR UPDATE locks
+
+**F: Race Condition Prevention**
+- Attempt concurrent point earn/redeem on same member
+- Expected: Both transactions processed correctly without data corruption
+- Implementation: Atomic RPC `process_membership_transaction_atomic`
+
+**G: Revenue Leakage Prevention**
+- Programs with member quotas are monitored nightly
+- Expected: Alert generated when program exceeds member limit
+- Implementation: `server/scripts/billing-cron.ts` with usage snapshots
 
 ---
 
@@ -234,6 +259,40 @@ This system has been hardened with four validation protocols designed to break t
 | **Webhook Status Sync** | Real-time wallet install/uninstall tracking |
 | **Idempotent Transactions** | Duplicate API calls return same result |
 | **Clerk Protection** | POS redeem requires confirmation modal |
+| **Atomic Transactions** | FOR UPDATE locks prevent double-claims and race conditions |
+| **Integer Point System** | "Casino Chip" model avoids floating-point precision issues |
+| **Billing Quotas** | Member limits enforced with nightly audit monitoring |
+
+### Campaign Launcher (Admin-Only)
+
+Full-featured direct mail campaign system for SUPER_ADMIN and PLATFORM_ADMIN roles:
+
+| Feature | Description |
+|---------|-------------|
+| **Client Selection** | Dropdown from list OR manual client ID with backend validation |
+| **Resource Types** | Postcards (6 sizes) or Letters (3 sizes) |
+| **Mailing Classes** | Standard (3-14 days) or First Class (2-5 days) |
+| **Template Management** | Fetch templates from PostGrid catalog |
+| **CSV Upload** | Drag-and-drop with contact parsing and validation |
+| **Cost Estimation** | Real-time per-piece and total cost calculation |
+| **Campaign History** | Track status (pending, processing, completed, failed) |
+
+### Integer-Based Point System
+
+The "Casino Chip" model uses integer points with configurable multipliers:
+
+```
+Formula: points = floor(transactionAmount × earn_rate_multiplier)
+Default: $1.00 = 10 points (multiplier = 10)
+```
+
+| Transaction | Amount | Multiplier | Points |
+|-------------|--------|------------|--------|
+| Coffee purchase | $4.50 | 10 | 45 points |
+| Full meal | $25.00 | 10 | 250 points |
+| Gas fillup | $60.00 | 5 | 300 points |
+
+Benefits: Avoids floating-point precision issues, whole numbers feel like rewards.
 
 ---
 
@@ -249,7 +308,9 @@ The React-based client dashboard provides program managers with a complete view 
 | **Dashboard** | `/dashboard` | Program overview and quick stats |
 | **Analytics** | `/analytics` | Enrollment charts, retention rates, source breakdown |
 | **Members** | `/members` | Searchable member list with pagination |
+| **Assets** | `/assets` | Program QR codes, PNG/SVG downloads, social sharing links |
 | **POS Simulator** | `/pos` | Point-of-sale transaction testing |
+| **Campaign Launcher** | `/admin/campaigns` | Admin-only direct mail campaign management |
 | **Admin Clients** | `/admin/clients` | Platform admin client management |
 
 ### Design System
@@ -732,6 +793,7 @@ Public enrollment page lookup by dashboard slug.
 |----------|-------------|----------------|--------------|
 | `/api/client/admin/tenants` | ✅ | ✅ | ❌ |
 | `/api/client/admin/provision` | ✅ | ✅ | ❌ |
+| `/api/campaigns/*` | ✅ | ✅ | ❌ |
 | `/api/client/analytics` | ✅ | ✅ | ✅ (own program) |
 | `/api/client/members` | ✅ | ✅ | ✅ (own program) |
 | `/api/pos/*` | ✅ | ✅ | ✅ (own program) |
@@ -750,6 +812,9 @@ Public enrollment page lookup by dashboard slug.
 | `claim_codes` | Physical mail redemption codes |
 | `admin_profiles` | User-program associations with roles |
 | `campaign_logs` | Notification audit trail |
+| `campaign_runs` | Direct mail campaign tracking |
+| `campaign_contacts` | Per-contact status and mail IDs |
+| `billing_snapshots` | Member quota usage history |
 
 ### Key Columns (programs)
 
@@ -762,14 +827,19 @@ Public enrollment page lookup by dashboard slug.
 | `is_suspended` | BOOLEAN | Kill switch status |
 | `dashboard_slug` | VARCHAR | Unique URL slug for enrollment |
 | `enrollment_url` | VARCHAR | PassKit enrollment URL |
+| `earn_rate_multiplier` | INTEGER | Points per $1 spent (default: 10) |
+| `member_limit` | INTEGER | Maximum active members allowed |
 
 ### Required RPC Functions
 
 | Function | Purpose |
 |----------|---------|
-| `process_membership_transaction` | Points earn/redeem |
+| `process_membership_transaction` | Points earn/redeem (legacy) |
+| `process_membership_transaction_atomic` | Atomic points earn/redeem (Protocol F) |
+| `process_claim_attempt` | Atomic claim code processing (Protocol E) |
 | `process_one_time_use` | Coupon/ticket redemption |
 | `get_service_status` | Health check |
+| `count_members_by_program` | Billing quota monitoring |
 
 ---
 
@@ -928,6 +998,8 @@ curl http://localhost:5000/api/health | jq
 │   │   │   ├── dashboard.tsx
 │   │   │   ├── analytics.tsx
 │   │   │   ├── members.tsx
+│   │   │   ├── assets.tsx    # Program QR codes & downloads
+│   │   │   ├── campaigns.tsx # Campaign Launcher (admin)
 │   │   │   └── pos.tsx
 │   │   ├── lib/              # Utilities
 │   │   │   ├── auth.tsx      # Auth context
@@ -937,20 +1009,33 @@ curl http://localhost:5000/api/health | jq
 │   └── index.html
 ├── server/
 │   ├── controllers/          # Request handlers
+│   │   ├── admin.controller.ts
+│   │   ├── pos.controller.ts
+│   │   ├── campaign.controller.ts
+│   │   └── passkit-webhook.controller.ts
 │   ├── services/             # Business logic
+│   │   ├── logic.service.ts
+│   │   ├── supabase.service.ts
+│   │   ├── passkit-provision.service.ts
+│   │   └── postgrid.service.ts
 │   ├── routes/               # Express routes
 │   │   ├── client.routes.ts  # Dashboard API
 │   │   ├── pos.routes.ts     # POS API
+│   │   ├── campaign.routes.ts # Campaign API (admin)
+│   │   ├── callbacks.routes.ts # PassKit webhooks
 │   │   └── webhook.routes.ts # External webhooks
 │   ├── middleware/           # Auth, validation
+│   ├── scripts/
+│   │   └── billing-cron.ts   # Nightly billing audit
 │   └── index.ts              # Server entry
-├── migrations/               # SQL migrations (001-014)
+├── migrations/               # SQL migrations (001-019)
 ├── scripts/
 │   ├── prod-validation.ts   # Production validation tests
 │   └── test-provisioning.ts # Provisioning tests
 ├── docs/
 │   ├── POS_INTEGRATION.md   # POS webhook guide
-│   └── SECURITY_VALIDATION.md  # Protocol D security tests
+│   ├── SECURITY_VALIDATION.md  # Protocol D security tests
+│   └── CAMPAIGN_LAUNCHER_ADMIN_ARCHITECTURE.md
 ├── design_guidelines.md     # UI/UX guidelines
 └── README.md
 ```
@@ -1009,6 +1094,22 @@ The following areas have been identified for future improvement. AI agents may a
 
 ## Changelog
 
+### v1.2.0 - Campaign Launcher & Security Hardening (December 2024)
+- ✅ Campaign Launcher with dual client selection (dropdown + manual ID)
+- ✅ PostGrid integration for postcards and letters (6 + 3 sizes)
+- ✅ Campaign history tracking with status monitoring
+- ✅ Backend role enforcement for admin-only routes
+- ✅ Migration 019: Campaign tracking tables with RLS
+- ✅ Idempotent migration (safe to re-run)
+
+### v1.1.0 - Enterprise Security (December 2024)
+- ✅ Protocol E: Double-claim prevention with atomic RPCs
+- ✅ Protocol F: Race condition prevention with FOR UPDATE locks
+- ✅ Protocol G: Revenue leakage prevention with billing quotas
+- ✅ Integer-based point system ("Casino Chip" model)
+- ✅ Program Assets page with QR code downloads
+- ✅ Migrations 015-018: Security hardening and billing
+
 ### v1.0.0 - Production Hardening (December 2024)
 - ✅ Soft-fail provisioning (Protocol A)
 - ✅ PassKit webhook status sync (Protocol B)
@@ -1030,6 +1131,7 @@ MIT License - See LICENSE file for details.
   <br>
   <sub>Operated by Oakmont Logic LLC</sub>
   <br><br>
-  <img src="https://img.shields.io/badge/Validated-Protocol%20A%20B%20C%20D-22c55e?style=flat-square" alt="Validated"/>
+  <img src="https://img.shields.io/badge/Validated-Protocol%20A%20B%20C%20D%20E%20F%20G-22c55e?style=flat-square" alt="Validated"/>
   <img src="https://img.shields.io/badge/Security-RLS%20Verified-2563eb?style=flat-square" alt="Security"/>
+  <img src="https://img.shields.io/badge/Campaigns-PostGrid%20Ready-dc2626?style=flat-square" alt="Campaigns"/>
 </p>

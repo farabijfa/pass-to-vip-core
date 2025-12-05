@@ -14,13 +14,16 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Protocol B:** PassKit webhook churn tracking via `/api/callbacks/passkit`
 - **Protocol C:** POS clerk protection - redeem requires confirmation modal
 - **Protocol D:** RLS security validated - anon key blocked from direct table access
+- **Protocol E:** Double-claim prevention - atomic RPC with FOR UPDATE locks
+- **Protocol F:** Race condition prevention - atomic transaction processing
+- **Protocol G:** Revenue leakage prevention - billing audit monitors member quotas
 - **Migrations 012-014:** Security policies, status tracking, nullable PassKit fields
 - **Migration 015:** Integer-based point system with earn_rate_multiplier (Casino Chip model)
 - **Migration 017:** Security hardening for Gap E (double-claim) and Gap F (race condition)
 - **Migration 018:** Billing and quotas system for Gap G (revenue leakage prevention)
-- **Gap H:** Program Assets page - QR code downloads, social sharing links (no backend changes needed)
-- **Gap I:** Campaign Launcher page - CSV upload with preview, cost estimation, and PostGrid integration
-- **Admin Campaign Launcher:** Full-featured campaign system with dual client selection (dropdown + manual ID validation), resource type switching (postcard/letter), size/mailing class options, template selection, cost estimation, campaign history tracking. Backend enforces SUPER_ADMIN/PLATFORM_ADMIN role via middleware.
+- **Migration 019:** Campaign tracking tables (campaign_runs, campaign_contacts) with RLS policies
+- **Gap H:** Program Assets page - QR code downloads, social sharing links
+- **Gap I:** Campaign Launcher page - full PostGrid/PassKit integration
 
 ## System Architecture
 
@@ -45,12 +48,44 @@ Branding includes a "Pass To VIP" logo in the header and "Operated by Oakmont Lo
 - **Point System:** Integer-based "Casino Chip" model with configurable earn_rate_multiplier per program. Formula: `points = floor(transactionAmount × multiplier)`. Default multiplier is 10 ($1 = 10 points). Avoids floating-point precision issues.
 
 ### Feature Specifications
-- **Client Dashboard:** Features include a login page, a program overview dashboard, analytics (enrollment charts, retention), member management, program assets (QR codes, social links), a POS simulator, and an admin interface for client management (for `PLATFORM_ADMIN`).
-- **Program Assets Page:** Displays master enrollment QR code with high-res PNG (1024x1024) and SVG (vector) downloads. Includes copy-to-clipboard functionality for enrollment URLs for social media sharing.
-- **POS Simulator:** Offers dual scanning modes, supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`), includes a confirmation modal for redeem actions (Protocol C), and supports both "Spend Amount" (currency with multiplier) and "Direct Points" earning modes.
-- **Campaign Launcher (Admin-Only):** Admin interface at `/admin/campaigns` for launching direct mail campaigns. Admin selects client from dropdown, uploads CSV with customer addresses, previews contacts, estimates costs, and launches campaigns via PostGrid. Only accessible to SUPER_ADMIN and PLATFORM_ADMIN roles.
-- **API Endpoints:** Separated into Client Dashboard API (JWT protected), Admin API (API key protected), Internal POS API (JWT protected), External POS Webhooks (API key protected with idempotency), Public Enrollment API (Supabase ANON key with RLS), and PassKit Callbacks (HMAC signature verified).
-- **Role-Based Access Control:** Granular permissions define access levels for different user roles across various API endpoints.
+
+#### Client Dashboard
+Features include a login page, a program overview dashboard, analytics (enrollment charts, retention), member management, program assets (QR codes, social links), a POS simulator, and an admin interface for client management (for `PLATFORM_ADMIN`).
+
+#### Program Assets Page
+Displays master enrollment QR code with high-res PNG (1024x1024) and SVG (vector) downloads. Includes copy-to-clipboard functionality for enrollment URLs for social media sharing.
+
+#### POS Simulator
+Offers dual scanning modes, supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`), includes a confirmation modal for redeem actions (Protocol C), and supports both "Spend Amount" (currency with multiplier) and "Direct Points" earning modes.
+
+#### Campaign Launcher (Admin-Only)
+Full-featured campaign management system at `/admin/campaigns` for launching direct mail campaigns via PostGrid. Only accessible to SUPER_ADMIN and PLATFORM_ADMIN roles with backend enforcement.
+
+**Features:**
+- **Dual Client Selection:** Dropdown from list OR manual client ID input with backend validation
+- **Resource Types:** Postcard (4x6, 6x4, 6x9, 9x6, 6x11, 11x6) or Letter (us_letter, us_legal, a4)
+- **Mailing Classes:** Standard Class (3-14 days, cheaper) or First Class (2-5 days, faster)
+- **Template Selection:** Fetch templates from PostGrid catalog with front/back options for postcards
+- **CSV Upload:** Drag-and-drop CSV with contact parsing, validation, and preview (shows valid/invalid breakdown)
+- **Cost Estimation:** Real-time cost calculation based on resource type, size, mailing class, and contact count
+- **Campaign History:** Tabbed view with status tracking (pending, processing, completed, failed)
+- **Protocol Integration:** MEMBERSHIP enrolls in loyalty, COUPON issues offers, EVENT_TICKET creates tickets
+
+**API Endpoints:**
+- `POST /api/campaigns/preview-csv` - Parse and validate CSV without sending
+- `POST /api/campaigns/upload-csv` - Launch campaign with contacts
+- `GET /api/campaigns/templates` - Fetch PostGrid template catalog
+- `POST /api/campaigns/validate-client` - Validate client ID exists
+- `POST /api/campaigns/estimate-cost` - Calculate campaign cost
+- `GET /api/campaigns/history` - Get campaign run history
+- `GET /api/campaigns/:campaignId` - Get campaign details
+- `GET /api/campaigns/config/options` - Get available sizes, mailing classes
+
+#### API Endpoints (Summary)
+Separated into Client Dashboard API (JWT protected), Admin API (API key protected), Internal POS API (JWT protected), External POS Webhooks (API key protected with idempotency), Public Enrollment API (Supabase ANON key with RLS), Campaign API (JWT + admin role protected), and PassKit Callbacks (HMAC signature verified).
+
+#### Role-Based Access Control
+Granular permissions define access levels for different user roles across various API endpoints.
 
 ## Production Validation Protocols
 
@@ -81,7 +116,8 @@ migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
 migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
 migrations/015_earn_rate_multiplier.sql    # Integer-based point system
 migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixes
-migrations/018_billing_and_quotas.sql              # Gap G: Revenue leakage prevention
+migrations/018_billing_and_quotas.sql      # Gap G: Revenue leakage prevention
+migrations/019_campaign_tracking.sql       # Campaign runs & contacts tracking (idempotent)
 ```
 
 ## Billing Watchdog (Gap G)
@@ -107,11 +143,14 @@ Automation options:
 - `server/controllers/passkit-webhook.controller.ts` - Handles wallet install/uninstall events, updates `passes_master` table
 - `server/controllers/admin.controller.ts` - Tenant provisioning with soft-fail PassKit
 - `server/controllers/pos.controller.ts` - POS lookup/earn/redeem operations
+- `server/controllers/campaign.controller.ts` - Campaign management (CSV upload, cost estimation, template catalog)
 
 ### Services
 - `server/services/passkit-provision.service.ts` - Auto-provisions PassKit programs with soft-fail
 - `server/services/admin.service.ts` - Client provisioning orchestration
 - `server/services/logic.service.ts` - Core POS transaction logic
+- `server/services/postgrid.service.ts` - PostGrid mail delivery integration
+- `server/services/supabase.service.ts` - Database operations including campaign persistence
 
 ### Scripts
 - `server/scripts/billing-cron.ts` - Nightly billing audit for Gap G (revenue leakage prevention)
@@ -120,18 +159,21 @@ Automation options:
 - `server/routes/callbacks.routes.ts` - PassKit webhook endpoint (no API key, uses HMAC)
 - `server/routes/admin.routes.ts` - Admin API (API key protected)
 - `server/routes/pos.routes.ts` - POS endpoints (JWT protected)
+- `server/routes/campaign.routes.ts` - Campaign endpoints (JWT + admin role protected)
 
 ### Frontend
-- `client/src/pages/pos.tsx` - POS with confirmation modal (lines 143-159, 297-312)
+- `client/src/pages/pos.tsx` - POS with confirmation modal (Protocol C)
 - `client/src/pages/dashboard.tsx` - Program overview
 - `client/src/pages/members.tsx` - Member management
 - `client/src/pages/assets.tsx` - Program Assets (QR codes, downloads, social links)
-- `client/src/pages/campaigns.tsx` - Campaign Launcher (admin-only with client selector, CSV upload, preview, cost estimation, launch)
+- `client/src/pages/campaigns.tsx` - Campaign Launcher (admin-only, tabbed interface)
+- `client/src/pages/analytics.tsx` - Enrollment charts and retention analytics
+- `client/src/pages/admin-clients.tsx` - Platform admin client management
 
 ### Documentation
 - `docs/SECURITY_VALIDATION.md` - Protocol D test procedures
 - `docs/POS_INTEGRATION.md` - External POS webhook guide
-- `docs/CAMPAIGN_LAUNCHER_ADMIN_ARCHITECTURE.md` - Admin-controlled campaign system (PARKED for future implementation)
+- `docs/CAMPAIGN_LAUNCHER_ADMIN_ARCHITECTURE.md` - Campaign system architecture
 
 ## External Dependencies
 
@@ -153,6 +195,24 @@ Automation options:
 - `PASSKIT_API_SECRET` - For HMAC webhook verification
 - `POSTGRID_API_KEY` - For physical mail campaigns
 - `APP_URL` - Production URL for QR codes
+
+## Campaign Launcher Configuration
+
+### PostGrid Sizes
+**Postcards:** 4x6, 6x4, 6x9, 9x6, 6x11, 11x6
+**Letters:** us_letter (8.5x11), us_legal (8.5x14), a4 (210x297mm)
+
+### Mailing Classes
+- **standard_class:** 3-14 business days, lower cost
+- **first_class:** 2-5 business days, premium pricing
+
+### Cost Estimation (per piece)
+| Type | Standard | First Class |
+|------|----------|-------------|
+| Postcard 4x6 | $0.70 | $1.20 |
+| Postcard 6x9 | $0.85 | $1.40 |
+| Letter US | $1.10 | $1.75 |
+| Letter Legal | $1.25 | $1.90 |
 
 ## Known Gaps for Future Improvement
 
