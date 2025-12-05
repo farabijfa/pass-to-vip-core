@@ -117,6 +117,18 @@ export function AppSidebar() {
         >
           Sign Out
         </Button>
+        <div className="mt-4 pt-3 border-t border-border/50 text-center">
+          <p className="text-[10px] text-muted-foreground leading-tight">
+            Operated by Oakmont Logic LLC
+          </p>
+          <a 
+            href="mailto:support@passtovip.com" 
+            className="text-[10px] text-primary hover:underline"
+            data-testid="link-support-email"
+          >
+            support@passtovip.com
+          </a>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

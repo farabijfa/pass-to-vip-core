@@ -114,6 +114,19 @@ export default function LoginPage() {
               </Button>
             </div>
           )}
+          
+          <div className="mt-6 pt-4 border-t border-border/50 text-center">
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Operated by Oakmont Logic LLC
+            </p>
+            <a 
+              href="mailto:support@passtovip.com" 
+              className="text-[11px] text-primary hover:underline"
+              data-testid="link-login-support"
+            >
+              support@passtovip.com
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>
