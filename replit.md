@@ -22,6 +22,12 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
   - **Client Command Center**: New budget input field with currency formatting in Programs section
   - **Campaign Launcher UI**: Real-time budget tracking, amber warning at 80%, confirmation modal with typed override for over-budget campaigns
   - **Cost Estimate API**: Enhanced to return budget comparison info when program_id provided
+- **Enhanced Notification System**: Smart segmentation for push notifications to digital wallet passes
+  - **Smart Segments**: ALL (all active members), VIP (high-value by points threshold), DORMANT (inactive members by days), GEO (by ZIP code), CSV (targeted member list)
+  - **Admin Notifications Page**: New `/admin/notifications` page with message composer, segment picker, preview/confirm flow, and campaign history
+  - **Segment Preview**: Dry-run capability shows recipient count and sample members before sending
+  - **CSV Upload**: Target specific member IDs from uploaded CSV files
+  - **Birthday Bot**: Automated birthday rewards with per-program configuration
 
 ## User Preferences
 - Iterative development preferred
