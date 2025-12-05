@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config, isSupabaseConfigured } from "../config";
+import short from "short-uuid";
 
 interface CreateTenantParams {
   businessName: string;
@@ -15,6 +16,8 @@ interface CreateTenantResult {
   programId?: string;
   email?: string;
   businessName?: string;
+  dashboardSlug?: string;
+  dashboardUrl?: string;
   error?: string;
 }
 
@@ -23,6 +26,7 @@ interface Program {
   name: string;
   passkit_program_id: string;
   protocol: string;
+  dashboard_slug: string;
   created_at: string;
 }
 
@@ -123,15 +127,27 @@ class AdminService {
       const userId = authData.user.id;
       console.log(`✅ Auth user created: ${userId}`);
 
-      // Step 2: Create Program
+      // Step 2: Create Program with unique dashboard slug
       console.log("🎫 Step 2: Creating program...");
+      const dashboardSlug = short.generate();
+      
+      // Check if dashboard_slug column exists (feature detection)
+      const hasDashboardSlug = await this.checkDashboardSlugColumn();
+      
+      const programInsert: Record<string, any> = {
+        name: businessName,
+        passkit_program_id: passkitProgramId,
+        protocol: protocol,
+      };
+      
+      if (hasDashboardSlug) {
+        programInsert.dashboard_slug = dashboardSlug;
+        console.log(`   Dashboard slug: ${dashboardSlug}`);
+      }
+      
       const { data: programData, error: programError } = await client
         .from("programs")
-        .insert({
-          name: businessName,
-          passkit_program_id: passkitProgramId,
-          protocol: protocol,
-        })
+        .insert(programInsert)
         .select()
         .single();
 
@@ -176,7 +192,7 @@ class AdminService {
       console.log(`   Program ID: ${programId}`);
       console.log(`   Business: ${businessName}`);
 
-      return {
+      const result: CreateTenantResult = {
         success: true,
         userId,
         programId,
@@ -184,12 +200,39 @@ class AdminService {
         businessName,
       };
 
+      if (hasDashboardSlug) {
+        result.dashboardSlug = dashboardSlug;
+        result.dashboardUrl = `/enroll/${dashboardSlug}`;
+        console.log(`   Dashboard URL: /enroll/${dashboardSlug}`);
+      }
+
+      return result;
+
     } catch (error) {
       console.error("❌ Tenant creation error:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error occurred",
       };
+    }
+  }
+
+  private async checkDashboardSlugColumn(): Promise<boolean> {
+    try {
+      const client = this.getClient();
+      // Try to select the column - if it doesn't exist, this will fail
+      const { error } = await client
+        .from("programs")
+        .select("dashboard_slug")
+        .limit(1);
+      
+      if (error && error.message.includes("dashboard_slug")) {
+        console.log("ℹ️ dashboard_slug column not available - run migration 010");
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -264,7 +307,9 @@ class AdminService {
             name,
             passkit_program_id,
             protocol,
-            is_suspended
+            is_suspended,
+            dashboard_slug,
+            enrollment_url
           )
         `)
         .order("created_at", { ascending: false });

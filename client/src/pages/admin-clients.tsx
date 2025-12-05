@@ -23,7 +23,10 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  ShieldAlert
+  ShieldAlert,
+  Copy,
+  Link,
+  ExternalLink
 } from "lucide-react";
 
 interface Tenant {
@@ -36,6 +39,8 @@ interface Tenant {
     passkit_program_id: string;
     protocol: string;
     is_suspended: boolean;
+    dashboard_slug?: string;
+    enrollment_url?: string;
   } | null;
 }
 
@@ -402,7 +407,42 @@ export default function AdminClientsPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  {tenant.programs?.dashboard_slug && (
+                    <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-md border border-primary/20">
+                      <Link className="h-4 w-4 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground mb-1">Enrollment URL</p>
+                        <code className="text-sm text-foreground block truncate" data-testid={`text-enrollment-url-${tenant.id}`}>
+                          {window.location.origin}/enroll/{tenant.programs.dashboard_slug}
+                        </code>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const url = `${window.location.origin}/enroll/${tenant.programs?.dashboard_slug}`;
+                          navigator.clipboard.writeText(url);
+                          toast({
+                            title: "URL Copied",
+                            description: "Enrollment URL copied to clipboard.",
+                          });
+                        }}
+                        data-testid={`button-copy-url-${tenant.id}`}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <a
+                        href={`/enroll/${tenant.programs.dashboard_slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-primary transition-colors"
+                        data-testid={`link-open-url-${tenant.id}`}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Protocol</p>
