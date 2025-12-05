@@ -15,6 +15,7 @@ import DashboardPage from "@/pages/dashboard";
 import AnalyticsPage from "@/pages/analytics";
 import MembersPage from "@/pages/members";
 import POSPage from "@/pages/pos";
+import AdminClientsPage from "@/pages/admin-clients";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -94,6 +95,11 @@ function Router() {
       <Route path="/pos">
         <AuthenticatedLayout>
           <ProtectedRoute component={POSPage} />
+        </AuthenticatedLayout>
+      </Route>
+      <Route path="/admin/clients">
+        <AuthenticatedLayout>
+          <ProtectedRoute component={AdminClientsPage} />
         </AuthenticatedLayout>
       </Route>
       <Route path="/">

@@ -1,10 +1,23 @@
 import { useAuth } from "@/lib/auth";
-import { clientApi, type AnalyticsData } from "@/lib/api";
+import { clientApi, type AnalyticsData, type Campaign } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, TrendingUp, TrendingDown, Activity, Smartphone, Mail, QrCode } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { 
+  Users, 
+  TrendingUp, 
+  TrendingDown, 
+  Activity, 
+  Smartphone, 
+  Mail, 
+  QrCode,
+  Send,
+  CheckCircle,
+  XCircle,
+  Clock
+} from "lucide-react";
 
 export default function DashboardPage() {
   const { user, mockMode } = useAuth();
@@ -15,7 +28,18 @@ export default function DashboardPage() {
     enabled: !!user,
   });
 
+  const { data: campaignsResult, isLoading: campaignsLoading } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => clientApi.getCampaigns(5),
+    enabled: !!user,
+  });
+
   const analytics = analyticsResult?.data;
+  const campaigns = campaignsResult?.data?.campaigns || [];
+
+  const retentionRate = analytics?.totals.total 
+    ? Math.round((analytics.totals.active / analytics.totals.total) * 100) 
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -31,7 +55,7 @@ export default function DashboardPage() {
 
       {user && (
         <Card className="border-border bg-card/80">
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle className="text-foreground flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
               {user.programName}
@@ -75,7 +99,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
           title="Total Members"
           value={analytics?.totals.total}
@@ -99,51 +123,94 @@ export default function DashboardPage() {
           loading={analyticsLoading}
           testId="stat-churned"
         />
+        <StatCard
+          title="Retention Rate"
+          value={retentionRate}
+          suffix="%"
+          icon={<Activity className="h-5 w-5" />}
+          variant={retentionRate >= 70 ? "success" : retentionRate >= 50 ? "default" : "warning"}
+          loading={analyticsLoading}
+          testId="stat-retention"
+        />
       </div>
 
-      <Card className="border-border bg-card/80">
-        <CardHeader>
-          <CardTitle className="text-foreground">Enrollment Sources</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            How members are joining your program
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {analyticsLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-20 bg-muted" />
-              <Skeleton className="h-20 bg-muted" />
-              <Skeleton className="h-20 bg-muted" />
-            </div>
-          ) : analytics ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SourceCard
-                title="SmartPass / QR"
-                icon={<QrCode className="h-6 w-6" />}
-                data={analytics.sources.smartpass}
-                color="blue"
-                testId="source-smartpass"
-              />
-              <SourceCard
-                title="Direct Mail"
-                icon={<Mail className="h-6 w-6" />}
-                data={analytics.sources.csv}
-                color="red"
-                testId="source-csv"
-              />
-              <SourceCard
-                title="Claim Codes"
-                icon={<Smartphone className="h-6 w-6" />}
-                data={analytics.sources.claimCode}
-                color="white"
-                testId="source-claim-code"
-              />
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-center py-8">No analytics data available</p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="border-border bg-card/80">
+          <CardHeader>
+            <CardTitle className="text-foreground">Enrollment Sources</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              How members are joining your program
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {analyticsLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-20 bg-muted" />
+                <Skeleton className="h-20 bg-muted" />
+                <Skeleton className="h-20 bg-muted" />
+              </div>
+            ) : analytics ? (
+              <div className="space-y-4">
+                <SourceCard
+                  title="SmartPass / QR"
+                  icon={<QrCode className="h-5 w-5" />}
+                  data={analytics.sources.smartpass}
+                  color="blue"
+                  testId="source-smartpass"
+                />
+                <SourceCard
+                  title="Direct Mail"
+                  icon={<Mail className="h-5 w-5" />}
+                  data={analytics.sources.csv}
+                  color="red"
+                  testId="source-csv"
+                />
+                <SourceCard
+                  title="Claim Codes"
+                  icon={<Smartphone className="h-5 w-5" />}
+                  data={analytics.sources.claimCode}
+                  color="white"
+                  testId="source-claim-code"
+                />
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">No analytics data available</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card/80">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center gap-2">
+              <Send className="h-5 w-5 text-primary" />
+              Recent Campaigns
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Your latest notification campaigns
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {campaignsLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-16 bg-muted" />
+                <Skeleton className="h-16 bg-muted" />
+                <Skeleton className="h-16 bg-muted" />
+              </div>
+            ) : campaigns.length > 0 ? (
+              <div className="space-y-3">
+                {campaigns.map((campaign) => (
+                  <CampaignCard key={campaign.id} campaign={campaign} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Send className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                <p className="text-muted-foreground">No campaigns sent yet</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -154,7 +221,8 @@ function StatCard({
   icon, 
   variant = "default", 
   loading,
-  testId 
+  testId,
+  suffix = ""
 }: { 
   title: string; 
   value?: number; 
@@ -162,6 +230,7 @@ function StatCard({
   variant?: "default" | "success" | "warning";
   loading?: boolean;
   testId: string;
+  suffix?: string;
 }) {
   const colorClasses = {
     default: "text-primary",
@@ -171,15 +240,15 @@ function StatCard({
 
   return (
     <Card className="border-border bg-card/80" data-testid={testId}>
-      <CardContent className="p-6">
+      <CardContent className="p-5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground">{title}</p>
             {loading ? (
               <Skeleton className="h-8 w-20 mt-1 bg-muted" />
             ) : (
-              <p className={`text-3xl font-bold ${colorClasses[variant]}`}>
-                {value?.toLocaleString() ?? "-"}
+              <p className={`text-2xl font-bold ${colorClasses[variant]}`}>
+                {value?.toLocaleString() ?? "-"}{suffix}
               </p>
             )}
           </div>
@@ -206,32 +275,96 @@ function SourceCard({
   testId: string;
 }) {
   const colorClasses = {
-    blue: "bg-primary/10 text-primary border-primary/20",
-    red: "bg-secondary/10 text-secondary border-secondary/20",
-    white: "bg-muted/20 text-foreground border-border",
+    blue: "text-primary",
+    red: "text-secondary",
+    white: "text-foreground",
+  };
+
+  const bgClasses = {
+    blue: "bg-primary/10",
+    red: "bg-secondary/10",
+    white: "bg-muted/30",
   };
 
   const activeRate = data.total > 0 ? Math.round((data.active / data.total) * 100) : 0;
 
   return (
-    <div className={`rounded-lg border p-4 ${colorClasses[color]}`} data-testid={testId}>
-      <div className="flex items-center gap-3 mb-3">
-        {icon}
-        <span className="font-medium">{title}</span>
+    <div className={`rounded-lg p-4 ${bgClasses[color]}`} data-testid={testId}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className={colorClasses[color]}>{icon}</span>
+          <span className={`font-medium ${colorClasses[color]}`}>{title}</span>
+        </div>
+        <Badge variant="outline" className="text-xs">
+          {activeRate}% active
+        </Badge>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-center">
+      <div className="grid grid-cols-3 gap-4 text-center">
         <div>
-          <p className="text-2xl font-bold">{data.total.toLocaleString()}</p>
-          <p className="text-xs opacity-70">Total</p>
+          <p className="text-xl font-bold text-foreground">{data.total.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">Total</p>
         </div>
         <div>
-          <p className="text-2xl font-bold">{data.active.toLocaleString()}</p>
-          <p className="text-xs opacity-70">Active</p>
+          <p className="text-xl font-bold text-primary">{data.active.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">Active</p>
         </div>
         <div>
-          <p className="text-2xl font-bold">{activeRate}%</p>
-          <p className="text-xs opacity-70">Rate</p>
+          <p className="text-xl font-bold text-secondary">{data.churned.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">Churned</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CampaignCard({ campaign }: { campaign: Campaign }) {
+  const successRate = campaign.successRate;
+  
+  return (
+    <div 
+      className="rounded-lg border border-border bg-muted/20 p-4"
+      data-testid={`campaign-${campaign.id}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+        <div>
+          <h4 className="font-medium text-foreground">{campaign.name}</h4>
+          <div className="flex items-center gap-2 mt-1">
+            <Badge variant="outline" className="text-xs">
+              {campaign.targetSegment}
+            </Badge>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {new Date(campaign.createdAt).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+        <Badge 
+          variant={successRate >= 90 ? "default" : successRate >= 70 ? "secondary" : "outline"}
+          className="text-xs"
+        >
+          {successRate}% success
+        </Badge>
+      </div>
+      
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+          <span>Delivery Progress</span>
+          <span>{campaign.successCount} / {campaign.recipientCount}</span>
+        </div>
+        <Progress value={successRate} className="h-1.5" />
+      </div>
+
+      <div className="flex items-center gap-4 mt-3 text-xs">
+        <span className="flex items-center gap-1 text-primary">
+          <CheckCircle className="h-3 w-3" />
+          {campaign.successCount} delivered
+        </span>
+        {campaign.failedCount > 0 && (
+          <span className="flex items-center gap-1 text-secondary">
+            <XCircle className="h-3 w-3" />
+            {campaign.failedCount} failed
+          </span>
+        )}
       </div>
     </div>
   );

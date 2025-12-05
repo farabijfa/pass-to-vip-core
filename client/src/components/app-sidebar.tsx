@@ -21,7 +21,9 @@ import {
   CreditCard, 
   LogOut,
   Sparkles,
-  User
+  User,
+  Building2,
+  Settings
 } from "lucide-react";
 
 const menuItems = [
@@ -31,9 +33,13 @@ const menuItems = [
   { title: "POS Simulator", path: "/pos", icon: CreditCard, testId: "link-pos" },
 ];
 
+const adminItems = [
+  { title: "Client Management", path: "/admin/clients", icon: Building2, testId: "link-admin-clients" },
+];
+
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, mockMode, logout } = useAuth();
+  const { user, mockMode, logout, isAdmin } = useAuth();
 
   return (
     <Sidebar className="border-border">
@@ -76,6 +82,33 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-muted-foreground flex items-center gap-1">
+              <Settings className="h-3 w-3" />
+              Admin
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton 
+                      asChild
+                      isActive={location === item.path}
+                      data-testid={item.testId}
+                    >
+                      <Link href={item.path}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border p-4">

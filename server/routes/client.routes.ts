@@ -28,4 +28,24 @@ router.get(
   clientController.getMembers.bind(clientController)
 );
 
+router.get(
+  "/campaigns",
+  clientController.getCampaigns.bind(clientController)
+);
+
+router.get(
+  "/admin/tenants",
+  clientController.getTenantsAsAdmin.bind(clientController)
+);
+
+router.post(
+  "/admin/provision",
+  clientController.provisionTenantAsAdmin.bind(clientController)
+);
+
+router.delete(
+  "/admin/tenants/:userId",
+  clientController.deleteTenantAsAdmin.bind(clientController)
+);
+
 export default router;

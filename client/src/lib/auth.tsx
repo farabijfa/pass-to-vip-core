@@ -12,6 +12,7 @@ interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refresh: () => Promise<void>;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -77,8 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ isLoading: false, isLoggedIn: false, user: null, mockMode: isMockMode() });
   };
 
+  const isAdmin = state.user?.role === "SUPER_ADMIN" || state.user?.role === "PLATFORM_ADMIN";
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refresh }}>
+    <AuthContext.Provider value={{ ...state, login, logout, refresh, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

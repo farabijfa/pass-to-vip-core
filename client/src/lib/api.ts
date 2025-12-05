@@ -43,6 +43,18 @@ export interface Member {
   created_at: string;
 }
 
+export interface Campaign {
+  id: string;
+  name: string;
+  recipientCount: number;
+  successCount: number;
+  failedCount: number;
+  message: string | null;
+  targetSegment: string;
+  createdAt: string;
+  successRate: number;
+}
+
 export interface POSResponse {
   success: boolean;
   action: string;
@@ -141,6 +153,12 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json();
 }
 
+const mockCampaigns: Campaign[] = [
+  { id: "c1", name: "Holiday Points Bonus", recipientCount: 523, successCount: 498, failedCount: 25, message: "Happy Holidays! Earn 2x points this week.", targetSegment: "All Members", createdAt: "2024-12-01T10:00:00Z", successRate: 95 },
+  { id: "c2", name: "Birthday Rewards", recipientCount: 47, successCount: 47, failedCount: 0, message: "Happy Birthday! Enjoy bonus points.", targetSegment: "Birthday Members", createdAt: "2024-11-28T09:00:00Z", successRate: 100 },
+  { id: "c3", name: "Win-Back Campaign", recipientCount: 156, successCount: 142, failedCount: 14, message: "We miss you! Come back for 50 bonus points.", targetSegment: "Inactive 30+ Days", createdAt: "2024-11-15T14:30:00Z", successRate: 91 },
+];
+
 export const clientApi = {
   async getMe(): Promise<ApiResponse<ClientContext>> {
     if (MOCK_MODE) {
@@ -156,6 +174,14 @@ export const clientApi = {
       return { success: true, data: mockAnalytics };
     }
     return apiCall<AnalyticsData>("/api/client/analytics");
+  },
+
+  async getCampaigns(limit = 10): Promise<ApiResponse<{ campaigns: Campaign[]; count: number }>> {
+    if (MOCK_MODE) {
+      await new Promise(r => setTimeout(r, 400));
+      return { success: true, data: { campaigns: mockCampaigns, count: mockCampaigns.length } };
+    }
+    return apiCall<{ campaigns: Campaign[]; count: number }>(`/api/client/campaigns?limit=${limit}`);
   },
 };
 
