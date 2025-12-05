@@ -101,7 +101,7 @@ BEGIN
     p.name::TEXT as program_name,
     COALESCE(p.billing_tier, 'STANDARD')::TEXT as billing_tier,
     COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE')::BIGINT as active_count,
-    COUNT(pm.id) FILTER (WHERE pm.status IN ('CHURNED', 'UNINSTALLED'))::BIGINT as churned_count,
+    COUNT(pm.id) FILTER (WHERE pm.status = 'UNINSTALLED')::BIGINT as churned_count,
     COUNT(pm.id)::BIGINT as total_count,
     COALESCE(p.member_limit, 1000) as member_limit,
     (COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE') > COALESCE(p.member_limit, 1000)) as is_over_limit,
@@ -141,7 +141,7 @@ BEGIN
     'billing_tier', COALESCE(p.billing_tier, 'STANDARD'),
     'member_limit', COALESCE(p.member_limit, 1000),
     'active_count', COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE'),
-    'churned_count', COUNT(pm.id) FILTER (WHERE pm.status IN ('CHURNED', 'UNINSTALLED')),
+    'churned_count', COUNT(pm.id) FILTER (WHERE pm.status = 'UNINSTALLED'),
     'total_count', COUNT(pm.id),
     'is_over_limit', COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE') > COALESCE(p.member_limit, 1000),
     'usage_percentage', ROUND(
