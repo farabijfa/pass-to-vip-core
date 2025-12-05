@@ -1389,6 +1389,16 @@ class ClientController {
         passkitTierSilverId,
         passkitTierGoldId,
         passkitTierPlatinumId,
+        tierSystemType,
+        tier1Name,
+        tier2Name,
+        tier3Name,
+        tier4Name,
+        defaultMemberLabel,
+        tier1DiscountPercent,
+        tier2DiscountPercent,
+        tier3DiscountPercent,
+        tier4DiscountPercent,
       } = req.body;
 
       if (!programId) {
@@ -1432,6 +1442,16 @@ class ClientController {
         passkitTierSilverId,
         passkitTierGoldId,
         passkitTierPlatinumId,
+        tierSystemType,
+        tier1Name,
+        tier2Name,
+        tier3Name,
+        tier4Name,
+        defaultMemberLabel,
+        tier1DiscountPercent,
+        tier2DiscountPercent,
+        tier3DiscountPercent,
+        tier4DiscountPercent,
       });
 
       if (!result.success) {

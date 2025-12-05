@@ -103,6 +103,10 @@ interface TenantProgram {
   tier3Name: string | null;
   tier4Name: string | null;
   defaultMemberLabel: string | null;
+  tier1DiscountPercent: number;
+  tier2DiscountPercent: number;
+  tier3DiscountPercent: number;
+  tier4DiscountPercent: number;
   createdAt: string;
 }
 
@@ -1308,6 +1312,10 @@ class AdminService {
           tier_3_name,
           tier_4_name,
           default_member_label,
+          tier_1_discount_percent,
+          tier_2_discount_percent,
+          tier_3_discount_percent,
+          tier_4_discount_percent,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1347,6 +1355,10 @@ class AdminService {
         tier3Name: p.tier_3_name,
         tier4Name: p.tier_4_name,
         defaultMemberLabel: p.default_member_label,
+        tier1DiscountPercent: p.tier_1_discount_percent ?? 0,
+        tier2DiscountPercent: p.tier_2_discount_percent ?? 5,
+        tier3DiscountPercent: p.tier_3_discount_percent ?? 10,
+        tier4DiscountPercent: p.tier_4_discount_percent ?? 15,
         createdAt: p.created_at,
       }));
 
@@ -1618,6 +1630,10 @@ class AdminService {
       tier3Name?: string | null;
       tier4Name?: string | null;
       defaultMemberLabel?: string | null;
+      tier1DiscountPercent?: number;
+      tier2DiscountPercent?: number;
+      tier3DiscountPercent?: number;
+      tier4DiscountPercent?: number;
     }
   ): Promise<{ success: boolean; data?: any; error?: string }> {
     console.log(`🔄 Updating tier thresholds for program: ${programId}`);
@@ -1684,6 +1700,20 @@ class AdminService {
         updateData.default_member_label = thresholds.defaultMemberLabel || null;
       }
 
+      // Add discount percentages if provided
+      if (thresholds.tier1DiscountPercent !== undefined) {
+        updateData.tier_1_discount_percent = thresholds.tier1DiscountPercent;
+      }
+      if (thresholds.tier2DiscountPercent !== undefined) {
+        updateData.tier_2_discount_percent = thresholds.tier2DiscountPercent;
+      }
+      if (thresholds.tier3DiscountPercent !== undefined) {
+        updateData.tier_3_discount_percent = thresholds.tier3DiscountPercent;
+      }
+      if (thresholds.tier4DiscountPercent !== undefined) {
+        updateData.tier_4_discount_percent = thresholds.tier4DiscountPercent;
+      }
+
       // Update tier thresholds, PassKit tier IDs, and tier naming config
       const { data: updated, error: updateError } = await client
         .from("programs")
@@ -1702,7 +1732,11 @@ class AdminService {
           tier_2_name,
           tier_3_name,
           tier_4_name,
-          default_member_label
+          default_member_label,
+          tier_1_discount_percent,
+          tier_2_discount_percent,
+          tier_3_discount_percent,
+          tier_4_discount_percent
         `)
         .single();
 
@@ -1727,6 +1761,10 @@ class AdminService {
           tier3Name: updated.tier_3_name,
           tier4Name: updated.tier_4_name,
           defaultMemberLabel: updated.default_member_label,
+          tier1DiscountPercent: updated.tier_1_discount_percent ?? 0,
+          tier2DiscountPercent: updated.tier_2_discount_percent ?? 5,
+          tier3DiscountPercent: updated.tier_3_discount_percent ?? 10,
+          tier4DiscountPercent: updated.tier_4_discount_percent ?? 15,
         }
       };
 
