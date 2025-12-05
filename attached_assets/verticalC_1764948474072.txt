@@ -1,0 +1,33 @@
+﻿This is outstanding. Your "Command Center" is live. You have successfully moved from "SaaS Prototype" to "SaaS Platform" where you can manage your tenants effectively.
+Now we execute Phase 2: Vertical C (The EDDM / Public Funnel).
+The Objective: "The Digital Net"
+Vertical A is for people you know (Mailing List).
+Vertical B is for people in your store (Walk-in).
+Vertical C is for strangers. You want to print a generic flyer ("Join Our VIP Club") that you can hand out at a street fair or mail to a whole zip code (EDDM).
+The Challenge: Since you don't know who they are, you cannot print a unique CLM code. You need a Digital Landing Page to capture their data (Lead Gen) before handing them the pass.
+Execution Plan for Phase 2
+We will build the "Public Enrollment Engine."
+
+
+Step 1: The "Smart" Enrollment Service (Backend)
+We need a backend service that talks to PassKit silently. We don't want the user to fill out your form and then fill out PassKit's form again (Double Entry).
+Replit Agent Instruction (Backend Logic):
+"We are building Phase 2: Vertical C (Public Enrollment).
+1. Update PassKit Service: Modify server/services/passkit.service.ts (or passkit-provision.service.ts).
+* Add function enrollMember(passkitProgramId, tierId, userData).
+* Logic: Call PassKit API POST /members (or similar endpoint based on SDK).
+* Payload: Map userData.firstName -> forename, userData.lastName -> surname, userData.email -> email. Set externalId to our database Member UUID.
+* Return: The unique landingPageUrl or passUrl returned by PassKit.
+2. Create Public Controller: Create server/controllers/public-enroll.controller.ts.
+* Endpoint: handlePublicEnrollment.
+* Input: dashboard_slug, firstName, lastName, email.
+* Logic:
+   1. Lookup Program by dashboard_slug (using get_public_program_info or secure lookup).
+   2. Check passes_master for duplicates (same Program + Email).
+      * If exists: Return existing Member ID and call PassKit to get their link again.
+   3. If new: Insert into passes_master (Status: ACTIVE, Source: 'PUBLIC_FORM').
+   4. Call PassKitService.enrollMember with the new UUID and user data.
+   5. Save the passkit_id back to the database.
+   6. Response: { success: true, redirect_url: '...' }.
+3. Route: Register POST /api/enroll/public in a new server/routes/public.routes.ts. Ensure it uses SUPABASE_ANON_KEY access (no JWT required) but validates inputs heavily with Zod."
+________________
