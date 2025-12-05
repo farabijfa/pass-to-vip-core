@@ -1698,6 +1698,91 @@ export default function AdminClientDetailsPage() {
 
                               {tierConfigForm[program.id].tierSystemType !== 'NONE' && (
                               <div className="border-t border-border pt-3 space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">Tier Discounts (%)</p>
+                                <p className="text-[10px] text-muted-foreground">Member discounts returned in POS webhook responses</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier1Name || 'Tier 1'}</Label>
+                                    <div className="flex items-center gap-1">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        placeholder="0"
+                                        className="h-7 text-xs"
+                                        value={tierConfigForm[program.id].tier1Discount}
+                                        onChange={(e) => setTierConfigForm((prev) => ({
+                                          ...prev,
+                                          [program.id]: { ...prev[program.id], tier1Discount: e.target.value },
+                                        }))}
+                                        data-testid={`input-discount-tier1-${program.id}`}
+                                      />
+                                      <span className="text-xs text-muted-foreground">%</span>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier2Name || 'Tier 2'}</Label>
+                                    <div className="flex items-center gap-1">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        placeholder="5"
+                                        className="h-7 text-xs"
+                                        value={tierConfigForm[program.id].tier2Discount}
+                                        onChange={(e) => setTierConfigForm((prev) => ({
+                                          ...prev,
+                                          [program.id]: { ...prev[program.id], tier2Discount: e.target.value },
+                                        }))}
+                                        data-testid={`input-discount-tier2-${program.id}`}
+                                      />
+                                      <span className="text-xs text-muted-foreground">%</span>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier3Name || 'Tier 3'}</Label>
+                                    <div className="flex items-center gap-1">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        placeholder="10"
+                                        className="h-7 text-xs"
+                                        value={tierConfigForm[program.id].tier3Discount}
+                                        onChange={(e) => setTierConfigForm((prev) => ({
+                                          ...prev,
+                                          [program.id]: { ...prev[program.id], tier3Discount: e.target.value },
+                                        }))}
+                                        data-testid={`input-discount-tier3-${program.id}`}
+                                      />
+                                      <span className="text-xs text-muted-foreground">%</span>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier4Name || 'Tier 4'}</Label>
+                                    <div className="flex items-center gap-1">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        placeholder="15"
+                                        className="h-7 text-xs"
+                                        value={tierConfigForm[program.id].tier4Discount}
+                                        onChange={(e) => setTierConfigForm((prev) => ({
+                                          ...prev,
+                                          [program.id]: { ...prev[program.id], tier4Discount: e.target.value },
+                                        }))}
+                                        data-testid={`input-discount-tier4-${program.id}`}
+                                      />
+                                      <span className="text-xs text-muted-foreground">%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              )}
+
+                              {tierConfigForm[program.id].tierSystemType !== 'NONE' && (
+                              <div className="border-t border-border pt-3 space-y-2">
                                 <p className="text-xs font-medium text-muted-foreground">PassKit Tier IDs (Optional)</p>
                                 <p className="text-[10px] text-muted-foreground">Use different pass designs per tier level</p>
                                 <div className="grid grid-cols-2 gap-2">
