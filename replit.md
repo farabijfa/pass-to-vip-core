@@ -27,7 +27,7 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 - **Protocol Routing:** Supports `MEMBERSHIP`, `EVENT_TICKET`, and `COUPON` protocols.
 - **Security:** Includes JWT, multi-tenant isolation, rate limiting, Zod validation, and a locked-down anonymous key.
 - **Point System:** Integer-based "Casino Chip" model with configurable `earn_rate_multiplier` (default 10).
-- **Tier System:** Configurable spend-based and point-based tiers with dynamic naming, visual enhancements, and PassKit tier ID mapping for different pass designs.
+- **Tier System:** Configurable spend-based and point-based tiers with dynamic naming, visual enhancements, PassKit tier ID mapping for different pass designs, and **dynamic tier discounts** (0-100% per tier, editable via Client Command Center).
 - **Notification System:** Enhanced system for push notifications to digital wallet passes with triple validation, dynamic tier segments, and protocol-aware segmentation (e.g., `ALL`, `TIER_1`, `GEO`, `CSV`). Includes segment preview and automated birthday rewards.
 
 ### Feature Specifications
