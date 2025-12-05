@@ -18,6 +18,33 @@ interface ClientProgram {
   name: string;
   passkit_program_id: string;
   protocol: string;
+  userId?: string;
+  passkit_status?: string;
+  postgrid_template_id?: string;
+}
+
+interface ClientProfile {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  program: {
+    id: string;
+    name: string;
+    protocol: string;
+    dashboardSlug: string;
+    enrollmentUrl: string | null;
+    isSuspended: boolean;
+    earnRateMultiplier: number;
+    memberLimit: number | null;
+    postgridTemplateId: string | null;
+    passkit: {
+      status: string;
+      programId: string | null;
+      tierId: string | null;
+    };
+  };
 }
 
 interface ValidatedClient {
@@ -122,9 +149,9 @@ async function fetchClients(): Promise<{ programs: ClientProgram[] }> {
   if (isMockMode()) {
     return {
       programs: [
-        { id: "prog-1", name: "Demo Pizza Rewards", passkit_program_id: "pk_demo_1", protocol: "MEMBERSHIP" },
-        { id: "prog-2", name: "Coffee Club VIP", passkit_program_id: "pk_demo_2", protocol: "MEMBERSHIP" },
-        { id: "prog-3", name: "Stadium Events", passkit_program_id: "pk_demo_3", protocol: "EVENT_TICKET" },
+        { id: "prog-1", name: "Demo Pizza Rewards", passkit_program_id: "pk_demo_1", protocol: "MEMBERSHIP", userId: "mock-user-001", passkit_status: "provisioned", postgrid_template_id: "tmpl_mock_1" },
+        { id: "prog-2", name: "Coffee Club VIP", passkit_program_id: "pk_demo_2", protocol: "MEMBERSHIP", userId: "mock-user-002", passkit_status: "manual_required", postgrid_template_id: undefined },
+        { id: "prog-3", name: "Stadium Events", passkit_program_id: "pk_demo_3", protocol: "EVENT_TICKET", userId: "mock-user-003", passkit_status: "skipped", postgrid_template_id: "tmpl_mock_2" },
       ],
     };
   }
@@ -143,6 +170,9 @@ async function fetchClients(): Promise<{ programs: ClientProgram[] }> {
       name: t.programs.name,
       passkit_program_id: t.programs.passkit_program_id || "",
       protocol: t.programs.protocol || "MEMBERSHIP",
+      userId: t.id,
+      passkit_status: t.programs.passkit_status || "manual_required",
+      postgrid_template_id: t.programs.postgrid_template_id || undefined,
     }));
   
   return { programs };
@@ -208,6 +238,7 @@ export default function CampaignsPage() {
   const [mailingClass, setMailingClass] = useState<string>("standard_class");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [selectedBackTemplate, setSelectedBackTemplate] = useState<string>("");
+  const [templateAutoFilled, setTemplateAutoFilled] = useState(false);
 
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -247,6 +278,27 @@ export default function CampaignsPage() {
       fetchCostEstimate();
     }
   }, [preview?.valid, resourceType, currentSize, mailingClass]);
+
+  useEffect(() => {
+    if (clientMode === "dropdown" && selectedProgram) {
+      if (selectedProgram.postgrid_template_id) {
+        setSelectedTemplate(selectedProgram.postgrid_template_id);
+        setTemplateAutoFilled(true);
+      } else {
+        setTemplateAutoFilled(false);
+      }
+    } else if (clientMode === "manual" && validatedClient) {
+      setTemplateAutoFilled(false);
+    } else {
+      setTemplateAutoFilled(false);
+    }
+  }, [selectedProgram?.id, validatedClient?.id, clientMode]);
+
+  const showPassKitWarning = 
+    clientMode === "dropdown" && 
+    selectedProgram && 
+    selectedProgram.protocol === "MEMBERSHIP" && 
+    selectedProgram.passkit_status !== "provisioned";
 
   const fetchCostEstimate = async () => {
     if (!preview || preview.valid === 0) return;
@@ -625,20 +677,33 @@ export default function CampaignsPage() {
                   {isLoadingClients ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (
-                    <Select value={selectedClient} onValueChange={setSelectedClient}>
-                      <SelectTrigger className="w-full" data-testid="select-client">
-                        <SelectValue placeholder="Select a client program..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientsData?.programs
-                          .filter((program) => program.id && program.id.trim() !== "")
-                          .map((program) => (
-                            <SelectItem key={program.id} value={program.id}>
-                              {program.name} ({program.protocol})
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      <Select value={selectedClient} onValueChange={setSelectedClient}>
+                        <SelectTrigger className="flex-1" data-testid="select-client">
+                          <SelectValue placeholder="Select a client program..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clientsData?.programs
+                            .filter((program) => program.id && program.id.trim() !== "")
+                            .map((program) => (
+                              <SelectItem key={program.id} value={program.id}>
+                                {program.name} ({program.protocol})
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedProgram?.userId && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => window.open(`/admin/clients/${selectedProgram.userId}`, '_blank')}
+                          title="View Client Settings"
+                          data-testid="button-view-client"
+                        >
+                          <ExternalLinkIcon className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   )}
                   {selectedProgram && (
                     <div className="p-3 rounded-md bg-muted/50">
@@ -647,6 +712,28 @@ export default function CampaignsPage() {
                         <span className="text-xs text-muted-foreground">
                           PassKit ID: {selectedProgram.passkit_program_id || "Not configured"}
                         </span>
+                        {selectedProgram.passkit_status === "provisioned" && (
+                          <Badge variant="outline" className="text-xs border-green-500 text-green-600">Synced</Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {showPassKitWarning && (
+                    <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-2" data-testid="alert-passkit-warning">
+                      <AlertIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-600">PassKit Not Synced</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          This client is not synced with PassKit. Campaigns may fail to generate digital passes.
+                          <a 
+                            href={`/admin/clients/${selectedProgram?.userId}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline ml-1"
+                          >
+                            Fix in Client Settings
+                          </a>
+                        </p>
                       </div>
                     </div>
                   )}
@@ -812,10 +899,23 @@ export default function CampaignsPage() {
                     {filteredTemplates.length > 0 && (
                       <>
                         <div className="space-y-2">
-                          <Label className="text-sm text-foreground">
-                            {resourceType === "postcard" ? "Front Template" : "Letter Template"}
-                          </Label>
-                          <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm text-foreground">
+                              {resourceType === "postcard" ? "Front Template" : "Letter Template"}
+                            </Label>
+                            {templateAutoFilled && (
+                              <Badge variant="outline" className="text-xs border-green-500 text-green-600" data-testid="badge-auto-filled">
+                                Auto-filled from Client Settings
+                              </Badge>
+                            )}
+                          </div>
+                          <Select 
+                            value={selectedTemplate} 
+                            onValueChange={(v) => {
+                              setSelectedTemplate(v);
+                              setTemplateAutoFilled(false);
+                            }}
+                          >
                             <SelectTrigger data-testid="select-template">
                               <SelectValue placeholder="Select a template..." />
                             </SelectTrigger>
@@ -1239,6 +1339,26 @@ function HistoryIcon({ className }: { className?: string }) {
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
       <path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
+function ExternalLinkIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
+}
+
+function AlertIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
   );
 }
