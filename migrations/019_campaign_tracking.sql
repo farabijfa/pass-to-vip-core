@@ -96,6 +96,12 @@ CREATE INDEX IF NOT EXISTS idx_campaign_contacts_postgrid_mail_id ON campaign_co
 ALTER TABLE campaign_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE campaign_contacts ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (makes migration idempotent/safe to re-run)
+DROP POLICY IF EXISTS "service_role_full_access_campaign_runs" ON campaign_runs;
+DROP POLICY IF EXISTS "service_role_full_access_campaign_contacts" ON campaign_contacts;
+DROP POLICY IF EXISTS "anon_no_access_campaign_runs" ON campaign_runs;
+DROP POLICY IF EXISTS "anon_no_access_campaign_contacts" ON campaign_contacts;
+
 -- Service role has full access
 CREATE POLICY "service_role_full_access_campaign_runs" ON campaign_runs
   FOR ALL TO service_role USING (true) WITH CHECK (true);
