@@ -118,35 +118,34 @@ class PublicEnrollController {
       if (existingMember && !lookupError) {
         console.log(`📧 Existing member found: ${existingMember.id}`);
 
-        if (existingMember.passkit_id && program.passkit_tier_id) {
-          const installUrl = `https://pub2.pskt.io/${existingMember.passkit_id}`;
-          
-          res.status(200).json({
-            success: true,
-            data: {
-              memberId: existingMember.id,
-              isNewMember: false,
-              redirectUrl: installUrl,
-              message: "Welcome back! Redirecting to your existing pass.",
-            },
-            metadata: { processingTime: Date.now() - startTime },
-          });
-          return;
+        let existingRedirectUrl: string;
+        let message: string;
+
+        if (existingMember.passkit_id) {
+          existingRedirectUrl = `https://pub2.pskt.io/${existingMember.passkit_id}`;
+          message = "Welcome back! Redirecting to your existing pass.";
+        } else if (program.enrollment_url) {
+          existingRedirectUrl = program.enrollment_url;
+          message = "Welcome back! Redirecting to enrollment page.";
+        } else if (program.passkit_tier_id) {
+          existingRedirectUrl = `https://pub2.pskt.io/c/${program.passkit_tier_id}`;
+          message = "Welcome back! Redirecting to claim your pass.";
+        } else {
+          existingRedirectUrl = "/";
+          message = "Welcome back! Your membership is already active.";
         }
 
-        if (program.enrollment_url) {
-          res.status(200).json({
-            success: true,
-            data: {
-              memberId: existingMember.id,
-              isNewMember: false,
-              redirectUrl: program.enrollment_url,
-              message: "Welcome back! Redirecting to enrollment page.",
-            },
-            metadata: { processingTime: Date.now() - startTime },
-          });
-          return;
-        }
+        res.status(200).json({
+          success: true,
+          data: {
+            memberId: existingMember.id,
+            isNewMember: false,
+            redirectUrl: existingRedirectUrl,
+            message,
+          },
+          metadata: { processingTime: Date.now() - startTime },
+        });
+        return;
       }
 
       const memberId = generate();
