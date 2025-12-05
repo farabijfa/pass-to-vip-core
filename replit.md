@@ -66,6 +66,7 @@ Multi-tenant SaaS platform bridging physical mail and digital wallets. Developed
 │   ├── services/             # Business logic
 │   │   ├── logic.service.ts  # POS orchestrator
 │   │   ├── passkit.service.ts
+│   │   ├── passkit-provision.service.ts  # Auto-provisioning orchestrator
 │   │   ├── postgrid.service.ts
 │   │   └── supabase.service.ts
 │   ├── routes/
@@ -90,6 +91,30 @@ Multi-tenant SaaS platform bridging physical mail and digital wallets. Developed
 - `MEMBERSHIP`: Points earn/redeem via `process_membership_transaction` RPC
 - `EVENT_TICKET`: One-time check-ins via `process_one_time_use` RPC
 - `COUPON`: Coupon issue/redeem via `process_one_time_use` RPC
+
+### PassKit Auto-Provisioning
+
+The `passkit-provision.service.ts` orchestrates automatic digital wallet program creation:
+
+**Flow:** Program → Tier → Enrollment URL
+
+| Step | API Endpoint | Result |
+|------|--------------|--------|
+| 1. Create Program | POST `/members/program` | `programId` |
+| 2. Create Tier | POST `/members/tier` | `tierId` |
+| 3. Get Enrollment URL | GET `/members/tier/{tierId}/links` | Apple/Google URLs |
+
+**Soft-Fail Approach:**
+- Client provisioning continues even if PassKit API fails
+- Response includes `passkitStatus`: `provisioned`, `manual_required`, or `skipped`
+- Wallet integration can be manually configured later if auto-provisioning fails
+
+**Provisioning Status Values:**
+| Status | Description |
+|--------|-------------|
+| `provisioned` | PassKit program/tier created automatically |
+| `manual_required` | Auto-provision failed; manual setup needed |
+| `skipped` | Protocol doesn't support auto-provisioning |
 
 ## Client Dashboard Pages
 
@@ -254,6 +279,9 @@ npx tsx scripts/prod-validation.ts
 - **Template Management:** Dynamic content
 
 ## Recent Changes
+- **PassKit Auto-Provisioning:** New orchestration service creates programs/tiers automatically with soft-fail approach
+- **Admin API Enhanced:** passkitProgramId now optional; response includes PassKit status, tier ID, enrollment URL
+- **POS Clerk Override:** Redemption actions require confirmation modal to prevent accidental point deductions
 - **Security hardening:** Migration 012 locks down anon key to RPC-only access
 - **Public enrollment:** Uses secure `get_public_program_info` RPC function
 - POS Simulator with dual scanning (keyboard wedge + camera)
