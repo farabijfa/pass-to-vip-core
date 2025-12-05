@@ -82,14 +82,15 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
     const client = supabaseService.getClient();
 
     if (eventType === "pass.uninstalled" || eventType === "delete") {
-      console.log(`🔴 Member ${memberId}: Pass uninstalled → CHURNED`);
+      console.log(`🔴 Pass ${memberId}: Uninstalled → CHURNED`);
       
+      // Update passes_master table (the actual table storing pass records)
       const { error } = await client
-        .from("members")
+        .from("passes_master")
         .update({
-          status: "CHURNED",
-          pass_status: "UNINSTALLED",
-          updated_at: new Date().toISOString(),
+          status: "UNINSTALLED",
+          is_active: false,
+          last_updated: new Date().toISOString(),
         })
         .eq("external_id", memberId);
 
@@ -103,20 +104,21 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
 
       return res.status(200).json({ 
         success: true, 
-        message: "Member marked as CHURNED",
+        message: "Pass marked as UNINSTALLED",
         memberId,
       });
     }
 
     if (eventType === "pass.installed" || eventType === "install") {
-      console.log(`🟢 Member ${memberId}: Pass installed → ACTIVE`);
+      console.log(`🟢 Pass ${memberId}: Installed → ACTIVE`);
       
+      // Update passes_master table (the actual table storing pass records)
       const { error } = await client
-        .from("members")
+        .from("passes_master")
         .update({
-          status: "ACTIVE",
-          pass_status: "INSTALLED",
-          updated_at: new Date().toISOString(),
+          status: "INSTALLED",
+          is_active: true,
+          last_updated: new Date().toISOString(),
         })
         .eq("external_id", memberId);
 
@@ -130,18 +132,19 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
 
       return res.status(200).json({ 
         success: true, 
-        message: "Member marked as ACTIVE",
+        message: "Pass marked as INSTALLED",
         memberId,
       });
     }
 
     if (eventType === "pass.updated" || eventType === "update") {
-      console.log(`🔵 Member ${memberId}: Pass updated`);
+      console.log(`🔵 Pass ${memberId}: Updated`);
       
+      // Update passes_master table (the actual table storing pass records)
       const { error } = await client
-        .from("members")
+        .from("passes_master")
         .update({
-          updated_at: new Date().toISOString(),
+          last_updated: new Date().toISOString(),
         })
         .eq("external_id", memberId);
 
