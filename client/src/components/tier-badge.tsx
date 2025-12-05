@@ -1,19 +1,30 @@
 import { Badge } from "@/components/ui/badge";
 import { Medal, Award, Trophy, Crown, Star } from "lucide-react";
-import { type TierLevel, getTierName, getTierColor } from "@/lib/tier-calculator";
+import { 
+  type TierLevel, 
+  type TierNames,
+  type TierSystemType,
+  getTierName, 
+  getTierColor,
+  getTierNameFromLevel,
+  TIER_PRESETS,
+  fromLegacyTierLevel
+} from "@/lib/tier-calculator";
 
 interface TierBadgeProps {
-  level: TierLevel;
+  level: TierLevel | string;
+  tierNames?: TierNames;
+  tierSystemType?: TierSystemType;
   showIcon?: boolean;
   size?: "sm" | "md" | "lg";
   className?: string;
 }
 
-const tierIcons = {
-  BRONZE: Medal,
-  SILVER: Award,
-  GOLD: Trophy,
-  PLATINUM: Crown,
+const tierIcons: Record<TierLevel, typeof Medal> = {
+  TIER_1: Medal,
+  TIER_2: Award,
+  TIER_3: Trophy,
+  TIER_4: Crown,
 };
 
 const sizeClasses = {
@@ -28,14 +39,37 @@ const iconSizes = {
   lg: "h-4 w-4",
 };
 
-export function TierBadge({ level, showIcon = true, size = "md", className = "" }: TierBadgeProps) {
-  const { bg, text, border } = getTierColor(level);
-  const Icon = tierIcons[level] || Star;
-  const name = getTierName(level);
+function normalizeLevel(level: TierLevel | string): TierLevel {
+  const levelMap: Record<string, TierLevel> = {
+    'BRONZE': 'TIER_1',
+    'SILVER': 'TIER_2',
+    'GOLD': 'TIER_3',
+    'PLATINUM': 'TIER_4',
+    'TIER_1': 'TIER_1',
+    'TIER_2': 'TIER_2',
+    'TIER_3': 'TIER_3',
+    'TIER_4': 'TIER_4',
+  };
+  return levelMap[level] || 'TIER_1';
+}
+
+export function TierBadge({ 
+  level, 
+  tierNames,
+  tierSystemType = 'LOYALTY',
+  showIcon = true, 
+  size = "md", 
+  className = "" 
+}: TierBadgeProps) {
+  const normalizedLevel = normalizeLevel(level);
+  const { bg, text, border } = getTierColor(normalizedLevel);
+  const Icon = tierIcons[normalizedLevel] || Star;
+  const names = tierNames || TIER_PRESETS[tierSystemType];
+  const name = getTierNameFromLevel(normalizedLevel, names, tierSystemType);
 
   return (
     <Badge
-      data-testid={`badge-tier-${level.toLowerCase()}`}
+      data-testid={`badge-tier-${normalizedLevel.toLowerCase()}`}
       className={`${bg} ${text} ${border} border ${sizeClasses[size]} ${className}`}
     >
       {showIcon && <Icon className={`${iconSizes[size]} mr-1`} />}
@@ -51,24 +85,40 @@ interface TierProgressProps {
     tierSilverMax: number | null;
     tierGoldMax: number | null;
   };
+  tierNames?: TierNames;
+  tierSystemType?: TierSystemType;
   showDetails?: boolean;
 }
 
-export function TierProgress({ points, thresholds, showDetails = true }: TierProgressProps) {
+export function TierProgress({ 
+  points, 
+  thresholds, 
+  tierNames,
+  tierSystemType = 'LOYALTY',
+  showDetails = true 
+}: TierProgressProps) {
   const { tierBronzeMax, tierSilverMax, tierGoldMax } = thresholds;
+  const names = tierNames || TIER_PRESETS[tierSystemType];
 
-  const calculateProgress = (): { level: TierLevel; progress: number; nextThreshold: number | null; pointsNeeded: number | null } => {
+  const calculateProgress = (): { 
+    level: TierLevel; 
+    progress: number; 
+    nextThreshold: number | null; 
+    pointsNeeded: number | null;
+    nextTierName: string | null;
+  } => {
     if (!tierBronzeMax && !tierSilverMax && !tierGoldMax) {
-      return { level: "BRONZE", progress: 100, nextThreshold: null, pointsNeeded: null };
+      return { level: "TIER_1", progress: 100, nextThreshold: null, pointsNeeded: null, nextTierName: null };
     }
 
     if (tierBronzeMax !== null && points <= tierBronzeMax) {
       const progress = (points / tierBronzeMax) * 100;
       return { 
-        level: "BRONZE", 
+        level: "TIER_1", 
         progress: Math.min(progress, 100), 
         nextThreshold: tierBronzeMax + 1,
-        pointsNeeded: tierBronzeMax - points + 1
+        pointsNeeded: tierBronzeMax - points + 1,
+        nextTierName: names.tier2Name
       };
     }
 
@@ -77,10 +127,11 @@ export function TierProgress({ points, thresholds, showDetails = true }: TierPro
       const range = tierSilverMax - start;
       const progress = ((points - start) / range) * 100;
       return { 
-        level: "SILVER", 
+        level: "TIER_2", 
         progress: Math.min(progress, 100), 
         nextThreshold: tierSilverMax + 1,
-        pointsNeeded: tierSilverMax - points + 1
+        pointsNeeded: tierSilverMax - points + 1,
+        nextTierName: names.tier3Name
       };
     }
 
@@ -89,35 +140,27 @@ export function TierProgress({ points, thresholds, showDetails = true }: TierPro
       const range = tierGoldMax - start;
       const progress = ((points - start) / range) * 100;
       return { 
-        level: "GOLD", 
+        level: "TIER_3", 
         progress: Math.min(progress, 100), 
         nextThreshold: tierGoldMax + 1,
-        pointsNeeded: tierGoldMax - points + 1
+        pointsNeeded: tierGoldMax - points + 1,
+        nextTierName: names.tier4Name
       };
     }
 
-    return { level: "PLATINUM", progress: 100, nextThreshold: null, pointsNeeded: null };
+    return { level: "TIER_4", progress: 100, nextThreshold: null, pointsNeeded: null, nextTierName: null };
   };
 
-  const { level, progress, pointsNeeded } = calculateProgress();
+  const { level, progress, pointsNeeded, nextTierName } = calculateProgress();
   const { bg } = getTierColor(level);
-
-  const nextTierName = (): string | null => {
-    switch (level) {
-      case "BRONZE": return "Silver";
-      case "SILVER": return "Gold";
-      case "GOLD": return "Platinum";
-      default: return null;
-    }
-  };
 
   return (
     <div className="space-y-2" data-testid="tier-progress">
       <div className="flex items-center justify-between">
-        <TierBadge level={level} size="sm" />
-        {showDetails && pointsNeeded !== null && (
+        <TierBadge level={level} tierNames={tierNames} tierSystemType={tierSystemType} size="sm" />
+        {showDetails && pointsNeeded !== null && nextTierName !== null && (
           <span className="text-xs text-muted-foreground">
-            {pointsNeeded.toLocaleString()} pts to {nextTierName()}
+            {pointsNeeded.toLocaleString()} pts to {nextTierName}
           </span>
         )}
       </div>
@@ -138,37 +181,58 @@ interface TierInfoCardProps {
     tierSilverMax: number | null;
     tierGoldMax: number | null;
   };
+  tierNames?: TierNames;
+  tierSystemType?: TierSystemType;
 }
 
-export function TierInfoCard({ points, thresholds }: TierInfoCardProps) {
+export function TierInfoCard({ 
+  points, 
+  thresholds,
+  tierNames,
+  tierSystemType = 'LOYALTY'
+}: TierInfoCardProps) {
   const { tierBronzeMax, tierSilverMax, tierGoldMax } = thresholds;
+  const names = tierNames || TIER_PRESETS[tierSystemType];
 
-  const tiers: { level: TierLevel; threshold: string; active: boolean }[] = [
+  const tiers: { level: TierLevel; name: string; threshold: string; active: boolean }[] = [
     { 
-      level: "BRONZE", 
+      level: "TIER_1",
+      name: names.tier1Name, 
       threshold: tierBronzeMax ? `0 - ${tierBronzeMax.toLocaleString()}` : "Entry",
       active: tierBronzeMax === null || points <= tierBronzeMax
     },
     { 
-      level: "SILVER", 
+      level: "TIER_2",
+      name: names.tier2Name, 
       threshold: tierBronzeMax && tierSilverMax ? `${(tierBronzeMax + 1).toLocaleString()} - ${tierSilverMax.toLocaleString()}` : "—",
       active: tierBronzeMax !== null && tierSilverMax !== null && points > tierBronzeMax && points <= tierSilverMax
     },
     { 
-      level: "GOLD", 
+      level: "TIER_3",
+      name: names.tier3Name, 
       threshold: tierSilverMax && tierGoldMax ? `${(tierSilverMax + 1).toLocaleString()} - ${tierGoldMax.toLocaleString()}` : "—",
       active: tierSilverMax !== null && tierGoldMax !== null && points > tierSilverMax && points <= tierGoldMax
     },
     { 
-      level: "PLATINUM", 
+      level: "TIER_4",
+      name: names.tier4Name, 
       threshold: tierGoldMax ? `${(tierGoldMax + 1).toLocaleString()}+` : "—",
       active: tierGoldMax !== null && points > tierGoldMax
     },
   ];
 
+  if (tierSystemType === 'NONE') {
+    return (
+      <div className="text-center p-4 rounded-md border border-muted bg-muted/20" data-testid="tier-info-card">
+        <TierBadge level="TIER_1" tierNames={tierNames} tierSystemType={tierSystemType} size="md" />
+        <div className="text-sm text-muted-foreground mt-2">No tier progression</div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-4 gap-2" data-testid="tier-info-card">
-      {tiers.map(({ level, threshold, active }) => (
+      {tiers.map(({ level, name, threshold, active }) => (
         <div
           key={level}
           className={`text-center p-2 rounded-md border transition-all ${
@@ -177,7 +241,7 @@ export function TierInfoCard({ points, thresholds }: TierInfoCardProps) {
               : "border-muted bg-muted/20 opacity-60"
           }`}
         >
-          <TierBadge level={level} size="sm" showIcon={false} />
+          <TierBadge level={level} tierNames={tierNames} tierSystemType={tierSystemType} size="sm" showIcon={false} />
           <div className="text-xs text-muted-foreground mt-1">{threshold}</div>
         </div>
       ))}
