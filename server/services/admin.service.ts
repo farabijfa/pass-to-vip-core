@@ -97,6 +97,12 @@ interface TenantProgram {
   passkitTierSilverId: string | null;
   passkitTierGoldId: string | null;
   passkitTierPlatinumId: string | null;
+  tierSystemType: 'LOYALTY' | 'OFFICE' | 'GYM' | 'CUSTOM' | 'NONE';
+  tier1Name: string | null;
+  tier2Name: string | null;
+  tier3Name: string | null;
+  tier4Name: string | null;
+  defaultMemberLabel: string | null;
   createdAt: string;
 }
 
@@ -1296,6 +1302,12 @@ class AdminService {
           passkit_tier_silver_id,
           passkit_tier_gold_id,
           passkit_tier_platinum_id,
+          tier_system_type,
+          tier_1_name,
+          tier_2_name,
+          tier_3_name,
+          tier_4_name,
+          default_member_label,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1329,6 +1341,12 @@ class AdminService {
         passkitTierSilverId: p.passkit_tier_silver_id,
         passkitTierGoldId: p.passkit_tier_gold_id,
         passkitTierPlatinumId: p.passkit_tier_platinum_id,
+        tierSystemType: p.tier_system_type ?? 'LOYALTY',
+        tier1Name: p.tier_1_name,
+        tier2Name: p.tier_2_name,
+        tier3Name: p.tier_3_name,
+        tier4Name: p.tier_4_name,
+        defaultMemberLabel: p.default_member_label,
         createdAt: p.created_at,
       }));
 
@@ -1522,6 +1540,12 @@ class AdminService {
           passkit_tier_silver_id,
           passkit_tier_gold_id,
           passkit_tier_platinum_id,
+          tier_system_type,
+          tier_1_name,
+          tier_2_name,
+          tier_3_name,
+          tier_4_name,
+          default_member_label,
           created_at
         `)
         .eq("tenant_id", tenantId)
@@ -1560,6 +1584,12 @@ class AdminService {
           passkitTierSilverId: program.passkit_tier_silver_id,
           passkitTierGoldId: program.passkit_tier_gold_id,
           passkitTierPlatinumId: program.passkit_tier_platinum_id,
+          tierSystemType: program.tier_system_type ?? 'LOYALTY',
+          tier1Name: program.tier_1_name,
+          tier2Name: program.tier_2_name,
+          tier3Name: program.tier_3_name,
+          tier4Name: program.tier_4_name,
+          defaultMemberLabel: program.default_member_label,
           createdAt: program.created_at,
         },
       };
@@ -1582,6 +1612,12 @@ class AdminService {
       passkitTierSilverId?: string | null;
       passkitTierGoldId?: string | null;
       passkitTierPlatinumId?: string | null;
+      tierSystemType?: 'LOYALTY' | 'OFFICE' | 'GYM' | 'CUSTOM' | 'NONE';
+      tier1Name?: string | null;
+      tier2Name?: string | null;
+      tier3Name?: string | null;
+      tier4Name?: string | null;
+      defaultMemberLabel?: string | null;
     }
   ): Promise<{ success: boolean; data?: any; error?: string }> {
     console.log(`🔄 Updating tier thresholds for program: ${programId}`);
@@ -1628,7 +1664,27 @@ class AdminService {
         updateData.passkit_tier_platinum_id = thresholds.passkitTierPlatinumId || null;
       }
 
-      // Update tier thresholds and PassKit tier IDs
+      // Add tier system type and custom names if provided
+      if (thresholds.tierSystemType !== undefined) {
+        updateData.tier_system_type = thresholds.tierSystemType;
+      }
+      if (thresholds.tier1Name !== undefined) {
+        updateData.tier_1_name = thresholds.tier1Name || null;
+      }
+      if (thresholds.tier2Name !== undefined) {
+        updateData.tier_2_name = thresholds.tier2Name || null;
+      }
+      if (thresholds.tier3Name !== undefined) {
+        updateData.tier_3_name = thresholds.tier3Name || null;
+      }
+      if (thresholds.tier4Name !== undefined) {
+        updateData.tier_4_name = thresholds.tier4Name || null;
+      }
+      if (thresholds.defaultMemberLabel !== undefined) {
+        updateData.default_member_label = thresholds.defaultMemberLabel || null;
+      }
+
+      // Update tier thresholds, PassKit tier IDs, and tier naming config
       const { data: updated, error: updateError } = await client
         .from("programs")
         .update(updateData)
@@ -1640,7 +1696,13 @@ class AdminService {
           passkit_tier_bronze_id,
           passkit_tier_silver_id,
           passkit_tier_gold_id,
-          passkit_tier_platinum_id
+          passkit_tier_platinum_id,
+          tier_system_type,
+          tier_1_name,
+          tier_2_name,
+          tier_3_name,
+          tier_4_name,
+          default_member_label
         `)
         .single();
 
@@ -1659,6 +1721,12 @@ class AdminService {
           passkitTierSilverId: updated.passkit_tier_silver_id,
           passkitTierGoldId: updated.passkit_tier_gold_id,
           passkitTierPlatinumId: updated.passkit_tier_platinum_id,
+          tierSystemType: updated.tier_system_type ?? 'LOYALTY',
+          tier1Name: updated.tier_1_name,
+          tier2Name: updated.tier_2_name,
+          tier3Name: updated.tier_3_name,
+          tier4Name: updated.tier_4_name,
+          defaultMemberLabel: updated.default_member_label,
         }
       };
 
