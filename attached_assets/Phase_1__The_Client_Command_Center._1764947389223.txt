@@ -1,0 +1,85 @@
+﻿This is the execution plan for Phase 1: The Client Command Center. We are transforming your simple "List of Clients" into a powerful "Mission Control" where you can rescue failed onboardings, configure billing limits, and manage API keys without touching the database directly.
+Step 1: Backend Implementation (Controller & Routes)
+We need to add the logic to fetch a "Full Profile" and handle the "Retry Sync" for PassKit.
+Copy and paste this instruction block to your Replit Agent:
+"We are implementing Phase 1: Client Command Center (Backend).
+1. Update Controller: Modify server/controllers/admin.controller.ts. Add these three functions:
+* getTenantProfile:
+   * Input: userId (from params).
+   * Logic:
+      * Fetch the user record (email, name).
+      * Fetch the admin_profile to find their program_id.
+      * Fetch the program details (including earn_rate_multiplier, member_limit, passkit_status).
+      * Fetch the latest billing_snapshot for this program.
+      * Fetch any pos_api_keys for this program.
+   * Response: JSON object with all this data nested.
+* updateTenantConfig:
+   * Input: programId (params), body (earn_rate_multiplier, member_limit, postgrid_template_id, is_suspended).
+   * Logic: Update the programs table. Return the updated record.
+* syncPassKit:
+   * Input: programId (params).
+   * Logic:
+      * Fetch the program.
+      * If passkit_program_id is already set and status is 'provisioned', return error.
+      * Call PassKitProvisionService.createMembershipProgram(program.name).
+      * Update programs table with the new passkit_program_id, passkit_tier_id, enrollment_url, and set passkit_status = 'provisioned'.
+   * Response: Success message and new PassKit data.
+2. Update Routes: Modify server/routes/admin.routes.ts.
+* GET /tenants/:userId/full-profile -> adminController.getTenantProfile
+* PATCH /tenants/:programId/config -> adminController.updateTenantConfig
+* POST /tenants/:programId/sync-passkit -> adminController.syncPassKit
+* Security: Ensure these use verifyApiKey OR verifyToken with SUPER_ADMIN check (whichever is your established pattern for admin routes)."
+________________
+
+
+Step 2: Frontend Implementation (The UI)
+Now we build the dashboard page. This page is dense, so we'll break it into logical cards.
+Copy and paste this instruction block to your Replit Agent:
+"We are implementing Phase 1: Client Command Center (Frontend).
+1. API Helper: Update client/src/lib/api.ts (or create client/src/lib/admin-api.ts) to include functions for the new endpoints: getTenantProfile, updateTenantConfig, syncPassKit.
+2. Create Page: Create client/src/pages/admin-client-details.tsx.
+3. UI Layout & Logic:
+* Header: Show Business Name and a 'Back to Clients' link.
+* Grid Layout: Use a 2-column grid (3-columns on large screens).
+* **Card 1: Identity & Status**
+    * Display Owner Name/Email.
+    * Display `dashboard_slug` (with a copy button).
+    * **Status Badge:** Green if Active, Red if Suspended.
+    * **PassKit Badge:** 'Synced' (Green) or 'Failed/Manual' (Red).
+    * **Action:** If PassKit is not synced, show a 'Retry Sync' button that calls `syncPassKit` and reloads data.
+
+
+* Card 2: Configuration (Form)
+   * Fields: Member Limit (number), Earn Rate Multiplier (number), PostGrid Template ID (text).
+   * Action: 'Save Changes' button (triggers updateTenantConfig).
+* Card 3: Billing Health
+   * Display 'Active Members / Limit' (e.g., 450 / 1000).
+   * Progress Bar: Visualizing usage.
+* Card 4: API Keys
+   * List existing POS API Keys.
+   * (Optional) Button to 'Revoke' or 'Generate New'.
+
+
+**4. Routing:**
+\* Register route `/admin/clients/:userId` in `client/src/App.tsx`.
+\* Update the list item in `client/src/pages/admin-clients.tsx` to link to this new detail page."
+
+
+________________
+
+
+Step 3: Verification Protocol
+Once the Agent finishes, perform these checks to ensure the "Command Center" works:
+1. The "Rescue" Test:
+   * Find a client in your list that has passkit_status: manual_required (from your previous tests).
+   * Click into their new Details page.
+   * Click the "Retry Sync" button.
+   * Success Criteria: The spinner runs, and the badge turns Green ("Provisioned"). The Enrollment URL appears.
+2. The "Billing" Test:
+   * Change a client's Member Limit from 1000 to 10.
+   * Click "Save".
+   * Success Criteria: The Progress Bar immediately fills up (red), visually indicating they are now "Over Limit".
+3. The "Vertical A" Prep:
+   * Paste a dummy ID (e.g., template_test_123) into the PostGrid Template ID field.
+   * Click "Save".
+   * Success Criteria: This ID persists. (Later, the Campaign Launcher will read this to save you time).
