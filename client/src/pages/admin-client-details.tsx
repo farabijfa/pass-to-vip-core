@@ -389,6 +389,10 @@ interface TenantProgram {
   tier3Name: string | null;
   tier4Name: string | null;
   defaultMemberLabel: string | null;
+  tier1DiscountPercent: number;
+  tier2DiscountPercent: number;
+  tier3DiscountPercent: number;
+  tier4DiscountPercent: number;
   campaignBudgetCents: number;
   createdAt: string;
 }
@@ -461,6 +465,10 @@ async function updateProgramTierThresholds(programId: string, params: {
   tier3Name?: string | null;
   tier4Name?: string | null;
   defaultMemberLabel?: string | null;
+  tier1DiscountPercent?: number;
+  tier2DiscountPercent?: number;
+  tier3DiscountPercent?: number;
+  tier4DiscountPercent?: number;
 }): Promise<void> {
   const token = getAuthToken();
   const response = await fetch(`/api/client/admin/programs/${programId}/tier-thresholds`, {
@@ -515,6 +523,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       tier3Name: null,
       tier4Name: null,
       defaultMemberLabel: null,
+      tier1DiscountPercent: 0,
+      tier2DiscountPercent: 5,
+      tier3DiscountPercent: 10,
+      tier4DiscountPercent: 15,
       campaignBudgetCents: 50000,
       createdAt: "2024-11-15T10:30:00Z",
     },
@@ -548,6 +560,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       tier3Name: null,
       tier4Name: null,
       defaultMemberLabel: null,
+      tier1DiscountPercent: 0,
+      tier2DiscountPercent: 5,
+      tier3DiscountPercent: 10,
+      tier4DiscountPercent: 15,
       campaignBudgetCents: 100000,
       createdAt: "2024-12-01T14:15:00Z",
     },
@@ -579,6 +595,10 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       tier3Name: null,
       tier4Name: null,
       defaultMemberLabel: "Ticket Holder",
+      tier1DiscountPercent: 0,
+      tier2DiscountPercent: 0,
+      tier3DiscountPercent: 0,
+      tier4DiscountPercent: 0,
       campaignBudgetCents: 50000,
       createdAt: "2024-12-05T10:00:00Z",
     },
@@ -708,6 +728,10 @@ export default function AdminClientDetailsPage() {
     tier3Name: string;
     tier4Name: string;
     defaultMemberLabel: string;
+    tier1Discount: string;
+    tier2Discount: string;
+    tier3Discount: string;
+    tier4Discount: string;
   }>>({});
 
   const initTierConfig = (program: TenantProgram) => {
@@ -730,6 +754,10 @@ export default function AdminClientDetailsPage() {
           tier3Name: program.tier3Name || preset.tier3,
           tier4Name: program.tier4Name || preset.tier4,
           defaultMemberLabel: program.defaultMemberLabel || "Member",
+          tier1Discount: program.tier1DiscountPercent?.toString() || "0",
+          tier2Discount: program.tier2DiscountPercent?.toString() || "5",
+          tier3Discount: program.tier3DiscountPercent?.toString() || "10",
+          tier4Discount: program.tier4DiscountPercent?.toString() || "15",
         },
       }));
     }
@@ -754,6 +782,25 @@ export default function AdminClientDetailsPage() {
     mutationFn: async (programId: string) => {
       const config = tierConfigForm[programId];
       if (!config) throw new Error("No tier config found");
+      
+      const tier1Discount = parseInt(config.tier1Discount) || 0;
+      const tier2Discount = parseInt(config.tier2Discount) || 0;
+      const tier3Discount = parseInt(config.tier3Discount) || 0;
+      const tier4Discount = parseInt(config.tier4Discount) || 0;
+      
+      if (tier1Discount < 0 || tier1Discount > 100 ||
+          tier2Discount < 0 || tier2Discount > 100 ||
+          tier3Discount < 0 || tier3Discount > 100 ||
+          tier4Discount < 0 || tier4Discount > 100) {
+        throw new Error("Discounts must be between 0 and 100%");
+      }
+      
+      if (tier2Discount < tier1Discount ||
+          tier3Discount < tier2Discount ||
+          tier4Discount < tier3Discount) {
+        throw new Error("Higher tiers should have equal or greater discounts");
+      }
+      
       return updateProgramTierThresholds(programId, {
         tierBronzeMax: parseInt(config.bronzeMax) || 999,
         tierSilverMax: parseInt(config.silverMax) || 4999,
@@ -768,6 +815,10 @@ export default function AdminClientDetailsPage() {
         tier3Name: config.tier3Name || null,
         tier4Name: config.tier4Name || null,
         defaultMemberLabel: config.defaultMemberLabel || null,
+        tier1DiscountPercent: tier1Discount,
+        tier2DiscountPercent: tier2Discount,
+        tier3DiscountPercent: tier3Discount,
+        tier4DiscountPercent: tier4Discount,
       });
     },
     onSuccess: () => {
