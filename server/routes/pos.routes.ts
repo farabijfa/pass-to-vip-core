@@ -337,6 +337,7 @@ router.post("/earn", async (req: Request, res: Response) => {
       transactionId: result.data?.transaction_id || `txn_${Date.now()}`,
       transactionRef: transactionRef || null,
       timestamp: new Date().toISOString(),
+      newTierName: result.data?.tier_level || null,
     };
 
     return res.status(200).json(

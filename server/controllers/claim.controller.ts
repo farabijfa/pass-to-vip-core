@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { supabaseService, passKitService } from "../services";
 import type { ApiResponse } from "@shared/schema";
 import { generate } from "short-uuid";
+import { calculateTierLevel, getTierPasskitId, getTierName, type TierLevel } from "../utils/tier-calculator";
 
 function createResponse<T>(
   success: boolean,
@@ -84,13 +85,35 @@ export class ClaimController {
 
       console.log(`🎫 Enrolling new member in PassKit program: ${claim.passkitProgramId}`);
 
-      // Fetch program config to get the correct tier_id
+      // Fetch program config to get tier thresholds and tier IDs
       const programResult = await supabaseService.getProgramByPasskitId(claim.passkitProgramId);
-      const tierId = programResult.success && programResult.program 
-        ? programResult.program.passkitTierId 
-        : "base";
+      
+      // Calculate the appropriate tier based on points (new members start at 0 = Bronze)
+      const startingPoints = 0;
+      let tierId = "base";
+      let tierLevel: TierLevel = "BRONZE";
+      
+      if (programResult.success && programResult.program) {
+        const program = programResult.program;
+        
+        // Calculate tier level based on points and thresholds
+        tierLevel = calculateTierLevel(startingPoints, {
+          tierBronzeMax: program.tierBronzeMax,
+          tierSilverMax: program.tierSilverMax,
+          tierGoldMax: program.tierGoldMax,
+        });
+        
+        // Get the appropriate PassKit tier ID for this level
+        tierId = getTierPasskitId(tierLevel, {
+          passkitTierBronzeId: program.passkitTierBronzeId,
+          passkitTierSilverId: program.passkitTierSilverId,
+          passkitTierGoldId: program.passkitTierGoldId,
+          passkitTierPlatinumId: program.passkitTierPlatinumId,
+          passkitTierId: program.passkitTierId,
+        });
+      }
 
-      console.log(`📋 Using tier ID: ${tierId} for program: ${claim.passkitProgramId}`);
+      console.log(`📋 Using tier: ${getTierName(tierLevel)} (ID: ${tierId}) for program: ${claim.passkitProgramId}`);
 
       const enrollResult = await passKitService.enrollMember(
         claim.passkitProgramId,
@@ -98,7 +121,7 @@ export class ClaimController {
           email: claim.email || `${claimCode}@claim.local`,
           firstName: claim.firstName || "Guest",
           lastName: claim.lastName,
-          points: 0,
+          points: startingPoints,
           tierId,
         }
       );

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TierBadge } from "@/components/tier-badge";
+import { type TierLevel } from "@/lib/tier-calculator";
 
 export default function MembersPage() {
   const { mockMode } = useAuth();
@@ -143,6 +145,14 @@ export default function MembersPage() {
 }
 
 function MemberRow({ member }: { member: Member }) {
+  const getTierLevel = (tierName: string): TierLevel => {
+    const normalizedName = tierName?.toUpperCase() || 'BRONZE';
+    if (normalizedName.includes('PLATINUM')) return 'PLATINUM';
+    if (normalizedName.includes('GOLD')) return 'GOLD';
+    if (normalizedName.includes('SILVER')) return 'SILVER';
+    return 'BRONZE';
+  };
+
   return (
     <TableRow 
       className="border-border/50"
@@ -175,7 +185,7 @@ function MemberRow({ member }: { member: Member }) {
         <span className="font-medium text-foreground">{member.points_balance.toLocaleString()}</span>
       </TableCell>
       <TableCell>
-        <span className="text-sm text-foreground">{member.tier_name}</span>
+        <TierBadge level={getTierLevel(member.tier_name)} size="sm" />
       </TableCell>
       <TableCell>
         <span className={`text-xs ${member.status === 'INSTALLED' ? 'text-foreground' : 'text-muted-foreground'}`}>

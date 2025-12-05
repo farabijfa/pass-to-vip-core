@@ -25,6 +25,7 @@ interface PosActionResult {
     passkit_internal_id?: string;
     notification_message?: string;
     protocol?: string;
+    tier_level?: string;
     offer_details?: {
       offer_id: string;
       offer_name: string;

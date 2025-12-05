@@ -11,7 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Html5Qrcode } from "html5-qrcode";
-import { DollarSign, Hash } from "lucide-react";
+import { DollarSign, Hash, Sparkles } from "lucide-react";
+import { TierBadge } from "@/components/tier-badge";
+import { type TierLevel } from "@/lib/tier-calculator";
 
 function parseMemberCode(rawCode: string): string {
   if (!rawCode || typeof rawCode !== "string") return "";
@@ -63,6 +65,23 @@ export default function POSPage() {
   
   const [showRedeemConfirm, setShowRedeemConfirm] = useState(false);
   const [pendingRedeemAmount, setPendingRedeemAmount] = useState(0);
+  
+  const [showTierUpgrade, setShowTierUpgrade] = useState(false);
+  const [tierUpgradeData, setTierUpgradeData] = useState<{ oldTier: TierLevel; newTier: TierLevel } | null>(null);
+
+  const getTierLevel = (tierName: string): TierLevel => {
+    const normalizedName = tierName?.toUpperCase() || 'BRONZE';
+    if (normalizedName.includes('PLATINUM')) return 'PLATINUM';
+    if (normalizedName.includes('GOLD')) return 'GOLD';
+    if (normalizedName.includes('SILVER')) return 'SILVER';
+    return 'BRONZE';
+  };
+
+  const tierOrder: TierLevel[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'];
+
+  const isTierUpgrade = (oldTier: TierLevel, newTier: TierLevel): boolean => {
+    return tierOrder.indexOf(newTier) > tierOrder.indexOf(oldTier);
+  };
 
   const calculatedPoints = member && transactionAmount
     ? Math.floor(parseFloat(transactionAmount) * (member.earn_rate_multiplier || 10))
@@ -139,17 +158,28 @@ export default function POSPage() {
         : await posApi.earn(member.external_id, pointsToEarn);
       
       if (result.success && result.data) {
+        const oldTier = getTierLevel(member.tier_name);
+        const newTierName = (result.data as { newTierName?: string }).newTierName || member.tier_name;
+        const newTier = getTierLevel(newTierName);
+        
         setLastTransaction(result.data);
-        setMember({ ...member, points_balance: result.data.newBalance });
+        setMember({ ...member, points_balance: result.data.newBalance, tier_name: newTierName });
         setPoints("");
         setTransactionAmount("");
+        
         const earnedAmount = result.data.newBalance - result.data.previousBalance;
-        toast({ 
-          title: "Points Earned!", 
-          description: earnMode === "amount"
-            ? `$${amountValue?.toFixed(2)} = ${earnedAmount.toLocaleString()} points. New balance: ${result.data.newBalance.toLocaleString()}`
-            : `Added ${earnedAmount.toLocaleString()} points. New balance: ${result.data.newBalance.toLocaleString()}` 
-        });
+        
+        if (isTierUpgrade(oldTier, newTier)) {
+          setTierUpgradeData({ oldTier, newTier });
+          setShowTierUpgrade(true);
+        } else {
+          toast({ 
+            title: "Points Earned!", 
+            description: earnMode === "amount"
+              ? `$${amountValue?.toFixed(2)} = ${earnedAmount.toLocaleString()} points. New balance: ${result.data.newBalance.toLocaleString()}`
+              : `Added ${earnedAmount.toLocaleString()} points. New balance: ${result.data.newBalance.toLocaleString()}` 
+          });
+        }
       } else {
         toast({ 
           title: "Transaction Failed", 
@@ -454,9 +484,9 @@ export default function POSPage() {
                   </div>
                   <div className="p-3 rounded-md bg-muted/30">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Tier</p>
-                    <p className="text-lg font-medium text-foreground mt-1" data-testid="badge-tier">
-                      {member.tier_name}
-                    </p>
+                    <div className="mt-1" data-testid="badge-tier">
+                      <TierBadge level={getTierLevel(member.tier_name)} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -765,6 +795,52 @@ export default function POSPage() {
                 Press <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Enter</kbd> to confirm 
                 or <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Esc</kbd> to cancel
               </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTierUpgrade} onOpenChange={setShowTierUpgrade}>
+        <DialogContent className="max-w-sm text-center" data-testid="dialog-tier-upgrade">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-center gap-2 text-xl">
+              <Sparkles className="w-6 h-6 text-yellow-500" />
+              Tier Upgrade!
+              <Sparkles className="w-6 h-6 text-yellow-500" />
+            </DialogTitle>
+            <DialogDescription>
+              Congratulations! You've been promoted to a new tier.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {tierUpgradeData && member && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-center gap-4">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase mb-2">Previous</p>
+                  <TierBadge level={tierUpgradeData.oldTier} />
+                </div>
+                <div className="text-2xl text-muted-foreground">→</div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground uppercase mb-2">New Tier</p>
+                  <TierBadge level={tierUpgradeData.newTier} size="lg" />
+                </div>
+              </div>
+              
+              <div className="p-4 rounded-md bg-primary/5 border border-primary/20">
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">{member.first_name}</span> now has access to 
+                  <span className="font-semibold text-primary"> {tierUpgradeData.newTier.toLowerCase()}</span> tier benefits!
+                </p>
+              </div>
+              
+              <Button 
+                className="w-full"
+                onClick={() => setShowTierUpgrade(false)}
+                data-testid="button-close-tier-upgrade"
+              >
+                Continue
+              </Button>
             </div>
           )}
         </DialogContent>

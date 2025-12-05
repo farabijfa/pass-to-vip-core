@@ -578,6 +578,13 @@ class SupabaseService {
       postgridTemplateId: string | null;
       protocol: string;
       isSuspended: boolean;
+      tierBronzeMax: number | null;
+      tierSilverMax: number | null;
+      tierGoldMax: number | null;
+      passkitTierBronzeId: string | null;
+      passkitTierSilverId: string | null;
+      passkitTierGoldId: string | null;
+      passkitTierPlatinumId: string | null;
     };
     error?: string;
   }> {
@@ -586,7 +593,11 @@ class SupabaseService {
 
       const { data, error } = await client
         .from("programs")
-        .select("id, name, passkit_program_id, passkit_tier_id, postgrid_template_id, protocol, is_suspended")
+        .select(`
+          id, name, passkit_program_id, passkit_tier_id, postgrid_template_id, protocol, is_suspended,
+          tier_bronze_max, tier_silver_max, tier_gold_max,
+          passkit_tier_bronze_id, passkit_tier_silver_id, passkit_tier_gold_id, passkit_tier_platinum_id
+        `)
         .eq("passkit_program_id", passkitProgramId)
         .limit(1);
 
@@ -617,6 +628,13 @@ class SupabaseService {
           postgridTemplateId: program.postgrid_template_id,
           protocol: program.protocol || "MEMBERSHIP",
           isSuspended: program.is_suspended || false,
+          tierBronzeMax: program.tier_bronze_max,
+          tierSilverMax: program.tier_silver_max,
+          tierGoldMax: program.tier_gold_max,
+          passkitTierBronzeId: program.passkit_tier_bronze_id,
+          passkitTierSilverId: program.passkit_tier_silver_id,
+          passkitTierGoldId: program.passkit_tier_gold_id,
+          passkitTierPlatinumId: program.passkit_tier_platinum_id,
         },
       };
     } catch (error) {

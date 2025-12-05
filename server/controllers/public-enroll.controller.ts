@@ -4,6 +4,7 @@ import { z } from "zod";
 import { config, isSupabaseConfigured } from "../config";
 import { passKitService } from "../services/passkit.service";
 import { generate } from "short-uuid";
+import { calculateTierLevel, getTierPasskitId, getTierName, type TierLevel } from "../utils/tier-calculator";
 
 const enrollmentSchema = z.object({
   dashboardSlug: z.string().min(1, "Dashboard slug is required"),
@@ -70,7 +71,14 @@ class PublicEnrollController {
           passkit_status,
           protocol,
           is_suspended,
-          enrollment_url
+          enrollment_url,
+          tier_bronze_max,
+          tier_silver_max,
+          tier_gold_max,
+          passkit_tier_bronze_id,
+          passkit_tier_silver_id,
+          passkit_tier_gold_id,
+          passkit_tier_platinum_id
         `)
         .eq("dashboard_slug", dashboardSlug)
         .single();
@@ -185,14 +193,36 @@ class PublicEnrollController {
 
       if (program.passkit_program_id && program.passkit_status === "provisioned") {
         try {
+          // Calculate the appropriate tier based on points (new members start at 0 = Bronze)
+          const startingPoints = 0;
+          let tierId = program.passkit_tier_id || "base";
+          
+          // Calculate tier level based on thresholds
+          const tierLevel: TierLevel = calculateTierLevel(startingPoints, {
+            tierBronzeMax: program.tier_bronze_max,
+            tierSilverMax: program.tier_silver_max,
+            tierGoldMax: program.tier_gold_max,
+          });
+          
+          // Get the appropriate PassKit tier ID for this level
+          tierId = getTierPasskitId(tierLevel, {
+            passkitTierBronzeId: program.passkit_tier_bronze_id,
+            passkitTierSilverId: program.passkit_tier_silver_id,
+            passkitTierGoldId: program.passkit_tier_gold_id,
+            passkitTierPlatinumId: program.passkit_tier_platinum_id,
+            passkitTierId: program.passkit_tier_id,
+          });
+          
+          console.log(`📋 Using tier: ${getTierName(tierLevel)} (ID: ${tierId}) for public enrollment`);
+          
           const enrollResult = await passKitService.enrollMember(
             program.passkit_program_id,
             {
               email: normalizedEmail,
               firstName,
               lastName,
-              points: 0,
-              tierId: program.passkit_tier_id || undefined,
+              points: startingPoints,
+              tierId,
             }
           );
 
