@@ -54,18 +54,33 @@ COMMENT ON FUNCTION get_public_program_info(text) IS
 -- STEP 2: Enable Row Level Security on all sensitive tables
 -- ============================================================================
 
--- Enable RLS on all tables (if not already enabled)
+-- Enable RLS on core tables (these must exist)
 ALTER TABLE IF EXISTS programs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS passes_master ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS admin_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS claim_codes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS notification_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS campaign_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS pos_api_keys ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS pos_transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS birthday_logs ENABLE ROW LEVEL SECURITY;
+
+-- Enable RLS on optional tables (only if they exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'notification_logs') THEN
+    EXECUTE 'ALTER TABLE notification_logs ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'campaign_logs') THEN
+    EXECUTE 'ALTER TABLE campaign_logs ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pos_api_keys') THEN
+    EXECUTE 'ALTER TABLE pos_api_keys ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pos_transactions') THEN
+    EXECUTE 'ALTER TABLE pos_transactions ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'birthday_logs') THEN
+    EXECUTE 'ALTER TABLE birthday_logs ENABLE ROW LEVEL SECURITY';
+  END IF;
+END $$;
 
 -- ============================================================================
 -- STEP 3: Revoke ALL direct table permissions from anon role
@@ -84,20 +99,15 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon;
 -- STEP 4: Create deny-by-default RLS policies for anon role
 -- ============================================================================
 
--- Drop existing anon policies if they exist (for idempotency)
+-- Drop existing anon policies if they exist (for idempotency) - core tables only
 DROP POLICY IF EXISTS "anon_deny_programs" ON programs;
 DROP POLICY IF EXISTS "anon_deny_passes_master" ON passes_master;
 DROP POLICY IF EXISTS "anon_deny_users" ON users;
 DROP POLICY IF EXISTS "anon_deny_admin_profiles" ON admin_profiles;
 DROP POLICY IF EXISTS "anon_deny_transactions" ON transactions;
 DROP POLICY IF EXISTS "anon_deny_claim_codes" ON claim_codes;
-DROP POLICY IF EXISTS "anon_deny_notification_logs" ON notification_logs;
-DROP POLICY IF EXISTS "anon_deny_campaign_logs" ON campaign_logs;
-DROP POLICY IF EXISTS "anon_deny_pos_api_keys" ON pos_api_keys;
-DROP POLICY IF EXISTS "anon_deny_pos_transactions" ON pos_transactions;
-DROP POLICY IF EXISTS "anon_deny_birthday_logs" ON birthday_logs;
 
--- Create explicit DENY policies for anon role on each table
+-- Create explicit DENY policies for anon role on core tables
 -- These ensure that even if RLS is enabled, anon gets nothing
 
 CREATE POLICY "anon_deny_programs" ON programs
@@ -130,26 +140,36 @@ CREATE POLICY "anon_deny_claim_codes" ON claim_codes
   TO anon
   USING (false);
 
--- Only create policies for tables that exist (some may be optional)
+-- Handle optional tables: drop existing policies and create new ones (only if table exists)
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'notification_logs') THEN
+  -- notification_logs
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'notification_logs') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "anon_deny_notification_logs" ON notification_logs';
     EXECUTE 'CREATE POLICY "anon_deny_notification_logs" ON notification_logs FOR ALL TO anon USING (false)';
   END IF;
   
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'campaign_logs') THEN
+  -- campaign_logs
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'campaign_logs') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "anon_deny_campaign_logs" ON campaign_logs';
     EXECUTE 'CREATE POLICY "anon_deny_campaign_logs" ON campaign_logs FOR ALL TO anon USING (false)';
   END IF;
   
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pos_api_keys') THEN
+  -- pos_api_keys
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pos_api_keys') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "anon_deny_pos_api_keys" ON pos_api_keys';
     EXECUTE 'CREATE POLICY "anon_deny_pos_api_keys" ON pos_api_keys FOR ALL TO anon USING (false)';
   END IF;
   
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pos_transactions') THEN
+  -- pos_transactions
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'pos_transactions') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "anon_deny_pos_transactions" ON pos_transactions';
     EXECUTE 'CREATE POLICY "anon_deny_pos_transactions" ON pos_transactions FOR ALL TO anon USING (false)';
   END IF;
   
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'birthday_logs') THEN
+  -- birthday_logs
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'birthday_logs') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "anon_deny_birthday_logs" ON birthday_logs';
     EXECUTE 'CREATE POLICY "anon_deny_birthday_logs" ON birthday_logs FOR ALL TO anon USING (false)';
   END IF;
 END $$;
