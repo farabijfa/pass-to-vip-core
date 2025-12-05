@@ -1,0 +1,150 @@
+﻿To address Gap G (Revenue Leakage), we need a system that acts as a "Usage Meter." We will implement a "Billing Watchdog" that runs independently of the main application flow.
+This solution consists of three parts:
+1. Database Upgrade: Adding quotas and history tables.
+2. Efficient Calculation: Using Supabase RPC to count active members (fast) rather than querying them one by one (slow).
+3. The Watchdog Script: A scheduled task that records usage and screams if a client is over limits.
+Part 1: The Database Strategy (Migration 018)
+We need to define "Quota" in the programs table and create a log for "Snapshots" to prove usage over time (auditable billing).
+Create file: migrations/018_billing_and_quotas.sql
+SQL
+   * -- 1. Add Limits to Programs
+   * ALTER TABLE programs 
+   * ADD COLUMN IF NOT EXISTS member_limit INTEGER DEFAULT 1000, -- Default tier limit
+   * ADD COLUMN IF NOT EXISTS billing_tier TEXT DEFAULT 'STANDARD';
+   *    * -- 2. Create Billing Snapshots (Audit Trail)
+   * CREATE TABLE IF NOT EXISTS billing_snapshots (
+   *   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+   *   program_id UUID REFERENCES programs(id) ON DELETE CASCADE,
+   *   active_member_count INTEGER NOT NULL,
+   *   churned_member_count INTEGER NOT NULL,
+   *   member_limit_at_snapshot INTEGER NOT NULL,
+   *   is_over_limit BOOLEAN DEFAULT FALSE,
+   *   created_at TIMESTAMPTZ DEFAULT NOW()
+   * );
+   *    * -- Index for reporting queries
+   * CREATE INDEX idx_billing_snapshots_program_date ON billing_snapshots(program_id, created_at);
+   *    * -- 3. High-Performance Counting RPC
+   * -- We do this in SQL to avoid pulling 5,000 records to Node.js just to count them.
+   * CREATE OR REPLACE FUNCTION get_daily_program_usage()
+   * RETURNS TABLE (
+   *   program_id UUID,
+   *   program_name TEXT,
+   *   owner_email TEXT,
+   *   active_count BIGINT,
+   *   churned_count BIGINT,
+   *   member_limit INTEGER
+   * ) 
+   * LANGUAGE plpgsql
+   * SECURITY DEFINER
+   * AS $$
+   * BEGIN
+   *   RETURN QUERY
+   *   SELECT 
+   *     p.id,
+   *     p.name,
+   *     ap.email, -- Assuming admin_profiles links to programs, or use owner_id
+   *     COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE') as active_count,
+   *     COUNT(pm.id) FILTER (WHERE pm.status = 'CHURNED') as churned_count,
+   *     p.member_limit
+   *   FROM programs p
+   *   LEFT JOIN passes_master pm ON p.id = pm.program_id
+   *   LEFT JOIN admin_profiles ap ON p.id = ap.program_id -- Adjust join based on your exact schema
+   *   GROUP BY p.id, p.name, ap.email, p.member_limit;
+   * END;
+   * $$;
+
+
+________________
+
+
+Part 2: The Watchdog Script
+We need a script that calls this RPC, checks the limits, logs the snapshot, and alerts us.
+Create file: server/scripts/billing-cron.ts
+TypeScript
+   * import { createClient } from '@supabase/supabase-js';
+   * import dotenv from 'dotenv';
+   * import { z } from 'zod';
+   *    * dotenv.config();
+   *    * // Standard Setup
+   * const SUPABASE_URL = process.env.SUPABASE_URL!;
+   * const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+   *    * if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+   *   console.error("Missing Supabase credentials");
+   *   process.exit(1);
+   * }
+   *    * const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+   *    * async function runBillingAudit() {
+   *   console.log("🔍 Starting Nightly Billing Audit...");
+   *    *   // 1. Call the efficient RPC
+   *   const { data: usageData, error } = await supabase.rpc('get_daily_program_usage');
+   *    *   if (error) {
+   *     console.error("❌ RPC Failed:", error);
+   *     process.exit(1);
+   *   }
+   *    *   if (!usageData || usageData.length === 0) {
+   *     console.log("No programs found.");
+   *     return;
+   *   }
+   *    *   // 2. Iterate and Audit
+   *   for (const prog of usageData) {
+   *     const isOverLimit = prog.active_count > prog.member_limit;
+   *     
+   *     // Log to Console (In production, this sends an Email or Slack Webhook)
+   *     const logMsg = `[Audit] ${prog.program_name}: ${prog.active_count}/${prog.member_limit} Members`;
+   *     
+   *     if (isOverLimit) {
+   *       console.error(`🚨 OVERAGE ALERT: ${logMsg} (Exceeds limit by ${prog.active_count - prog.member_limit})`);
+   *       // TODO: Send email to finance@passtovip.com
+   *     } else {
+   *       console.log(`✅ ${logMsg}`);
+   *     }
+   *    *     // 3. Save Snapshot to DB
+   *     const { error: snapError } = await supabase
+   *       .from('billing_snapshots')
+   *       .insert({
+   *         program_id: prog.program_id,
+   *         active_member_count: prog.active_count,
+   *         churned_member_count: prog.churned_count,
+   *         member_limit_at_snapshot: prog.member_limit,
+   *         is_over_limit: isOverLimit
+   *       });
+   *    *     if (snapError) console.error(`Failed to save snapshot for ${prog.program_name}`, snapError);
+   *   }
+   *    *   console.log("💾 Billing Snapshots saved.");
+   * }
+   *    * runBillingAudit();
+
+
+________________
+
+
+Part 3: Replit AI Agent Instructions
+Copy and paste the following block into the Replit Agent to implement this Gap Fix entirely.
+Plaintext
+   * We are implementing Gap G: SaaS Metrics & Billing Audit.
+   *    * 1.  **Database Migration**:
+   *     - Create a new migration file `migrations/018_billing_and_quotas.sql`.
+   *     - Add columns `member_limit` (int, default 1000) and `billing_tier` (text) to the `programs` table.
+   *     - Create a new table `billing_snapshots` with columns: `id`, `program_id`, `active_member_count`, `churned_member_count`, `member_limit_at_snapshot`, `is_over_limit`, and `created_at`.
+   *     - Create a Secure RPC function `get_daily_program_usage` that joins `programs` and `passes_master` to return aggregated counts (active vs churned) per program without fetching all rows.
+   *    * 2.  **Billing Script**:
+   *     - Create a new script `server/scripts/billing-cron.ts`.
+   *     - It should initialize the Supabase client using `SUPABASE_SERVICE_ROLE_KEY`.
+   *     - Call the `get_daily_program_usage` RPC.
+   *     - Iterate through the results:
+   *         - Check if `active_count` > `member_limit`.
+   *         - If true, log a "🚨 OVERAGE ALERT" to the console.
+   *         - Insert a record into the `billing_snapshots` table for every program.
+   *     - Add a command to `package.json` scripts: `"audit:billing": "npx tsx server/scripts/billing-cron.ts"`.
+   *    * 3.  **Execution**:
+   *     - Apply the migration to the database.
+   *     - Run the script once to verify it correctly counts current members and saves a snapshot.
+
+
+How to Automate this on Replit
+Since Replit Projects (unless deployed) sleep when inactive, you have two options for the "Nightly" part:
+1. Replit Deployments: If you deploy this project (Reserved VM), you can use a package like node-cron inside your server/index.ts to run this logic every night at midnight.
+2. External Trigger (Recommended for MVP): Use a free uptime monitor (like UptimeRobot) or a Cron service (Cron-job.org) to hit a specific secure API endpoint (e.g., POST /api/admin/trigger-audit protected by ADMIN_API_KEY) which then executes the logic inside billing-cron.ts.
+Recommended Next Step:
+Execute the Agent Instructions above. Once complete, run npm run audit:billing to see your current "Revenue Leakage" report immediately.
+   *
