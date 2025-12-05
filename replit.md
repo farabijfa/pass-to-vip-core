@@ -178,7 +178,15 @@ Raw: pub-abc123 → PUB-ABC123
 - **Rate Limiting:** `/api/pos/*` (60/min), `/api/notify/*` (10/min)
 - **Kill Switch:** Instantly suspend programs
 - **Input Validation:** Zod schemas on all endpoints
-- **Anon Key Only:** Public endpoints never expose service role key
+- **Anon Key Lockdown:** Public endpoints use RPC functions only (no direct table access)
+- **Row Level Security:** All tables have deny-by-default policies for anon role
+
+### Anon Key Security (Migration 012)
+The `SUPABASE_ANON_KEY` is intentionally public. To prevent data exposure:
+- **Direct table access revoked:** Anon role cannot SELECT from any table
+- **RPC-only access:** Anon can only call `get_public_program_info(slug)`
+- **RLS enforcement:** All tables have explicit deny policies for anon role
+- **Service role preserved:** Backend operations use service role key (full access)
 
 ## Environment Variables
 
@@ -214,6 +222,7 @@ migrations/003_passkit_tier_id.sql
 migrations/004_rpc_functions_verification.sql
 migrations/010_dashboard_slug.sql
 migrations/011_pos_integration.sql
+migrations/012_secure_public_access.sql  # CRITICAL: Locks down anon key access
 ```
 
 ## Development Commands
@@ -245,6 +254,8 @@ npx tsx scripts/prod-validation.ts
 - **Template Management:** Dynamic content
 
 ## Recent Changes
+- **Security hardening:** Migration 012 locks down anon key to RPC-only access
+- **Public enrollment:** Uses secure `get_public_program_info` RPC function
 - POS Simulator with dual scanning (keyboard wedge + camera)
 - "Scan with Camera" button uses primary blue for prominence
 - USA patriotic color scheme (blue/red/white)

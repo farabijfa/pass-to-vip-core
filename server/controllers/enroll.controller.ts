@@ -61,7 +61,7 @@ class EnrollController {
       // Use secure RPC function instead of direct table access
       // This ensures anon key cannot access tables directly
       const { data: programs, error } = await supabase
-        .rpc('get_public_program_info', { p_slug: slug.toLowerCase().trim() });
+        .rpc('get_public_program_info', { p_slug: slug.toLowerCase().trim() } as any);
 
       if (error) {
         // Handle case where RPC function doesn't exist (migration not run)
