@@ -63,6 +63,7 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
     enrollment_source: string;
     program_id: string;
     program_name: string;
+    earn_rate_multiplier: number;
     created_at: string;
   };
   error?: string;
@@ -94,7 +95,8 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
         program:programs!inner (
           id,
           name,
-          is_suspended
+          is_suspended,
+          earn_rate_multiplier
         )
       `)
       .eq("external_id", externalId)
@@ -105,7 +107,7 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
       return { success: false, error: "Member not found" };
     }
 
-    const program = data.program as unknown as { id: string; name: string; is_suspended: boolean };
+    const program = data.program as unknown as { id: string; name: string; is_suspended: boolean; earn_rate_multiplier: number };
 
     return {
       success: true,
@@ -122,6 +124,7 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
         enrollment_source: data.enrollment_source || "UNKNOWN",
         program_id: program.id,
         program_name: program.name,
+        earn_rate_multiplier: program.earn_rate_multiplier || 10,
         created_at: data.created_at,
       },
     };
@@ -209,9 +212,10 @@ router.post("/earn", async (req: Request, res: Response) => {
   const startTime = Date.now();
 
   try {
-    const { externalId, points, transactionRef, metadata } = req.body;
+    const { externalId, points, transactionAmount, transactionRef, metadata } = req.body;
 
-    if (!externalId || points === undefined) {
+    // Validate: need externalId and either points or transactionAmount
+    if (!externalId) {
       return res.status(400).json(
         createResponse(
           false,
@@ -219,7 +223,7 @@ router.post("/earn", async (req: Request, res: Response) => {
           undefined,
           {
             code: "VALIDATION_ERROR",
-            message: "externalId and points are required",
+            message: "externalId is required",
           },
           requestId,
           Date.now() - startTime
@@ -227,8 +231,11 @@ router.post("/earn", async (req: Request, res: Response) => {
       );
     }
 
-    const pointsNum = parseInt(String(points));
-    if (isNaN(pointsNum) || pointsNum <= 0) {
+    // Allow either points (direct) or transactionAmount (with multiplier)
+    const hasPoints = points !== undefined && points !== null;
+    const hasTransactionAmount = transactionAmount !== undefined && transactionAmount !== null;
+    
+    if (!hasPoints && !hasTransactionAmount) {
       return res.status(400).json(
         createResponse(
           false,
@@ -236,7 +243,7 @@ router.post("/earn", async (req: Request, res: Response) => {
           undefined,
           {
             code: "VALIDATION_ERROR",
-            message: "Points must be a positive number",
+            message: "Either 'points' (direct) or 'transactionAmount' (currency) is required",
           },
           requestId,
           Date.now() - startTime
@@ -244,29 +251,87 @@ router.post("/earn", async (req: Request, res: Response) => {
       );
     }
 
-    if (pointsNum > 100000) {
-      return res.status(400).json(
-        createResponse(
-          false,
-          undefined,
-          undefined,
-          {
-            code: "VALIDATION_ERROR",
-            message: "Points cannot exceed 100,000 per transaction",
-          },
-          requestId,
-          Date.now() - startTime
-        )
-      );
+    let pointsNum = 0;
+    let txnAmount: number | undefined = undefined;
+
+    if (hasTransactionAmount) {
+      // Currency-based earning with multiplier
+      txnAmount = parseFloat(String(transactionAmount));
+      if (isNaN(txnAmount) || txnAmount <= 0) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            undefined,
+            {
+              code: "VALIDATION_ERROR",
+              message: "transactionAmount must be a positive number",
+            },
+            requestId,
+            Date.now() - startTime
+          )
+        );
+      }
+      if (txnAmount > 1000000) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            undefined,
+            {
+              code: "VALIDATION_ERROR",
+              message: "transactionAmount cannot exceed 1,000,000",
+            },
+            requestId,
+            Date.now() - startTime
+          )
+        );
+      }
+    } else {
+      // Direct points earning
+      pointsNum = parseInt(String(points));
+      if (isNaN(pointsNum) || pointsNum <= 0) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            undefined,
+            {
+              code: "VALIDATION_ERROR",
+              message: "Points must be a positive number",
+            },
+            requestId,
+            Date.now() - startTime
+          )
+        );
+      }
+
+      if (pointsNum > 100000) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            undefined,
+            {
+              code: "VALIDATION_ERROR",
+              message: "Points cannot exceed 100,000 per transaction",
+            },
+            requestId,
+            Date.now() - startTime
+          )
+        );
+      }
     }
 
-    const result = await logicService.handlePosAction(externalId, "MEMBER_EARN", pointsNum);
+    const result = await logicService.handlePosAction(externalId, "MEMBER_EARN", pointsNum, txnAmount);
     const processingTime = Date.now() - startTime;
 
     const responseData = {
       action: "EARN",
       externalId,
-      pointsAdded: pointsNum,
+      pointsAdded: result.data?.points_processed || pointsNum,
+      transactionAmount: result.data?.transaction_amount || txnAmount,
+      multiplierUsed: result.data?.multiplier_used,
       previousBalance: result.data?.previous_balance || 0,
       newBalance: result.data?.new_balance || pointsNum,
       transactionId: result.data?.transaction_id || `txn_${Date.now()}`,
@@ -593,14 +658,24 @@ router.get("/actions", (_req: Request, res: Response) => {
           lookup: {
             method: "POST",
             path: "/api/pos/lookup",
-            description: "Look up member by external ID or scan code",
+            description: "Look up member by external ID or scan code. Returns earn_rate_multiplier for point calculations.",
             body: { externalId: "string", scanCode: "string (alternative)" },
+            response: { member: { earn_rate_multiplier: "number (default 10)" } },
           },
           earn: {
             method: "POST",
             path: "/api/pos/earn",
-            description: "Add points to member balance",
-            body: { externalId: "string", points: "number", transactionRef: "string (optional)" },
+            description: "Add points to member balance. Use EITHER points (direct) OR transactionAmount (currency-based with multiplier).",
+            body: { 
+              externalId: "string (required)", 
+              points: "number (direct points, optional)", 
+              transactionAmount: "number (currency amount, applies multiplier, optional)",
+              transactionRef: "string (optional)" 
+            },
+            examples: [
+              { description: "Direct points", body: { externalId: "PUB-123", points: 100 } },
+              { description: "Currency-based (10x multiplier)", body: { externalId: "PUB-123", transactionAmount: 12.50 }, result: "125 points" },
+            ],
           },
           redeem: {
             method: "POST",
@@ -608,6 +683,16 @@ router.get("/actions", (_req: Request, res: Response) => {
             description: "Redeem points from member balance",
             body: { externalId: "string", points: "number", transactionRef: "string (optional)" },
           },
+        },
+        pointSystem: {
+          description: "Currency-to-points conversion uses configurable earn_rate_multiplier per program",
+          formula: "points = floor(transactionAmount * earn_rate_multiplier)",
+          defaultMultiplier: 10,
+          examples: [
+            { amount: 12.50, multiplier: 10, points: 125 },
+            { amount: 12.99, multiplier: 10, points: 129 },
+            { amount: 1000, multiplier: 1, points: 1000, note: "Japan (Yen)" },
+          ],
         },
         webhookEndpoints: {
           lookup: "POST /api/webhooks/pos/lookup",

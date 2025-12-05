@@ -15,6 +15,7 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Protocol C:** POS clerk protection - redeem requires confirmation modal
 - **Protocol D:** RLS security validated - anon key blocked from direct table access
 - **Migrations 012-014:** Security policies, status tracking, nullable PassKit fields
+- **Migration 015:** Integer-based point system with earn_rate_multiplier (Casino Chip model)
 
 ## System Architecture
 
@@ -36,10 +37,11 @@ Branding includes a "Pass To VIP" logo in the header and "Operated by Oakmont Lo
 - **Digital Wallet Integration:** Orchestrated via `passkit-provision.service.ts` for automatic creation of digital wallet programs and tiers, supporting a "soft-fail" approach where provisioning continues even if PassKit API fails.
 - **Protocol Routing:** Supports `MEMBERSHIP`, `EVENT_TICKET`, and `COUPON` protocols, each interacting with Supabase RPCs for specific transaction types.
 - **Security:** Includes JWT authentication, multi-tenant isolation, rate limiting, input validation with Zod, and a locked-down anonymous key for public endpoints.
+- **Point System:** Integer-based "Casino Chip" model with configurable earn_rate_multiplier per program. Formula: `points = floor(transactionAmount × multiplier)`. Default multiplier is 10 ($1 = 10 points). Avoids floating-point precision issues.
 
 ### Feature Specifications
 - **Client Dashboard:** Features include a login page, a program overview dashboard, analytics (enrollment charts, retention), member management, a POS simulator, and an admin interface for client management (for `PLATFORM_ADMIN`).
-- **POS Simulator:** Offers dual scanning modes, supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`), and includes a confirmation modal for redeem actions (Protocol C).
+- **POS Simulator:** Offers dual scanning modes, supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`), includes a confirmation modal for redeem actions (Protocol C), and supports both "Spend Amount" (currency with multiplier) and "Direct Points" earning modes.
 - **API Endpoints:** Separated into Client Dashboard API (JWT protected), Admin API (API key protected), Internal POS API (JWT protected), External POS Webhooks (API key protected with idempotency), Public Enrollment API (Supabase ANON key with RLS), and PassKit Callbacks (HMAC signature verified).
 - **Role-Based Access Control:** Granular permissions define access levels for different user roles across various API endpoints.
 
@@ -67,6 +69,7 @@ migrations/011_pos_integration.sql         # POS API keys & transactions
 migrations/012_secure_public_access.sql    # CRITICAL: RLS for anon key
 migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
 migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
+migrations/015_earn_rate_multiplier.sql    # Integer-based point system
 ```
 
 ## Key Files

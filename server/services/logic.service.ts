@@ -19,6 +19,9 @@ interface PosActionResult {
     redemption_id?: string;
     new_balance?: number;
     previous_balance?: number;
+    points_processed?: number;
+    transaction_amount?: number;
+    multiplier_used?: number;
     passkit_internal_id?: string;
     notification_message?: string;
     protocol?: string;
@@ -42,7 +45,8 @@ class LogicService {
   async handlePosAction(
     externalId: string,
     actionType: ActionType,
-    amount?: number
+    amount?: number,
+    transactionAmount?: number
   ): Promise<PosActionResult> {
     if (!isSupabaseConfigured()) {
       throw new Error("Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.");
@@ -86,6 +90,10 @@ class LogicService {
     if (MEMBERSHIP_ACTIONS.includes(actionType)) {
       rpcName = "process_membership_transaction";
       rpcParams.p_amount = parseInt(String(amount)) || 0;
+      // Support transaction amount for currency-based earning with multiplier
+      if (transactionAmount !== undefined && actionType === "MEMBER_EARN") {
+        rpcParams.p_transaction_amount = transactionAmount;
+      }
     } else if (ONE_TIME_ACTIONS.includes(actionType)) {
       rpcName = "process_one_time_use";
     } else {

@@ -12,6 +12,7 @@ interface CreateTenantParams {
   protocol: "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
   timezone?: string;
   autoProvision?: boolean;
+  earnRateMultiplier?: number;
 }
 
 interface CreateTenantResult {
@@ -27,6 +28,7 @@ interface CreateTenantResult {
   passkitTierId?: string;
   enrollmentUrl?: string;
   timezone?: string;
+  earnRateMultiplier?: number;
   error?: string;
 }
 
@@ -81,12 +83,14 @@ class AdminService {
       protocol,
       timezone = "America/New_York",
       autoProvision = true,
+      earnRateMultiplier = 10,
     } = params;
 
     console.log(`🏢 Creating new tenant: ${businessName}`);
     console.log(`   Email: ${email}`);
     console.log(`   Protocol: ${protocol}`);
     console.log(`   Auto-Provision: ${autoProvision}`);
+    console.log(`   Earn Rate Multiplier: ${earnRateMultiplier}x`);
     if (providedProgramId) {
       console.log(`   Provided PassKit Program: ${providedProgramId}`);
     }
@@ -211,6 +215,7 @@ class AdminService {
         passkit_status: passkitData.status,
         timezone: timezone,
         protocol: protocol,
+        earn_rate_multiplier: earnRateMultiplier,
       };
       
       if (hasDashboardSlug) {
@@ -283,6 +288,7 @@ class AdminService {
         passkitTierId: passkitData.tierId || undefined,
         enrollmentUrl: passkitData.enrollmentUrl || undefined,
         timezone,
+        earnRateMultiplier,
       };
 
       if (hasDashboardSlug) {
@@ -397,7 +403,8 @@ class AdminService {
             timezone,
             is_suspended,
             dashboard_slug,
-            enrollment_url
+            enrollment_url,
+            earn_rate_multiplier
           )
         `)
         .order("created_at", { ascending: false });

@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { Html5Qrcode } from "html5-qrcode";
+import { DollarSign, Hash } from "lucide-react";
 
 function parseMemberCode(rawCode: string): string {
   if (!rawCode || typeof rawCode !== "string") return "";
@@ -48,6 +50,8 @@ export default function POSPage() {
   
   const [externalId, setExternalId] = useState("");
   const [points, setPoints] = useState("");
+  const [transactionAmount, setTransactionAmount] = useState("");
+  const [earnMode, setEarnMode] = useState<"points" | "amount">("amount");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
@@ -59,6 +63,10 @@ export default function POSPage() {
   
   const [showRedeemConfirm, setShowRedeemConfirm] = useState(false);
   const [pendingRedeemAmount, setPendingRedeemAmount] = useState(0);
+
+  const calculatedPoints = member && transactionAmount
+    ? Math.floor(parseFloat(transactionAmount) * (member.earn_rate_multiplier || 10))
+    : 0;
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -101,26 +109,46 @@ export default function POSPage() {
   }, [externalId, toast]);
 
   const handleEarn = async () => {
-    if (!member || !points) return;
+    if (!member) return;
+
+    let pointsToEarn = 0;
+    let amountValue: number | undefined;
     
-    const pointsNum = parseInt(points);
-    if (isNaN(pointsNum) || pointsNum <= 0) {
-      toast({ title: "Error", description: "Please enter a valid points amount", variant: "destructive" });
-      return;
+    if (earnMode === "amount") {
+      const amount = parseFloat(transactionAmount);
+      if (isNaN(amount) || amount <= 0) {
+        toast({ title: "Error", description: "Please enter a valid transaction amount", variant: "destructive" });
+        return;
+      }
+      amountValue = amount;
+      pointsToEarn = Math.floor(amount * (member.earn_rate_multiplier || 10));
+    } else {
+      const pointsNum = parseInt(points);
+      if (isNaN(pointsNum) || pointsNum <= 0) {
+        toast({ title: "Error", description: "Please enter a valid points amount", variant: "destructive" });
+        return;
+      }
+      pointsToEarn = pointsNum;
     }
 
     setIsProcessing(true);
     
     try {
-      const result = await posApi.earn(member.external_id, pointsNum);
+      const result = earnMode === "amount"
+        ? await posApi.earn(member.external_id, undefined, amountValue)
+        : await posApi.earn(member.external_id, pointsToEarn);
       
       if (result.success && result.data) {
         setLastTransaction(result.data);
         setMember({ ...member, points_balance: result.data.newBalance });
         setPoints("");
+        setTransactionAmount("");
+        const earnedAmount = result.data.newBalance - result.data.previousBalance;
         toast({ 
           title: "Points Earned!", 
-          description: `Added ${pointsNum} points. New balance: ${result.data.newBalance}` 
+          description: earnMode === "amount"
+            ? `$${amountValue?.toFixed(2)} = ${earnedAmount.toLocaleString()} points. New balance: ${result.data.newBalance.toLocaleString()}`
+            : `Added ${earnedAmount.toLocaleString()} points. New balance: ${result.data.newBalance.toLocaleString()}` 
         });
       } else {
         toast({ 
@@ -460,25 +488,81 @@ export default function POSPage() {
                 </TabsList>
                 
                 <TabsContent value="earn" className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="earnPoints" className="text-foreground text-sm">Points to Add</Label>
-                    <Input
-                      id="earnPoints"
-                      type="number"
-                      placeholder="100"
-                      value={points}
-                      onChange={(e) => setPoints(e.target.value)}
-                      className="bg-background border-border text-foreground placeholder:text-muted-foreground text-xl"
-                      data-testid="input-earn-points"
-                    />
-                  </div>
+                  <RadioGroup
+                    value={earnMode}
+                    onValueChange={(v) => setEarnMode(v as "points" | "amount")}
+                    className="grid grid-cols-2 gap-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="amount" id="mode-amount" data-testid="radio-earn-amount" />
+                      <Label htmlFor="mode-amount" className="flex items-center gap-1 text-foreground text-sm cursor-pointer">
+                        <DollarSign className="w-4 h-4" />
+                        Spend Amount
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="points" id="mode-points" data-testid="radio-earn-points" />
+                      <Label htmlFor="mode-points" className="flex items-center gap-1 text-foreground text-sm cursor-pointer">
+                        <Hash className="w-4 h-4" />
+                        Direct Points
+                      </Label>
+                    </div>
+                  </RadioGroup>
+
+                  {earnMode === "amount" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="transactionAmount" className="text-foreground text-sm">Transaction Amount ($)</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                          id="transactionAmount"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="12.50"
+                          value={transactionAmount}
+                          onChange={(e) => setTransactionAmount(e.target.value)}
+                          className="bg-background border-border text-foreground placeholder:text-muted-foreground text-xl pl-10"
+                          data-testid="input-transaction-amount"
+                        />
+                      </div>
+                      {transactionAmount && parseFloat(transactionAmount) > 0 && (
+                        <div className="p-3 rounded-md bg-primary/10 border border-primary/20">
+                          <p className="text-sm text-foreground">
+                            <span className="font-medium">${parseFloat(transactionAmount).toFixed(2)}</span>
+                            <span className="text-muted-foreground"> × {member.earn_rate_multiplier || 10}x = </span>
+                            <span className="font-semibold text-primary">{calculatedPoints.toLocaleString()} points</span>
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Earn rate: {member.earn_rate_multiplier || 10}x ($1.00 = {member.earn_rate_multiplier || 10} points)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="earnPoints" className="text-foreground text-sm">Points to Add</Label>
+                      <Input
+                        id="earnPoints"
+                        type="number"
+                        placeholder="100"
+                        value={points}
+                        onChange={(e) => setPoints(e.target.value)}
+                        className="bg-background border-border text-foreground placeholder:text-muted-foreground text-xl"
+                        data-testid="input-earn-points"
+                      />
+                    </div>
+                  )}
+                  
                   <Button 
                     className="w-full"
                     onClick={handleEarn}
-                    disabled={isProcessing || !points}
+                    disabled={isProcessing || (earnMode === "amount" ? !transactionAmount : !points)}
                     data-testid="button-earn"
                   >
-                    {isProcessing ? "Processing..." : "Add Points"}
+                    {isProcessing ? "Processing..." : earnMode === "amount" 
+                      ? `Add ${calculatedPoints.toLocaleString()} Points` 
+                      : "Add Points"}
                   </Button>
                 </TabsContent>
                 

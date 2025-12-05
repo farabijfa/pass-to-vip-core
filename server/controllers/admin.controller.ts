@@ -11,6 +11,7 @@ const provisionTenantSchema = z.object({
   protocol: z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]).default("MEMBERSHIP"),
   timezone: z.string().default("America/New_York"),
   autoProvision: z.boolean().default(true),
+  earnRateMultiplier: z.number().int().min(1).max(1000).default(10),
 });
 
 class AdminController {
@@ -41,6 +42,7 @@ class AdminController {
         protocol, 
         timezone,
         autoProvision,
+        earnRateMultiplier,
       } = validation.data;
 
       const result = await adminService.createTenant({
@@ -52,6 +54,7 @@ class AdminController {
         protocol,
         timezone,
         autoProvision,
+        earnRateMultiplier,
       });
 
       const processingTime = Date.now() - startTime;
@@ -99,6 +102,10 @@ class AdminController {
             programId: result.passkitProgramId,
             tierId: result.passkitTierId,
             enrollmentUrl: result.enrollmentUrl,
+          },
+          pointSystem: {
+            earnRateMultiplier: result.earnRateMultiplier,
+            description: `$1.00 spent = ${result.earnRateMultiplier} points`,
           },
         },
         metadata: {
