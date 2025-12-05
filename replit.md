@@ -1,17 +1,22 @@
-# Phygital Loyalty Ecosystem - Backend API
+# Pass To VIP - Phygital Loyalty Ecosystem
 
 ## Overview
-This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem that integrates digital wallets with physical rewards processing. Developed for **PassToVIP**, it aims to bridge physical interactions and digital loyalty programs.
+Multi-tenant SaaS platform bridging physical mail and digital wallets. Developed for **Pass To VIP** (passtovip.com / scantovip.com), operated by **Oakmont Logic LLC**.
+
+**Support Contact:** support@passtovip.com
 
 **Key Capabilities:**
-- Membership point management
-- One-time offer redemptions
-- Dynamic digital pass creation and updates
-- "Physical Bridge" to convert physical mail recipients into digital wallet users
-- **Three Enrollment Verticals:**
-  - **Vertical A (Push):** Direct mail campaigns with claim codes
-  - **Vertical B (Pull):** Reception QR codes for walk-in enrollment
-  - **Vertical C (EDDM):** High-volume neighborhood blanket campaigns
+- React client dashboard with analytics, member management, and POS simulator
+- JWT authentication with role-based access control (SUPER_ADMIN, PLATFORM_ADMIN, CLIENT_ADMIN)
+- Dual QR/barcode scanning (keyboard-wedge external scanners + mobile camera)
+- Digital wallet integration (Apple Wallet, Google Pay via PassKit)
+- Physical mail campaigns (postcards/letters via PostGrid)
+- Unique enrollment URLs per client via dashboard_slug
+
+**Three Enrollment Verticals:**
+- **Vertical A (Push):** Direct mail campaigns with claim codes
+- **Vertical B (Pull):** Reception QR codes for walk-in enrollment
+- **Vertical C (EDDM):** High-volume neighborhood blanket campaigns
 
 **Target Industries:** Retail, Hospitality, Event Management.
 
@@ -19,118 +24,230 @@ This project is a Node.js/Express backend API for a 'Phygital' Loyalty Ecosystem
 - Iterative development preferred
 - Ask before making major changes to the codebase
 - Detailed explanations for new features or complex logic
-- Do NOT modify the `/admin` folder
+- Do NOT modify the `/admin` folder (legacy HTML pages)
+
+## Design System
+
+### USA Patriotic Color Scheme
+| Color | HSL Value | Hex | Usage |
+|-------|-----------|-----|-------|
+| Primary Blue | `hsl(215, 74%, 45%)` | `#2563eb` | Buttons, active states, positive actions |
+| Secondary Red | `hsl(356, 72%, 48%)` | `#dc2626` | Warnings, churned status, redeem actions |
+| White | - | `#ffffff` | Backgrounds, cards |
+
+### Branding Elements
+- **Header:** "Pass To VIP" logo with program name
+- **Footer:** "Operated by Oakmont Logic LLC"
+- **Support:** support@passtovip.com
 
 ## System Architecture
 
-### Core Design
-The system employs a clear separation of concerns:
-- **Controllers:** Handle API requests and delegate tasks.
-- **Services:** Encapsulate business logic and manage integrations (Supabase, PassKit, PostGrid).
-- **Logic Service:** Orchestrates Point-of-Sale (POS) actions, routing to Supabase RPC functions and PassKit synchronization.
-- **Data Flow:** Client Request → Controller → `logic.service.ts` → Supabase RPC + `passkit.service.ts`.
-
 ### File Structure
-The project follows a standard Express application structure:
 ```
-server/
-├── controllers/
-├── services/
-├── middleware/
-├── routes/
-├── config/
-└── index.ts
+├── client/                    # React frontend (Vite + TailwindCSS + shadcn/ui)
+│   └── src/
+│       ├── components/        # UI components
+│       │   ├── ui/           # shadcn/ui base components
+│       │   └── app-sidebar.tsx
+│       ├── pages/            # Route pages
+│       │   ├── login.tsx     # JWT authentication
+│       │   ├── dashboard.tsx # Program overview
+│       │   ├── analytics.tsx # Enrollment charts, retention
+│       │   ├── members.tsx   # Searchable member list
+│       │   ├── pos.tsx       # POS simulator with dual scanning
+│       │   └── admin-clients.tsx # Platform admin
+│       ├── lib/
+│       │   ├── auth.tsx      # AuthContext with JWT
+│       │   ├── api.ts        # Authenticated API client
+│       │   └── queryClient.ts
+│       └── index.css         # Tailwind + theme variables
+├── server/
+│   ├── controllers/          # Request handlers
+│   ├── services/             # Business logic
+│   │   ├── logic.service.ts  # POS orchestrator
+│   │   ├── passkit.service.ts
+│   │   ├── postgrid.service.ts
+│   │   └── supabase.service.ts
+│   ├── routes/
+│   │   ├── client.routes.ts  # Dashboard API (JWT auth)
+│   │   ├── pos.routes.ts     # Internal POS (JWT auth)
+│   │   └── webhook.routes.ts # External POS (API key)
+│   ├── middleware/
+│   └── index.ts
+├── migrations/               # SQL for Supabase
+├── docs/
+│   └── POS_INTEGRATION.md   # External POS webhook guide
+└── design_guidelines.md     # UI/UX specifications
+```
 
-migrations/
-public/
-```
+### Core Design
+- **Controllers:** Handle API requests and delegate tasks
+- **Services:** Encapsulate business logic (Supabase, PassKit, PostGrid)
+- **Logic Service:** Orchestrates POS actions → Supabase RPC + PassKit sync
+- **Data Flow:** Client → Controller → `logic.service.ts` → Supabase RPC + `passkit.service.ts`
 
 ### Protocol Routing
-The system dynamically routes POS actions based on predefined protocols:
-- `MEMBERSHIP`: Processes points earn/redeem via `process_membership_transaction` RPC.
-- `EVENT_TICKET`: Handles one-time check-ins via `process_one_time_use` RPC.
-- `COUPON`: Manages coupon issue/redeem via `process_one_time_use` RPC.
+- `MEMBERSHIP`: Points earn/redeem via `process_membership_transaction` RPC
+- `EVENT_TICKET`: One-time check-ins via `process_one_time_use` RPC
+- `COUPON`: Coupon issue/redeem via `process_one_time_use` RPC
 
-### Client API Endpoints
-The system includes a React client portal with the following authenticated endpoints:
-- **POST /api/client/login** - Authenticates via Supabase and returns JWT token
-- **GET /api/client/me** - Returns user profile and program context
-- **GET /api/client/analytics** - Returns member counts (total, active, churned) by enrollment source
-- **GET /api/client/members** - Returns paginated members list with search support
-- **GET /api/client/campaigns** - Returns campaign/notification history with success rates
+## Client Dashboard Pages
 
-### Admin API Endpoints (Requires SUPER_ADMIN or PLATFORM_ADMIN role)
-- **GET /api/client/admin/tenants** - Lists all client accounts and their programs (includes dashboard_slug for unique URLs)
-- **POST /api/client/admin/provision** - Creates new client account with Supabase Auth user, program, admin_profiles link, and unique dashboard_slug
-- **DELETE /api/client/admin/tenants/:userId** - Removes client account and associated data
+| Page | Path | Description |
+|------|------|-------------|
+| Login | `/login` | JWT authentication with Supabase |
+| Dashboard | `/dashboard` | Program overview, quick stats |
+| Analytics | `/analytics` | Enrollment charts, retention rates, source breakdown |
+| Members | `/members` | Searchable/paginated member list |
+| POS Simulator | `/pos` | Dual-mode scanning, earn/redeem points |
+| Admin Clients | `/admin/clients` | Platform admin client management |
 
-### Public Enrollment API
-- **GET /api/enroll/:slug** - Public endpoint for enrollment via unique dashboard URL
-  - Returns program info (id, name, protocol, enrollment_url, is_suspended)
-  - Uses anon key only (no service role key for security)
-  - Returns 503 if anon key not configured or dashboard_slug column missing
-  - Returns 404 if slug not found
+## POS Simulator Features
 
-### Role-Based Access Control
-The system implements server-side role validation for admin operations:
-- **SUPER_ADMIN** - Full platform access
-- **PLATFORM_ADMIN** - Admin access to client provisioning
-- **CLIENT_ADMIN** - Standard client access (dashboard, analytics, members)
-- Admin API endpoints validate JWT tokens and check `admin_profiles.role` before processing
+### Dual Scanning Modes
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **Keyboard Wedge** | USB/Bluetooth scanners type + Enter | Retail counters, fixed POS |
+| **Camera Scan** | Mobile camera via html5-qrcode | Mobile staff, pop-ups |
 
-### Test Data
-The seed script (`scripts/seed-members.ts`) can be used to populate test members for development:
-```bash
-npx tsx scripts/seed-members.ts <program_id>
+### Smart Code Parser
+Automatically extracts member IDs from various formats:
+```
+URL: https://example.com/member?code=PUB-ABC123 → PUB-ABC123
+Path: https://example.com/claim/CLM-XYZ789 → CLM-XYZ789
+Raw: pub-abc123 → PUB-ABC123
 ```
 
-### UI/UX Decisions
-The project includes an admin dashboard (located in `public/`) and a React client portal (`client/`) for program managers. The design emphasizes clear data presentation for customer and program statistics.
+### Supported Prefixes
+| Prefix | Source | Description |
+|--------|--------|-------------|
+| `PUB-` | Public Enrollment | Walk-in QR scan |
+| `CLM-` | Claim Code | Direct mail redemption |
+| `MBR-` | Member ID | Direct lookup |
 
-### Security Features
-- **Multi-Tenant Isolation:** Ensures data separation between clients.
-- **Rate Limiting:** Protects `/api/pos/*` (60/min) and `/api/notify/*` (10/min) endpoints.
-- **Input Validation:** Prevents common vulnerabilities like SQL injection.
-- **Duplicate Prevention:** Ensures unique program and business name creation.
-- **Kill Switch:** Allows suspension of programs for immediate halting of POS transactions.
-- **Legacy Admin Pages:** HTML admin pages (`/admin/*`) are disabled in production mode; use React dashboard at `/admin/clients` instead.
-- **Anon Key for Public Endpoints:** Public enrollment API uses Supabase anon key only (no service role key exposure).
+## API Endpoints
 
-### Webhook Architecture (Vertical B/C)
-The PassKit enrollment webhook (`/api/webhooks/passkit/enrollment`) handles high-volume EDDM campaigns:
-- **Idempotency:** Duplicate webhooks (e.g., PassKit retries) are absorbed gracefully
-- **External ID Format:** `PUB-{short-uuid}` prefix for all public enrollments
-- **Enrollment Source:** Set to `SMARTPASS` for all public enrollment paths
-- **Program Lookup:** Maps `passkit_program_id` → internal Supabase UUID
-- **Birthday Validation:** Validates and formats dates before storing
-- **Spike Protection:** Always returns HTTP 200 to prevent webhook retries
+### Client Dashboard API (JWT Authentication)
+- **POST /api/client/login** - Authenticate, receive JWT token
+- **GET /api/client/me** - User profile and program context
+- **GET /api/client/analytics** - Member counts by enrollment source
+- **GET /api/client/members** - Paginated members with search
+- **GET /api/client/campaigns** - Campaign/notification history
 
-### POS Webhook Integration
-External POS systems can integrate via authenticated webhook endpoints:
-- **POST /api/webhooks/pos/lookup** - Member lookup by external_id or scan code
-- **POST /api/webhooks/pos/earn** - Add points with validation
-- **POST /api/webhooks/pos/redeem** - Deduct points with balance check
+### Admin API (SUPER_ADMIN or PLATFORM_ADMIN)
+- **GET /api/client/admin/tenants** - List all clients with dashboard_slug
+- **POST /api/client/admin/provision** - Create new client account
+- **DELETE /api/client/admin/tenants/:userId** - Remove client
 
-**Authentication:** `x-api-key` header with `pk_live_*` format keys  
-**Idempotency:** `Idempotency-Key` header prevents duplicate processing  
-**Rate Limiting:** 60 requests/min per API key (configurable)  
-**Documentation:** See `docs/POS_INTEGRATION.md` for full integration guide
+### Internal POS API (JWT Authentication)
+- **POST /api/pos/lookup** - Member lookup by external_id
+- **POST /api/pos/earn** - Award points
+- **POST /api/pos/redeem** - Deduct points
 
-### Internal POS Simulator
-- **POST /api/pos/lookup** - Dashboard-authenticated member lookup
-- **POST /api/pos/earn** - Dashboard-authenticated point earning
-- **POST /api/pos/redeem** - Dashboard-authenticated point redemption
-- Mock mode (VITE_MOCK_MODE=true) for development/testing
+### External POS Webhooks (API Key Authentication)
+- **POST /api/webhooks/pos/lookup** - Member lookup
+- **POST /api/webhooks/pos/earn** - Add points (idempotent)
+- **POST /api/webhooks/pos/redeem** - Deduct points (idempotent)
+
+**Headers:** `x-api-key: pk_live_*`, `Idempotency-Key: unique-id`
+
+### Public Enrollment
+- **GET /api/enroll/:slug** - Public program lookup by dashboard_slug
+  - Uses SUPABASE_ANON_KEY only (no service role key exposure)
+  - Returns 503 if anon key not configured
+
+## Role-Based Access Control
+
+| Role | Description | Access |
+|------|-------------|--------|
+| `SUPER_ADMIN` | Platform owner | Full system access |
+| `PLATFORM_ADMIN` | Platform operator | Client provisioning |
+| `CLIENT_ADMIN` | Business client | Own program only |
+
+### Permissions Matrix
+| Endpoint | SUPER_ADMIN | PLATFORM_ADMIN | CLIENT_ADMIN |
+|----------|-------------|----------------|--------------|
+| `/api/client/admin/*` | ✅ | ✅ | ❌ |
+| `/api/client/analytics` | ✅ | ✅ | ✅ (own) |
+| `/api/client/members` | ✅ | ✅ | ✅ (own) |
+| `/api/pos/*` | ✅ | ✅ | ✅ (own) |
+
+## Security Features
+- **JWT Authentication:** Secure client dashboard sessions
+- **Multi-Tenant Isolation:** Data separated by program_id
+- **Rate Limiting:** `/api/pos/*` (60/min), `/api/notify/*` (10/min)
+- **Kill Switch:** Instantly suspend programs
+- **Input Validation:** Zod schemas on all endpoints
+- **Anon Key Only:** Public endpoints never expose service role key
+
+## Environment Variables
+
+### Required
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server only) |
+| `SUPABASE_ANON_KEY` | Anonymous key (public endpoints) |
+| `ADMIN_API_KEY` | External API authentication |
+| `SESSION_SECRET` | Session encryption |
+
+### Client Dashboard
+| Variable | Description |
+|----------|-------------|
+| `VITE_MOCK_MODE` | Enable mock data (`true`/`false`) |
+
+### Optional
+| Variable | Required For |
+|----------|--------------|
+| `PASSKIT_API_KEY` | Digital wallet sync |
+| `PASSKIT_API_SECRET` | Digital wallet sync |
+| `POSTGRID_API_KEY` | Physical mail |
+| `APP_URL` | QR code generation |
+
+## Database Migrations
+
+Execute in Supabase Studio SQL Editor (in order):
+```
+migrations/001_performance_indexes.sql
+migrations/002_program_suspension.sql
+migrations/003_passkit_tier_id.sql
+migrations/004_rpc_functions_verification.sql
+migrations/010_dashboard_slug.sql
+migrations/011_pos_integration.sql
+```
+
+## Development Commands
+
+```bash
+# Start development server
+npm run dev
+
+# Seed test members
+npx tsx scripts/seed-members.ts <program_id>
+
+# Production validation (7 flows)
+npx tsx scripts/prod-validation.ts
+```
 
 ## External Dependencies
 
--   **Supabase (Required):**
-    -   **Database:** PostgreSQL for storing loyalty data, members, transactions, and claim codes.
-    -   **Authentication:** User authentication for client dashboards.
-    -   **RPC Functions:** Stored procedures for core loyalty logic.
--   **PassKit (Optional):**
-    -   **Digital Wallet Management:** Creation and updates of Apple Wallet and Google Wallet passes.
-    -   **Push Notifications:** Real-time updates to digital wallet holders.
--   **PostGrid (Optional):**
-    -   **Direct Mail:** Sending physical postcards and letters.
-    -   **Template Management:** Dynamic content integration for physical mail campaigns.
+### Supabase (Required)
+- **Database:** PostgreSQL for loyalty data
+- **Authentication:** User auth for dashboards
+- **RPC Functions:** Stored procedures for core logic
+
+### PassKit (Optional)
+- **Digital Wallets:** Apple Wallet & Google Pay passes
+- **Push Notifications:** Real-time wallet updates
+
+### PostGrid (Optional)
+- **Direct Mail:** Postcards and letters
+- **Template Management:** Dynamic content
+
+## Recent Changes
+- POS Simulator with dual scanning (keyboard wedge + camera)
+- "Scan with Camera" button uses primary blue for prominence
+- USA patriotic color scheme (blue/red/white)
+- Role-based access control with JWT
+- Unique enrollment URLs via dashboard_slug
+- Comprehensive README with full documentation
