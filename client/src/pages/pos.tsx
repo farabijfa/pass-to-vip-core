@@ -56,6 +56,10 @@ export default function POSPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  
+  const [showRedeemConfirm, setShowRedeemConfirm] = useState(false);
+  const [pendingRedeemAmount, setPendingRedeemAmount] = useState(0);
+  
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const startTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -136,7 +140,7 @@ export default function POSPage() {
     }
   };
 
-  const handleRedeem = async () => {
+  const handleRedeem = () => {
     if (!member || !points) return;
     
     const pointsNum = parseInt(points);
@@ -150,10 +154,17 @@ export default function POSPage() {
       return;
     }
 
+    setPendingRedeemAmount(pointsNum);
+    setShowRedeemConfirm(true);
+  };
+
+  const confirmRedeem = async () => {
+    if (!member || pendingRedeemAmount <= 0) return;
+
     setIsProcessing(true);
     
     try {
-      const result = await posApi.redeem(member.external_id, pointsNum);
+      const result = await posApi.redeem(member.external_id, pendingRedeemAmount);
       
       if (result.success && result.data) {
         setLastTransaction(result.data);
@@ -161,7 +172,7 @@ export default function POSPage() {
         setPoints("");
         toast({ 
           title: "Points Redeemed!", 
-          description: `Redeemed ${pointsNum} points. New balance: ${result.data.newBalance}` 
+          description: `Redeemed ${pendingRedeemAmount} points. New balance: ${result.data.newBalance}` 
         });
       } else {
         toast({ 
@@ -178,7 +189,14 @@ export default function POSPage() {
       });
     } finally {
       setIsProcessing(false);
+      setShowRedeemConfirm(false);
+      setPendingRedeemAmount(0);
     }
+  };
+
+  const cancelRedeem = () => {
+    setShowRedeemConfirm(false);
+    setPendingRedeemAmount(0);
   };
 
   const resetTransaction = () => {
@@ -275,6 +293,23 @@ export default function POSPage() {
       stopScanner();
     };
   }, [stopScanner]);
+
+  useEffect(() => {
+    if (!showRedeemConfirm) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !isProcessing) {
+        e.preventDefault();
+        confirmRedeem();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelRedeem();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showRedeemConfirm, isProcessing]);
 
   const handleOpenScanner = () => {
     setCameraError(null);
@@ -579,6 +614,75 @@ export default function POSPage() {
               Cancel
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showRedeemConfirm} onOpenChange={(open) => !open && cancelRedeem()}>
+        <DialogContent className="max-w-sm" data-testid="dialog-redeem-confirm">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Confirm Redemption</DialogTitle>
+            <DialogDescription>
+              This action will deduct points from the member's balance
+            </DialogDescription>
+          </DialogHeader>
+          
+          {member && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-md border border-destructive/30 bg-destructive/5">
+                <p className="text-sm text-muted-foreground mb-1">Member</p>
+                <p className="font-medium text-foreground" data-testid="text-confirm-member-name">
+                  {member.first_name} {member.last_name}
+                </p>
+                
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase">Current</p>
+                    <p className="text-lg font-semibold text-foreground">
+                      {member.points_balance.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase">Deduct</p>
+                    <p className="text-lg font-semibold text-destructive" data-testid="text-confirm-deduct-amount">
+                      -{pendingRedeemAmount.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase">New</p>
+                    <p className="text-lg font-semibold text-foreground" data-testid="text-confirm-new-balance">
+                      {(member.points_balance - pendingRedeemAmount).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                <Button 
+                  variant="destructive"
+                  onClick={confirmRedeem}
+                  disabled={isProcessing}
+                  className="w-full"
+                  data-testid="button-confirm-redeem"
+                >
+                  {isProcessing ? "Processing..." : "Confirm Redemption"}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={cancelRedeem}
+                  disabled={isProcessing}
+                  className="w-full"
+                  data-testid="button-cancel-redeem"
+                >
+                  Cancel
+                </Button>
+              </div>
+              
+              <p className="text-xs text-center text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Enter</kbd> to confirm 
+                or <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Esc</kbd> to cancel
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
