@@ -359,6 +359,8 @@ async function retryPassKitSync(programId: string): Promise<{ enrollmentUrl?: st
   return result.data?.passkit || {};
 }
 
+type TierSystemType = 'LOYALTY' | 'OFFICE' | 'GYM' | 'CUSTOM' | 'NONE';
+
 interface TenantProgram {
   id: string;
   name: string;
@@ -381,6 +383,12 @@ interface TenantProgram {
   passkitTierSilverId: string | null;
   passkitTierGoldId: string | null;
   passkitTierPlatinumId: string | null;
+  tierSystemType: TierSystemType;
+  tier1Name: string | null;
+  tier2Name: string | null;
+  tier3Name: string | null;
+  tier4Name: string | null;
+  defaultMemberLabel: string | null;
   campaignBudgetCents: number;
   createdAt: string;
 }
@@ -447,6 +455,12 @@ async function updateProgramTierThresholds(programId: string, params: {
   passkitTierSilverId?: string | null;
   passkitTierGoldId?: string | null;
   passkitTierPlatinumId?: string | null;
+  tierSystemType?: TierSystemType;
+  tier1Name?: string | null;
+  tier2Name?: string | null;
+  tier3Name?: string | null;
+  tier4Name?: string | null;
+  defaultMemberLabel?: string | null;
 }): Promise<void> {
   const token = getAuthToken();
   const response = await fetch(`/api/client/admin/programs/${programId}/tier-thresholds`, {
@@ -462,6 +476,14 @@ async function updateProgramTierThresholds(programId: string, params: {
     throw new Error(result.error?.message || "Failed to update tier thresholds");
   }
 }
+
+const TIER_PRESETS: Record<TierSystemType, { tier1: string; tier2: string; tier3: string; tier4: string }> = {
+  LOYALTY: { tier1: 'Bronze', tier2: 'Silver', tier3: 'Gold', tier4: 'Platinum' },
+  OFFICE: { tier1: 'Member', tier2: 'Staff', tier3: 'Admin', tier4: 'Executive' },
+  GYM: { tier1: 'Weekday', tier2: '7-Day', tier3: '24/7', tier4: 'Family' },
+  CUSTOM: { tier1: '', tier2: '', tier3: '', tier4: '' },
+  NONE: { tier1: '', tier2: '', tier3: '', tier4: '' },
+};
 
 const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
   "mock-user-001-aaaa-bbbb-cccc": [
@@ -487,6 +509,12 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       passkitTierSilverId: "pk_tier_silver_001",
       passkitTierGoldId: "pk_tier_gold_001",
       passkitTierPlatinumId: "pk_tier_platinum_001",
+      tierSystemType: "LOYALTY",
+      tier1Name: null,
+      tier2Name: null,
+      tier3Name: null,
+      tier4Name: null,
+      defaultMemberLabel: null,
       campaignBudgetCents: 50000,
       createdAt: "2024-11-15T10:30:00Z",
     },
@@ -514,6 +542,12 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       passkitTierSilverId: null,
       passkitTierGoldId: null,
       passkitTierPlatinumId: null,
+      tierSystemType: "OFFICE",
+      tier1Name: null,
+      tier2Name: null,
+      tier3Name: null,
+      tier4Name: null,
+      defaultMemberLabel: null,
       campaignBudgetCents: 100000,
       createdAt: "2024-12-01T14:15:00Z",
     },
@@ -539,6 +573,12 @@ const MOCK_PROGRAMS: Record<string, TenantProgram[]> = {
       passkitTierSilverId: null,
       passkitTierGoldId: null,
       passkitTierPlatinumId: null,
+      tierSystemType: "NONE",
+      tier1Name: null,
+      tier2Name: null,
+      tier3Name: null,
+      tier4Name: null,
+      defaultMemberLabel: "Ticket Holder",
       campaignBudgetCents: 50000,
       createdAt: "2024-12-05T10:00:00Z",
     },
@@ -662,10 +702,18 @@ export default function AdminClientDetailsPage() {
     passkitSilverId: string;
     passkitGoldId: string;
     passkitPlatinumId: string;
+    tierSystemType: TierSystemType;
+    tier1Name: string;
+    tier2Name: string;
+    tier3Name: string;
+    tier4Name: string;
+    defaultMemberLabel: string;
   }>>({});
 
   const initTierConfig = (program: TenantProgram) => {
     if (!tierConfigForm[program.id]) {
+      const systemType = program.tierSystemType || 'LOYALTY';
+      const preset = TIER_PRESETS[systemType];
       setTierConfigForm((prev) => ({
         ...prev,
         [program.id]: {
@@ -676,9 +724,30 @@ export default function AdminClientDetailsPage() {
           passkitSilverId: program.passkitTierSilverId || "",
           passkitGoldId: program.passkitTierGoldId || "",
           passkitPlatinumId: program.passkitTierPlatinumId || "",
+          tierSystemType: systemType,
+          tier1Name: program.tier1Name || preset.tier1,
+          tier2Name: program.tier2Name || preset.tier2,
+          tier3Name: program.tier3Name || preset.tier3,
+          tier4Name: program.tier4Name || preset.tier4,
+          defaultMemberLabel: program.defaultMemberLabel || "Member",
         },
       }));
     }
+  };
+
+  const handleTierSystemTypeChange = (programId: string, newType: TierSystemType) => {
+    const preset = TIER_PRESETS[newType];
+    setTierConfigForm((prev) => ({
+      ...prev,
+      [programId]: {
+        ...prev[programId],
+        tierSystemType: newType,
+        tier1Name: newType === 'CUSTOM' ? prev[programId].tier1Name : preset.tier1,
+        tier2Name: newType === 'CUSTOM' ? prev[programId].tier2Name : preset.tier2,
+        tier3Name: newType === 'CUSTOM' ? prev[programId].tier3Name : preset.tier3,
+        tier4Name: newType === 'CUSTOM' ? prev[programId].tier4Name : preset.tier4,
+      },
+    }));
   };
 
   const updateTierMutation = useMutation({
@@ -693,12 +762,18 @@ export default function AdminClientDetailsPage() {
         passkitTierSilverId: config.passkitSilverId || null,
         passkitTierGoldId: config.passkitGoldId || null,
         passkitTierPlatinumId: config.passkitPlatinumId || null,
+        tierSystemType: config.tierSystemType,
+        tier1Name: config.tier1Name || null,
+        tier2Name: config.tier2Name || null,
+        tier3Name: config.tier3Name || null,
+        tier4Name: config.tier4Name || null,
+        defaultMemberLabel: config.defaultMemberLabel || null,
       });
     },
     onSuccess: () => {
       toast({
-        title: "Tier Thresholds Updated",
-        description: "Tier boundaries have been saved successfully.",
+        title: "Tier Configuration Updated",
+        description: "Tier system and thresholds have been saved successfully.",
       });
       refetchPrograms();
       setExpandedTierConfig(null);
@@ -1400,11 +1475,117 @@ export default function AdminClientDetailsPage() {
 
                           {expandedTierConfig === program.id && tierConfigForm[program.id] && (
                             <div className="mt-3 space-y-4 text-xs">
+                              <div className="space-y-3">
+                                <div className="space-y-2">
+                                  <Label className="text-xs font-medium text-muted-foreground">Tier System Type</Label>
+                                  <Select
+                                    value={tierConfigForm[program.id].tierSystemType}
+                                    onValueChange={(value) => handleTierSystemTypeChange(program.id, value as TierSystemType)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs" data-testid={`select-tier-system-${program.id}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="LOYALTY">Loyalty (Bronze/Silver/Gold/Platinum)</SelectItem>
+                                      <SelectItem value="OFFICE">Office (Member/Staff/Admin/Executive)</SelectItem>
+                                      <SelectItem value="GYM">Gym (Weekday/7-Day/24-7/Family)</SelectItem>
+                                      <SelectItem value="CUSTOM">Custom Names</SelectItem>
+                                      <SelectItem value="NONE">No Tiers (Single Label)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {tierConfigForm[program.id].tierSystemType === 'CUSTOM' && (
+                                  <div className="border border-dashed border-border rounded-md p-3 space-y-2 bg-muted/30">
+                                    <p className="text-[10px] font-medium text-muted-foreground">Custom Tier Names</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Tier 1 (Lowest)</Label>
+                                        <Input
+                                          type="text"
+                                          placeholder="e.g., Bronze"
+                                          className="h-7 text-xs"
+                                          value={tierConfigForm[program.id].tier1Name}
+                                          onChange={(e) => setTierConfigForm((prev) => ({
+                                            ...prev,
+                                            [program.id]: { ...prev[program.id], tier1Name: e.target.value },
+                                          }))}
+                                          data-testid={`input-custom-tier1-${program.id}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Tier 2</Label>
+                                        <Input
+                                          type="text"
+                                          placeholder="e.g., Silver"
+                                          className="h-7 text-xs"
+                                          value={tierConfigForm[program.id].tier2Name}
+                                          onChange={(e) => setTierConfigForm((prev) => ({
+                                            ...prev,
+                                            [program.id]: { ...prev[program.id], tier2Name: e.target.value },
+                                          }))}
+                                          data-testid={`input-custom-tier2-${program.id}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Tier 3</Label>
+                                        <Input
+                                          type="text"
+                                          placeholder="e.g., Gold"
+                                          className="h-7 text-xs"
+                                          value={tierConfigForm[program.id].tier3Name}
+                                          onChange={(e) => setTierConfigForm((prev) => ({
+                                            ...prev,
+                                            [program.id]: { ...prev[program.id], tier3Name: e.target.value },
+                                          }))}
+                                          data-testid={`input-custom-tier3-${program.id}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Tier 4 (Highest)</Label>
+                                        <Input
+                                          type="text"
+                                          placeholder="e.g., Platinum"
+                                          className="h-7 text-xs"
+                                          value={tierConfigForm[program.id].tier4Name}
+                                          onChange={(e) => setTierConfigForm((prev) => ({
+                                            ...prev,
+                                            [program.id]: { ...prev[program.id], tier4Name: e.target.value },
+                                          }))}
+                                          data-testid={`input-custom-tier4-${program.id}`}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {tierConfigForm[program.id].tierSystemType === 'NONE' && (
+                                  <div className="border border-dashed border-border rounded-md p-3 space-y-2 bg-muted/30">
+                                    <p className="text-[10px] font-medium text-muted-foreground">Single Member Label</p>
+                                    <p className="text-[10px] text-muted-foreground">All members will use this label instead of tier names</p>
+                                    <Input
+                                      type="text"
+                                      placeholder="e.g., Member, Ticket Holder"
+                                      className="h-7 text-xs"
+                                      value={tierConfigForm[program.id].defaultMemberLabel}
+                                      onChange={(e) => setTierConfigForm((prev) => ({
+                                        ...prev,
+                                        [program.id]: { ...prev[program.id], defaultMemberLabel: e.target.value },
+                                      }))}
+                                      data-testid={`input-member-label-${program.id}`}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {tierConfigForm[program.id].tierSystemType !== 'NONE' && (
                               <div className="space-y-2">
                                 <p className="text-xs font-medium text-muted-foreground">Point Thresholds</p>
                                 <div className="flex items-center gap-2">
                                   <Medal className="w-4 h-4 text-amber-600" />
-                                  <span className="w-16">Bronze</span>
+                                  <span className="w-16 truncate" title={tierConfigForm[program.id].tier1Name || 'Tier 1'}>
+                                    {tierConfigForm[program.id].tier1Name || 'Tier 1'}
+                                  </span>
                                   <span className="text-muted-foreground">0 -</span>
                                   <Input
                                     type="number"
@@ -1420,7 +1601,9 @@ export default function AdminClientDetailsPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Award className="w-4 h-4 text-slate-400" />
-                                  <span className="w-16">Silver</span>
+                                  <span className="w-16 truncate" title={tierConfigForm[program.id].tier2Name || 'Tier 2'}>
+                                    {tierConfigForm[program.id].tier2Name || 'Tier 2'}
+                                  </span>
                                   <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].bronzeMax) || 0) + 1} -</span>
                                   <Input
                                     type="number"
@@ -1436,7 +1619,9 @@ export default function AdminClientDetailsPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Star className="w-4 h-4 text-yellow-500" />
-                                  <span className="w-16">Gold</span>
+                                  <span className="w-16 truncate" title={tierConfigForm[program.id].tier3Name || 'Tier 3'}>
+                                    {tierConfigForm[program.id].tier3Name || 'Tier 3'}
+                                  </span>
                                   <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].silverMax) || 0) + 1} -</span>
                                   <Input
                                     type="number"
@@ -1452,17 +1637,21 @@ export default function AdminClientDetailsPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Gem className="w-4 h-4 text-cyan-400" />
-                                  <span className="w-16">Platinum</span>
+                                  <span className="w-16 truncate" title={tierConfigForm[program.id].tier4Name || 'Tier 4'}>
+                                    {tierConfigForm[program.id].tier4Name || 'Tier 4'}
+                                  </span>
                                   <span className="text-muted-foreground">{(parseInt(tierConfigForm[program.id].goldMax) || 0) + 1}+</span>
                                 </div>
                               </div>
+                              )}
 
+                              {tierConfigForm[program.id].tierSystemType !== 'NONE' && (
                               <div className="border-t border-border pt-3 space-y-2">
                                 <p className="text-xs font-medium text-muted-foreground">PassKit Tier IDs (Optional)</p>
                                 <p className="text-[10px] text-muted-foreground">Use different pass designs per tier level</p>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div>
-                                    <Label className="text-[10px] text-muted-foreground">Bronze Pass ID</Label>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier1Name || 'Tier 1'} Pass ID</Label>
                                     <Input
                                       type="text"
                                       placeholder="pk_tier_..."
@@ -1476,7 +1665,7 @@ export default function AdminClientDetailsPage() {
                                     />
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] text-muted-foreground">Silver Pass ID</Label>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier2Name || 'Tier 2'} Pass ID</Label>
                                     <Input
                                       type="text"
                                       placeholder="pk_tier_..."
@@ -1490,7 +1679,7 @@ export default function AdminClientDetailsPage() {
                                     />
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] text-muted-foreground">Gold Pass ID</Label>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier3Name || 'Tier 3'} Pass ID</Label>
                                     <Input
                                       type="text"
                                       placeholder="pk_tier_..."
@@ -1504,7 +1693,7 @@ export default function AdminClientDetailsPage() {
                                     />
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] text-muted-foreground">Platinum Pass ID</Label>
+                                    <Label className="text-[10px] text-muted-foreground">{tierConfigForm[program.id].tier4Name || 'Tier 4'} Pass ID</Label>
                                     <Input
                                       type="text"
                                       placeholder="pk_tier_..."
@@ -1519,6 +1708,7 @@ export default function AdminClientDetailsPage() {
                                   </div>
                                 </div>
                               </div>
+                              )}
 
                               <Button
                                 size="sm"
