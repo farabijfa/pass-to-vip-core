@@ -61,6 +61,7 @@ USING (true)
 WITH CHECK (true);
 
 -- Platform admins can read billing snapshots
+-- Note: admin_profiles.id is the user's UUID that links to auth.users
 CREATE POLICY "Platform admins can read billing snapshots"
 ON billing_snapshots
 FOR SELECT
@@ -68,7 +69,7 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM admin_profiles ap
-    WHERE ap.user_id = auth.uid()
+    WHERE ap.id = auth.uid()
     AND ap.role IN ('SUPER_ADMIN', 'PLATFORM_ADMIN')
   )
 );
