@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { config, isSupabaseConfigured } from "../config";
 import { adminService } from "../services/admin.service";
+import { notificationService } from "../services/notification.service";
 import { z } from "zod";
 
 const provisionTenantSchema = z.object({
@@ -1441,6 +1442,248 @@ class ClientController {
 
     } catch (error) {
       console.error("Update tier thresholds error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getTenantsWithProgramsAsAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const result = await adminService.listTenantsWithPrograms();
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "LIST_FAILED",
+            message: result.error,
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.tenants,
+      });
+
+    } catch (error) {
+      console.error("Get tenants with programs error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getNotificationSegmentsAsAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { tenantId, programId, protocol } = req.query;
+
+      if (!tenantId || !programId || !protocol) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "tenantId, programId, and protocol are required",
+          },
+        });
+        return;
+      }
+
+      const result = await notificationService.getAvailableSegments(
+        tenantId as string,
+        programId as string,
+        protocol as "MEMBERSHIP" | "COUPON" | "EVENT_TICKET"
+      );
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "FETCH_SEGMENTS_FAILED",
+            message: result.error,
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          segments: result.segments,
+          tierThresholds: result.tierThresholds,
+        },
+      });
+
+    } catch (error) {
+      console.error("Get segments error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async previewNotificationSegmentAsAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { tenantId, programId, protocol, segment, segmentConfig } = req.body;
+
+      if (!tenantId || !programId || !protocol || !segment) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "tenantId, programId, protocol, and segment are required",
+          },
+        });
+        return;
+      }
+
+      const result = await notificationService.getSegmentPreview(
+        tenantId,
+        programId,
+        protocol,
+        segment,
+        segmentConfig
+      );
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "PREVIEW_FAILED",
+            message: result.error,
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.stats,
+      });
+
+    } catch (error) {
+      console.error("Preview segment error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async sendNotificationBroadcastAsAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { tenantId, programId, protocol, message, segment, segmentConfig, campaignName } = req.body;
+
+      if (!tenantId || !programId || !protocol || !message || !segment) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "tenantId, programId, protocol, message, and segment are required",
+          },
+        });
+        return;
+      }
+
+      const result = await notificationService.sendBroadcast({
+        tenantId,
+        programId,
+        protocol,
+        message,
+        segment,
+        segmentConfig,
+        campaignName,
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "BROADCAST_FAILED",
+            message: result.error,
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          campaignLogId: result.campaignLogId,
+          totalRecipients: result.totalRecipients,
+          successCount: result.successCount,
+          failedCount: result.failedCount,
+        },
+      });
+
+    } catch (error) {
+      console.error("Send broadcast error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getNotificationLogsAsAdmin(req: Request, res: Response): Promise<void> {
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const result = await notificationService.getCampaignLogs();
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "FETCH_LOGS_FAILED",
+            message: result.error,
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          logs: result.logs,
+        },
+      });
+
+    } catch (error) {
+      console.error("Get notification logs error:", error);
       res.status(500).json({
         success: false,
         error: {

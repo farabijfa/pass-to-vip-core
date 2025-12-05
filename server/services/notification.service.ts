@@ -184,7 +184,12 @@ class NotificationService {
     try {
       const client = this.getClient();
 
-      const { data: programs, error } = await client
+      // programId can be either the database UUID or the passkit_program_id
+      // We first try to find by database id, then fall back to passkit_program_id
+      let program: any = null;
+
+      // Try to find by database id first
+      const { data: programById, error: errorById } = await client
         .from("programs")
         .select(`
           id,
@@ -197,19 +202,42 @@ class NotificationService {
           tier_gold_max
         `)
         .eq("tenant_id", tenantId)
-        .eq("passkit_program_id", programId)
+        .eq("id", programId)
         .limit(1);
 
-      if (error) {
-        return { valid: false, error: `Database error: ${error.message}` };
-      }
+      if (!errorById && programById?.length > 0) {
+        program = programById[0];
+      } else {
+        // Fall back to passkit_program_id lookup
+        const { data: programByPasskitId, error: errorByPasskitId } = await client
+          .from("programs")
+          .select(`
+            id,
+            name,
+            protocol,
+            passkit_program_id,
+            tenant_id,
+            tier_bronze_max,
+            tier_silver_max,
+            tier_gold_max
+          `)
+          .eq("tenant_id", tenantId)
+          .eq("passkit_program_id", programId)
+          .limit(1);
 
-      const program = programs?.[0];
+        if (errorByPasskitId) {
+          return { valid: false, error: `Database error: ${errorByPasskitId.message}` };
+        }
+
+        if (programByPasskitId?.length > 0) {
+          program = programByPasskitId[0];
+        }
+      }
 
       if (!program) {
         return {
           valid: false,
-          error: `Program not found for tenant ${tenantId} with PassKit ID ${programId}`,
+          error: `Program not found for tenant ${tenantId} with ID ${programId}`,
         };
       }
 

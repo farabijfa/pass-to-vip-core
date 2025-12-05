@@ -476,6 +476,91 @@ class AdminService {
     }
   }
 
+  async listTenantsWithPrograms(): Promise<{ 
+    success: boolean; 
+    tenants?: Array<{
+      id: string;
+      name: string;
+      programs: Array<{
+        id: string;
+        name: string;
+        protocol: string;
+        passkit_program_id: string | null;
+        is_primary: boolean;
+      }>;
+    }>; 
+    error?: string 
+  }> {
+    try {
+      const client = this.getClient();
+
+      // Get all programs grouped by tenant (tenant_id = user id)
+      const { data: programs, error } = await client
+        .from("programs")
+        .select(`
+          id,
+          name,
+          protocol,
+          passkit_program_id,
+          is_primary,
+          tenant_id
+        `)
+        .not("tenant_id", "is", null)
+        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Group programs by tenant
+      const tenantMap = new Map<string, {
+        id: string;
+        name: string;
+        programs: Array<{
+          id: string;
+          name: string;
+          protocol: string;
+          passkit_program_id: string | null;
+          is_primary: boolean;
+        }>;
+      }>();
+
+      for (const program of programs || []) {
+        const tenantId = program.tenant_id;
+        if (!tenantId) continue;
+
+        if (!tenantMap.has(tenantId)) {
+          // Use first program name as tenant name (typically primary program)
+          tenantMap.set(tenantId, {
+            id: tenantId,
+            name: program.name,
+            programs: [],
+          });
+        }
+
+        tenantMap.get(tenantId)!.programs.push({
+          id: program.id,
+          name: program.name,
+          protocol: program.protocol,
+          passkit_program_id: program.passkit_program_id,
+          is_primary: program.is_primary || false,
+        });
+      }
+
+      return { 
+        success: true, 
+        tenants: Array.from(tenantMap.values()),
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
   async deleteTenant(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const client = this.getClient();

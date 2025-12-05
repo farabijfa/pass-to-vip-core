@@ -173,26 +173,39 @@ export default function NotificationsPage() {
   const [previewData, setPreviewData] = useState<SegmentPreview | null>(null);
   const [tierThresholds, setTierThresholds] = useState<TierThresholds | null>(null);
 
-  const tenantsQuery = useQuery<Tenant[]>({
-    queryKey: ["/api/admin/tenants"],
+  const tenantsQuery = useQuery<{ success: boolean; data: Tenant[] }>({
+    queryKey: ["/api/client/admin/tenants-with-programs"],
+    queryFn: async () => {
+      const res = await fetch("/api/client/admin/tenants-with-programs", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+      });
+      return res.json();
+    },
     enabled: !mockMode,
   });
 
-  const selectedTenant = tenantsQuery.data?.find((t) => t.id === selectedTenantId);
+  const tenants = tenantsQuery.data?.data || [];
+  const selectedTenant = tenants.find((t) => t.id === selectedTenantId);
   const selectedProgram = selectedTenant?.programs.find((p) => p.id === selectedProgramId);
 
   const segmentsQuery = useQuery<{ success: boolean; data: { segments: SegmentInfo[]; tierThresholds?: TierThresholds } }>({
-    queryKey: ["/api/notifications/segments", selectedTenantId, selectedProgram?.passkit_program_id, selectedProgram?.protocol],
+    queryKey: ["/api/client/admin/notifications/segments", selectedTenantId, selectedProgram?.id, selectedProgram?.protocol],
     queryFn: async () => {
       const params = new URLSearchParams({
         tenantId: selectedTenantId,
-        programId: selectedProgram?.passkit_program_id || "",
+        programId: selectedProgram?.id || "",
         protocol: selectedProgram?.protocol || "",
       });
-      const res = await fetch(`/api/notifications/segments?${params}`);
+      const res = await fetch(`/api/client/admin/notifications/segments?${params}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+      });
       return res.json();
     },
-    enabled: !!selectedTenantId && !!selectedProgram?.passkit_program_id,
+    enabled: !!selectedTenantId && !!selectedProgram?.id,
   });
 
   useEffect(() => {
@@ -212,7 +225,15 @@ export default function NotificationsPage() {
   }, [selectedProgram, segmentsQuery.data]);
 
   const logsQuery = useQuery<{ success: boolean; data: { logs: CampaignLog[] } }>({
-    queryKey: ["/api/notifications/logs"],
+    queryKey: ["/api/client/admin/notifications/logs"],
+    queryFn: async () => {
+      const res = await fetch("/api/client/admin/notifications/logs", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+      });
+      return res.json();
+    },
     enabled: !mockMode,
   });
 
@@ -224,9 +245,9 @@ export default function NotificationsPage() {
       if (selectedSegment === "GEO") segmentConfig.zipCodes = zipCodes.split(",").map((z) => z.trim()).filter(Boolean);
       if (selectedSegment === "CSV") segmentConfig.memberIds = csvMemberIds;
 
-      const res = await apiRequest("POST", "/api/notifications/segment/preview", {
+      const res = await apiRequest("POST", "/api/client/admin/notifications/segment/preview", {
         tenantId: selectedTenantId,
-        programId: selectedProgram?.passkit_program_id,
+        programId: selectedProgram?.id,
         protocol: selectedProgram?.protocol,
         segment: selectedSegment,
         segmentConfig,
@@ -254,9 +275,9 @@ export default function NotificationsPage() {
       if (selectedSegment === "GEO") segmentConfig.zipCodes = zipCodes.split(",").map((z) => z.trim()).filter(Boolean);
       if (selectedSegment === "CSV") segmentConfig.memberIds = csvMemberIds;
 
-      const res = await apiRequest("POST", "/api/notifications/broadcast", {
+      const res = await apiRequest("POST", "/api/client/admin/notifications/broadcast", {
         tenantId: selectedTenantId,
-        programId: selectedProgram?.passkit_program_id,
+        programId: selectedProgram?.id,
         protocol: selectedProgram?.protocol,
         message,
         segment: selectedSegment,
@@ -267,7 +288,7 @@ export default function NotificationsPage() {
     },
     onSuccess: (data: any) => {
       setShowConfirmDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/admin/notifications/logs"] });
       toast({
         title: "Broadcast Sent!",
         description: `Successfully sent to ${data.data.successCount} of ${data.data.totalRecipients} recipients`,
@@ -398,7 +419,7 @@ export default function NotificationsPage() {
                   <SelectValue placeholder="Choose a tenant..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {tenantsQuery.data?.map((tenant) => (
+                  {tenants.map((tenant) => (
                     <SelectItem key={tenant.id} value={tenant.id}>
                       {tenant.name}
                     </SelectItem>

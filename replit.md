@@ -23,8 +23,15 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
   - **Campaign Launcher UI**: Real-time budget tracking, amber warning at 80%, confirmation modal with typed override for over-budget campaigns
   - **Cost Estimate API**: Enhanced to return budget comparison info when program_id provided
 - **Enhanced Notification System**: Smart segmentation for push notifications to digital wallet passes
-  - **Smart Segments**: ALL (all active members), VIP (high-value by points threshold), DORMANT (inactive members by days), GEO (by ZIP code), CSV (targeted member list)
-  - **Admin Notifications Page**: New `/admin/notifications` page with message composer, segment picker, preview/confirm flow, and campaign history
+  - **Triple Validation**: All notification operations require tenant+programId+protocol alignment before sending
+  - **Protocol-Aware Segments**:
+    - MEMBERSHIP: ALL, TIER_BRONZE, TIER_SILVER, TIER_GOLD, TIER_PLATINUM, VIP, DORMANT, GEO, CSV
+    - COUPON: ALL_ACTIVE, UNREDEEMED, EXPIRING_SOON, GEO, CSV
+    - EVENT_TICKET: ALL_TICKETED, NOT_CHECKED_IN, CHECKED_IN, GEO, CSV
+  - **Tier-Based Segmentation**: Configurable thresholds per program (Bronze/Silver/Gold/Platinum)
+  - **Migration 023**: Added tier threshold columns (`tier_bronze_max`, `tier_silver_max`, `tier_gold_max`) to programs table
+  - **Admin Notifications Page**: New `/admin/notifications` page with two-step Tenant → Program selector
+  - **JWT-Authenticated Routes**: Notification endpoints now use `/api/client/admin/notifications/*` paths with JWT auth
   - **Segment Preview**: Dry-run capability shows recipient count and sample members before sending
   - **CSV Upload**: Target specific member IDs from uploaded CSV files
   - **Birthday Bot**: Automated birthday rewards with per-program configuration
@@ -61,7 +68,13 @@ The client dashboard employs a USA Patriotic Color Scheme: Primary Blue (`#2563e
 - **Client Command Center (Admin-Only):** Detailed client profile management for platform administrators, including identity, configuration, billing health, API keys, and PassKit sync retry. Programs section includes PostGrid template dropdown selector for per-program template defaults.
 - **Campaign Launcher (Admin-Only):** Full-featured system for direct mail campaigns via PostGrid. Features two-step Tenant → Program selector to prevent enrollment mismatches in multi-program clients. Supports various resource types (postcards, letters), mailing classes, template selection, CSV upload with validation, real-time cost estimation, and campaign history tracking. Claim codes are now linked to specific program_id for precise targeting.
 - **Public Enrollment Engine:** Self-service enrollment for strangers via web form (`/enroll/:slug`). Captures firstName, lastName, email without pre-assigned codes. Features duplicate email detection (returns existing pass URL), PassKit soft-fail provisioning, rate limiting (20 requests/15min), and source tracking (`source: PUBLIC_FORM` in passes_master). Available for MEMBERSHIP protocol programs only.
-- **API Endpoints:** Categorized into Client Dashboard (JWT), Admin (API key), Internal POS (JWT), External POS Webhooks (API key + idempotency), Public Enrollment (Zod validation + rate limiting, no auth), Campaign (JWT + admin role), and PassKit Callbacks (HMAC verified).
+- **API Endpoints:** Categorized into Client Dashboard (JWT), Admin (API key), Internal POS (JWT), External POS Webhooks (API key + idempotency), Public Enrollment (Zod validation + rate limiting, no auth), Campaign (JWT + admin role), Notifications (JWT + admin role), and PassKit Callbacks (HMAC verified).
+- **Notification API Endpoints (JWT authenticated):**
+  - `GET /api/client/admin/tenants-with-programs` - List all tenants with their programs for notification composer
+  - `GET /api/client/admin/notifications/segments` - Get available segments for a program (requires tenantId, programId, protocol)
+  - `POST /api/client/admin/notifications/segment/preview` - Preview segment recipients before sending
+  - `POST /api/client/admin/notifications/broadcast` - Send push notification to targeted segment
+  - `GET /api/client/admin/notifications/logs` - Get notification campaign history
 - **Role-Based Access Control:** Granular permissions across API endpoints for different user roles.
 
 ## External Dependencies

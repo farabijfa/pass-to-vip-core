@@ -90,4 +90,31 @@ router.patch(
   clientController.updateProgramTierThresholdsAsAdmin.bind(clientController)
 );
 
+// Tenants with all programs (for notification composer)
+router.get(
+  "/admin/tenants-with-programs",
+  clientController.getTenantsWithProgramsAsAdmin.bind(clientController)
+);
+
+// Notification Management (Admin - JWT authenticated)
+router.get(
+  "/admin/notifications/segments",
+  clientController.getNotificationSegmentsAsAdmin.bind(clientController)
+);
+
+router.post(
+  "/admin/notifications/segment/preview",
+  clientController.previewNotificationSegmentAsAdmin.bind(clientController)
+);
+
+router.post(
+  "/admin/notifications/broadcast",
+  clientController.sendNotificationBroadcastAsAdmin.bind(clientController)
+);
+
+router.get(
+  "/admin/notifications/logs",
+  clientController.getNotificationLogsAsAdmin.bind(clientController)
+);
+
 export default router;
