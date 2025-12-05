@@ -17,6 +17,7 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Migrations 012-014:** Security policies, status tracking, nullable PassKit fields
 - **Migration 015:** Integer-based point system with earn_rate_multiplier (Casino Chip model)
 - **Migration 017:** Security hardening for Gap E (double-claim) and Gap F (race condition)
+- **Migration 018:** Billing and quotas system for Gap G (revenue leakage prevention)
 
 ## System Architecture
 
@@ -72,7 +73,25 @@ migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
 migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
 migrations/015_earn_rate_multiplier.sql    # Integer-based point system
 migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixes
+migrations/018_billing_and_quotas.sql              # Gap G: Revenue leakage prevention
 ```
+
+## Billing Watchdog (Gap G)
+
+Run the nightly billing audit to check member quotas:
+```bash
+npx tsx server/scripts/billing-cron.ts
+```
+
+This script:
+- Counts active/churned members per program using efficient SQL RPC
+- Checks if any programs exceed their member limits
+- Logs overage alerts for billing team
+- Saves usage snapshots to `billing_snapshots` table for audit trail
+
+Automation options:
+- **Replit Deployments:** Use node-cron inside server/index.ts
+- **External:** Use cron-job.org to hit `/api/admin/trigger-audit` (ADMIN_API_KEY protected)
 
 ## Key Files
 
@@ -85,6 +104,9 @@ migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixe
 - `server/services/passkit-provision.service.ts` - Auto-provisions PassKit programs with soft-fail
 - `server/services/admin.service.ts` - Client provisioning orchestration
 - `server/services/logic.service.ts` - Core POS transaction logic
+
+### Scripts
+- `server/scripts/billing-cron.ts` - Nightly billing audit for Gap G (revenue leakage prevention)
 
 ### Routes
 - `server/routes/callbacks.routes.ts` - PassKit webhook endpoint (no API key, uses HMAC)
