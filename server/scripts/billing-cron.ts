@@ -36,7 +36,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 interface ProgramUsage {
   program_id: string;
   program_name: string;
-  client_name: string;
   billing_tier: string;
   active_count: number;
   churned_count: number;
@@ -109,7 +108,6 @@ async function runBillingAudit(): Promise<AuditResult> {
 
       console.error(`\n🚨 OVERAGE ALERT`);
       console.error(`   Program:  ${prog.program_name} ${tierBadge}`);
-      console.error(`   Client:   ${prog.client_name}`);
       console.error(`   Usage:    ${prog.active_count} / ${prog.member_limit} members (${usagePercent}%)`);
       console.error(`   Overage:  +${prog.overage_amount} members over limit`);
       console.error(`   ${statusBar}`);
@@ -121,7 +119,6 @@ async function runBillingAudit(): Promise<AuditResult> {
       // WARNING - approaching limit
       console.warn(`\n⚠️  APPROACHING LIMIT`);
       console.warn(`   Program:  ${prog.program_name} ${tierBadge}`);
-      console.warn(`   Client:   ${prog.client_name}`);
       console.warn(`   Usage:    ${prog.active_count} / ${prog.member_limit} members (${usagePercent}%)`);
       console.warn(`   ${statusBar}`);
 

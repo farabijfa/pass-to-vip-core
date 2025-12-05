@@ -83,7 +83,6 @@ CREATE OR REPLACE FUNCTION get_daily_program_usage()
 RETURNS TABLE (
   program_id UUID,
   program_name TEXT,
-  client_name TEXT,
   billing_tier TEXT,
   active_count BIGINT,
   churned_count BIGINT,
@@ -100,7 +99,6 @@ BEGIN
   SELECT 
     p.id as program_id,
     p.name::TEXT as program_name,
-    COALESCE(c.name, 'Unknown')::TEXT as client_name,
     COALESCE(p.billing_tier, 'STANDARD')::TEXT as billing_tier,
     COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE')::BIGINT as active_count,
     COUNT(pm.id) FILTER (WHERE pm.status IN ('CHURNED', 'UNINSTALLED'))::BIGINT as churned_count,
@@ -113,9 +111,8 @@ BEGIN
     )::BIGINT as overage_amount
   FROM programs p
   LEFT JOIN passes_master pm ON p.id = pm.program_id
-  LEFT JOIN clients c ON p.client_id = c.id
   WHERE p.is_suspended = FALSE
-  GROUP BY p.id, p.name, c.name, p.billing_tier, p.member_limit
+  GROUP BY p.id, p.name, p.billing_tier, p.member_limit
   ORDER BY COUNT(pm.id) FILTER (WHERE pm.status = 'ACTIVE') DESC;
 END;
 $$;
