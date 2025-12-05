@@ -57,6 +57,19 @@ The system includes a React client portal with the following authenticated endpo
 - **GET /api/client/me** - Returns user profile and program context
 - **GET /api/client/analytics** - Returns member counts (total, active, churned) by enrollment source
 - **GET /api/client/members** - Returns paginated members list with search support
+- **GET /api/client/campaigns** - Returns campaign/notification history with success rates
+
+### Admin API Endpoints (Requires SUPER_ADMIN or PLATFORM_ADMIN role)
+- **GET /api/client/admin/tenants** - Lists all client accounts and their programs
+- **POST /api/client/admin/provision** - Creates new client account with Supabase Auth user, program, and admin_profiles link
+- **DELETE /api/client/admin/tenants/:userId** - Removes client account and associated data
+
+### Role-Based Access Control
+The system implements server-side role validation for admin operations:
+- **SUPER_ADMIN** - Full platform access
+- **PLATFORM_ADMIN** - Admin access to client provisioning
+- **CLIENT_ADMIN** - Standard client access (dashboard, analytics, members)
+- Admin API endpoints validate JWT tokens and check `admin_profiles.role` before processing
 
 ### Test Data
 The seed script (`scripts/seed-members.ts`) can be used to populate test members for development:
