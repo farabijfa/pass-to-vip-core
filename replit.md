@@ -24,11 +24,15 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
   - **Cost Estimate API**: Enhanced to return budget comparison info when program_id provided
 - **Enhanced Notification System**: Smart segmentation for push notifications to digital wallet passes
   - **Triple Validation**: All notification operations require tenant+programId+protocol alignment before sending
+  - **Dynamic Tier Segments (v2.5.2)**: Tier segment names now use dynamic naming from program configuration
+    - Segments use generic types (TIER_1, TIER_2, TIER_3, TIER_4) with display names from tier_system_type presets
+    - When tier_system_type is NONE, tier segments are automatically hidden from available segments
   - **Protocol-Aware Segments**:
-    - MEMBERSHIP: ALL, TIER_BRONZE, TIER_SILVER, TIER_GOLD, TIER_PLATINUM, VIP, DORMANT, GEO, CSV
-    - COUPON: ALL_ACTIVE, UNREDEEMED, EXPIRING_SOON, GEO, CSV
-    - EVENT_TICKET: ALL_TICKETED, NOT_CHECKED_IN, CHECKED_IN, GEO, CSV
-  - **Tier-Based Segmentation**: Configurable thresholds per program (Bronze/Silver/Gold/Platinum)
+    - MEMBERSHIP: ALL, TIER_1, TIER_2, TIER_3, TIER_4, VIP, DORMANT, GEO, CITY, CSV
+    - COUPON: ALL_ACTIVE, UNREDEEMED, EXPIRING_SOON, GEO, CITY, CSV
+    - EVENT_TICKET: ALL_TICKETED, NOT_CHECKED_IN, CHECKED_IN, GEO, CITY, CSV
+  - **CITY Segment (v2.5.2)**: New segment type for targeting members by city name
+  - **Tier-Based Segmentation**: Configurable thresholds per program with dynamic tier names
   - **Migration 023**: Added tier threshold columns (`tier_bronze_max`, `tier_silver_max`, `tier_gold_max`) to programs table
   - **Admin Notifications Page**: New `/admin/notifications` page with two-step Tenant → Program selector
   - **JWT-Authenticated Routes**: Notification endpoints now use `/api/client/admin/notifications/*` paths with JWT auth

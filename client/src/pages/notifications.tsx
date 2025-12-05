@@ -38,6 +38,7 @@ import {
   UserX,
   UserCheck,
   Shield,
+  Building,
 } from "lucide-react";
 
 type ProtocolType = "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
@@ -114,6 +115,7 @@ const iconComponents: Record<string, typeof Users> = {
   Gem,
   Clock,
   MapPin,
+  Building,
   FileSpreadsheet,
   Ticket,
   TicketCheck,
@@ -160,13 +162,14 @@ const mockTenants: Tenant[] = [
 
 const mockMembershipSegments: SegmentInfo[] = [
   { type: "ALL", name: "All Members", description: "All active members", icon: "Users", estimatedCount: 1234 },
-  { type: "TIER_BRONZE", name: "Bronze Tier", description: "0-999 points", icon: "Medal", estimatedCount: 456 },
-  { type: "TIER_SILVER", name: "Silver Tier", description: "1000-4999 points", icon: "Award", estimatedCount: 321 },
-  { type: "TIER_GOLD", name: "Gold Tier", description: "5000-14999 points", icon: "Star", estimatedCount: 89 },
-  { type: "TIER_PLATINUM", name: "Platinum Tier", description: "15000+ points", icon: "Crown", estimatedCount: 23 },
+  { type: "TIER_1", name: "Bronze Tier", description: "0-999 points", icon: "Medal", estimatedCount: 456 },
+  { type: "TIER_2", name: "Silver Tier", description: "1000-4999 points", icon: "Award", estimatedCount: 321 },
+  { type: "TIER_3", name: "Gold Tier", description: "5000-14999 points", icon: "Star", estimatedCount: 89 },
+  { type: "TIER_4", name: "Platinum Tier", description: "15000+ points", icon: "Crown", estimatedCount: 23 },
   { type: "VIP", name: "VIP", description: "Custom threshold", icon: "Gem", requiresConfig: true, configType: "vip" },
   { type: "DORMANT", name: "Dormant", description: "Inactive members", icon: "Clock", requiresConfig: true, configType: "dormant" },
-  { type: "GEO", name: "Geographic", description: "By ZIP code", icon: "MapPin", requiresConfig: true, configType: "geo" },
+  { type: "GEO", name: "Geographic (ZIP)", description: "By ZIP code", icon: "MapPin", requiresConfig: true, configType: "geo" },
+  { type: "CITY", name: "City", description: "By city name", icon: "Building", requiresConfig: true, configType: "cities" },
   { type: "CSV", name: "CSV Upload", description: "Custom list", icon: "FileSpreadsheet", requiresConfig: true, configType: "csv" },
 ];
 
@@ -174,7 +177,8 @@ const mockCouponSegments: SegmentInfo[] = [
   { type: "ALL_ACTIVE", name: "All Active", description: "All active coupons", icon: "Ticket", estimatedCount: 567 },
   { type: "UNREDEEMED", name: "Unredeemed", description: "Not yet used", icon: "TicketCheck", estimatedCount: 234 },
   { type: "EXPIRING_SOON", name: "Expiring Soon", description: "Expires within 7 days", icon: "AlertTriangle", estimatedCount: 45 },
-  { type: "GEO", name: "Geographic", description: "By ZIP code", icon: "MapPin", requiresConfig: true, configType: "geo" },
+  { type: "GEO", name: "Geographic (ZIP)", description: "By ZIP code", icon: "MapPin", requiresConfig: true, configType: "geo" },
+  { type: "CITY", name: "City", description: "By city name", icon: "Building", requiresConfig: true, configType: "cities" },
   { type: "CSV", name: "CSV Upload", description: "Custom list", icon: "FileSpreadsheet", requiresConfig: true, configType: "csv" },
 ];
 
@@ -182,7 +186,8 @@ const mockEventSegments: SegmentInfo[] = [
   { type: "ALL_TICKETED", name: "All Ticketed", description: "All ticket holders", icon: "Ticket", estimatedCount: 890 },
   { type: "NOT_CHECKED_IN", name: "Not Checked In", description: "Haven't arrived", icon: "UserX", estimatedCount: 456 },
   { type: "CHECKED_IN", name: "Checked In", description: "Already arrived", icon: "UserCheck", estimatedCount: 434 },
-  { type: "GEO", name: "Geographic", description: "By ZIP code", icon: "MapPin", requiresConfig: true, configType: "geo" },
+  { type: "GEO", name: "Geographic (ZIP)", description: "By ZIP code", icon: "MapPin", requiresConfig: true, configType: "geo" },
+  { type: "CITY", name: "City", description: "By city name", icon: "Building", requiresConfig: true, configType: "cities" },
   { type: "CSV", name: "CSV Upload", description: "Custom list", icon: "FileSpreadsheet", requiresConfig: true, configType: "csv" },
 ];
 
@@ -234,13 +239,14 @@ const protocolIcons: Record<ProtocolType, typeof Shield> = {
 function getSegmentColor(segment: string): string {
   const colorMap: Record<string, string> = {
     ALL: "bg-primary/20 text-primary",
-    TIER_BRONZE: "bg-amber-600/20 text-amber-600",
-    TIER_SILVER: "bg-slate-400/20 text-slate-400",
-    TIER_GOLD: "bg-yellow-500/20 text-yellow-500",
-    TIER_PLATINUM: "bg-cyan-400/20 text-cyan-400",
+    TIER_1: "bg-amber-600/20 text-amber-600",
+    TIER_2: "bg-slate-400/20 text-slate-400",
+    TIER_3: "bg-yellow-500/20 text-yellow-500",
+    TIER_4: "bg-cyan-400/20 text-cyan-400",
     VIP: "bg-yellow-500/20 text-yellow-500",
     DORMANT: "bg-orange-500/20 text-orange-500",
     GEO: "bg-green-500/20 text-green-500",
+    CITY: "bg-teal-500/20 text-teal-500",
     CSV: "bg-purple-500/20 text-purple-500",
     ALL_ACTIVE: "bg-primary/20 text-primary",
     UNREDEEMED: "bg-blue-500/20 text-blue-500",
@@ -265,6 +271,7 @@ export default function NotificationsPage() {
   const [vipThreshold, setVipThreshold] = useState(500);
   const [dormantDays, setDormantDays] = useState(30);
   const [zipCodes, setZipCodes] = useState("");
+  const [cities, setCities] = useState("");
   const [csvMemberIds, setCsvMemberIds] = useState<string[]>([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [previewData, setPreviewData] = useState<SegmentPreview | null>(null);
@@ -340,6 +347,7 @@ export default function NotificationsPage() {
       if (selectedSegment === "VIP") segmentConfig.vipThreshold = vipThreshold;
       if (selectedSegment === "DORMANT") segmentConfig.dormantDays = dormantDays;
       if (selectedSegment === "GEO") segmentConfig.zipCodes = zipCodes.split(",").map((z) => z.trim()).filter(Boolean);
+      if (selectedSegment === "CITY") segmentConfig.cities = cities.split(",").map((c) => c.trim()).filter(Boolean);
       if (selectedSegment === "CSV") segmentConfig.memberIds = csvMemberIds;
 
       const res = await apiRequest("POST", "/api/client/admin/notifications/segment/preview", {
@@ -370,6 +378,7 @@ export default function NotificationsPage() {
       if (selectedSegment === "VIP") segmentConfig.vipThreshold = vipThreshold;
       if (selectedSegment === "DORMANT") segmentConfig.dormantDays = dormantDays;
       if (selectedSegment === "GEO") segmentConfig.zipCodes = zipCodes.split(",").map((z) => z.trim()).filter(Boolean);
+      if (selectedSegment === "CITY") segmentConfig.cities = cities.split(",").map((c) => c.trim()).filter(Boolean);
       if (selectedSegment === "CSV") segmentConfig.memberIds = csvMemberIds;
 
       const res = await apiRequest("POST", "/api/client/admin/notifications/broadcast", {
@@ -452,6 +461,15 @@ export default function NotificationsPage() {
       toast({
         title: "No Member IDs",
         description: "Please upload a CSV file with member IDs",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedSegment === "CITY" && !cities.trim()) {
+      toast({
+        title: "No Cities",
+        description: "Please enter at least one city name",
         variant: "destructive",
       });
       return;
@@ -698,6 +716,22 @@ export default function NotificationsPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Target members in specific ZIP code areas
+                </p>
+              </div>
+            )}
+
+            {selectedSegment === "CITY" && (
+              <div className="space-y-2 p-3 rounded-md bg-muted/30 border border-border">
+                <Label htmlFor="cities">Cities (comma separated)</Label>
+                <Input
+                  id="cities"
+                  placeholder="Los Angeles, New York, Chicago"
+                  value={cities}
+                  onChange={(e) => setCities(e.target.value)}
+                  data-testid="input-cities"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Target members in specific cities
                 </p>
               </div>
             )}

@@ -7,10 +7,11 @@ const RATE_LIMIT_DELAY_MS = 200;
 
 type ProtocolType = "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
 
-type MembershipSegment = "ALL" | "TIER_BRONZE" | "TIER_SILVER" | "TIER_GOLD" | "TIER_PLATINUM" | "VIP" | "DORMANT" | "GEO" | "CSV";
-type CouponSegment = "ALL_ACTIVE" | "UNREDEEMED" | "EXPIRING_SOON" | "GEO" | "CSV";
-type EventTicketSegment = "ALL_TICKETED" | "NOT_CHECKED_IN" | "CHECKED_IN" | "GEO" | "CSV";
+type MembershipSegment = "ALL" | "TIER_1" | "TIER_2" | "TIER_3" | "TIER_4" | "VIP" | "DORMANT" | "GEO" | "CITY" | "CSV";
+type CouponSegment = "ALL_ACTIVE" | "UNREDEEMED" | "EXPIRING_SOON" | "GEO" | "CITY" | "CSV";
+type EventTicketSegment = "ALL_TICKETED" | "NOT_CHECKED_IN" | "CHECKED_IN" | "GEO" | "CITY" | "CSV";
 type SegmentType = MembershipSegment | CouponSegment | EventTicketSegment;
+type TierSystemType = "LOYALTY" | "OFFICE" | "GYM" | "CUSTOM" | "NONE";
 
 interface ProgramInfo {
   id: string;
@@ -21,6 +22,12 @@ interface ProgramInfo {
   tier_bronze_max: number;
   tier_silver_max: number;
   tier_gold_max: number;
+  tier_system_type: TierSystemType;
+  tier_1_name: string | null;
+  tier_2_name: string | null;
+  tier_3_name: string | null;
+  tier_4_name: string | null;
+  default_member_label: string | null;
 }
 
 interface TripleValidation {
@@ -59,6 +66,7 @@ interface BroadcastOptions {
     vipThreshold?: number;
     dormantDays?: number;
     zipCodes?: string[];
+    cities?: string[];
     memberIds?: string[];
   };
   campaignName?: string;
@@ -140,7 +148,7 @@ interface SegmentDefinition {
   icon: string;
   estimatedCount?: number;
   requiresConfig?: boolean;
-  configType?: "vipThreshold" | "dormantDays" | "zipCodes" | "memberIds";
+  configType?: "vipThreshold" | "dormantDays" | "zipCodes" | "cities" | "memberIds";
 }
 
 interface SegmentStats {
@@ -199,7 +207,13 @@ class NotificationService {
           tenant_id,
           tier_bronze_max,
           tier_silver_max,
-          tier_gold_max
+          tier_gold_max,
+          tier_system_type,
+          tier_1_name,
+          tier_2_name,
+          tier_3_name,
+          tier_4_name,
+          default_member_label
         `)
         .eq("tenant_id", tenantId)
         .eq("id", programId)
@@ -219,7 +233,13 @@ class NotificationService {
             tenant_id,
             tier_bronze_max,
             tier_silver_max,
-            tier_gold_max
+            tier_gold_max,
+            tier_system_type,
+            tier_1_name,
+            tier_2_name,
+            tier_3_name,
+            tier_4_name,
+            default_member_label
           `)
           .eq("tenant_id", tenantId)
           .eq("passkit_program_id", programId)
@@ -255,6 +275,12 @@ class NotificationService {
           tier_bronze_max: program.tier_bronze_max ?? 999,
           tier_silver_max: program.tier_silver_max ?? 4999,
           tier_gold_max: program.tier_gold_max ?? 14999,
+          tier_system_type: program.tier_system_type ?? "LOYALTY",
+          tier_1_name: program.tier_1_name ?? null,
+          tier_2_name: program.tier_2_name ?? null,
+          tier_3_name: program.tier_3_name ?? null,
+          tier_4_name: program.tier_4_name ?? null,
+          default_member_label: program.default_member_label ?? null,
         } as ProgramInfo,
       };
     } catch (error) {
@@ -265,15 +291,43 @@ class NotificationService {
     }
   }
 
-  getSegmentsForProtocol(protocol: ProtocolType): SegmentDefinition[] {
+  private getTierNames(program?: ProgramInfo): { tier1: string; tier2: string; tier3: string; tier4: string } {
+    const defaults: Record<TierSystemType, { tier1: string; tier2: string; tier3: string; tier4: string }> = {
+      LOYALTY: { tier1: "Bronze", tier2: "Silver", tier3: "Gold", tier4: "Platinum" },
+      OFFICE: { tier1: "Member", tier2: "Staff", tier3: "Admin", tier4: "Executive" },
+      GYM: { tier1: "Weekday", tier2: "7-Day", tier3: "24/7", tier4: "Family" },
+      CUSTOM: { tier1: "Tier 1", tier2: "Tier 2", tier3: "Tier 3", tier4: "Tier 4" },
+      NONE: { tier1: "Member", tier2: "Member", tier3: "Member", tier4: "Member" },
+    };
+
+    const tierSystemType = program?.tier_system_type ?? "LOYALTY";
+    const preset = defaults[tierSystemType];
+
+    return {
+      tier1: program?.tier_1_name || preset.tier1,
+      tier2: program?.tier_2_name || preset.tier2,
+      tier3: program?.tier_3_name || preset.tier3,
+      tier4: program?.tier_4_name || preset.tier4,
+    };
+  }
+
+  getSegmentsForProtocol(protocol: ProtocolType, program?: ProgramInfo): SegmentDefinition[] {
     const commonSegments: SegmentDefinition[] = [
       {
         type: "GEO",
-        name: "Geographic",
+        name: "Geographic (ZIP)",
         description: "Target by ZIP code",
         icon: "MapPin",
         requiresConfig: true,
         configType: "zipCodes",
+      },
+      {
+        type: "CITY" as SegmentType,
+        name: "City",
+        description: "Target by city name",
+        icon: "Building",
+        requiresConfig: true,
+        configType: "cities",
       },
       {
         type: "CSV",
@@ -285,16 +339,27 @@ class NotificationService {
       },
     ];
 
+    const tierNames = this.getTierNames(program);
+    const tierSystemType = program?.tier_system_type ?? "LOYALTY";
+
     switch (protocol) {
       case "MEMBERSHIP":
-        return [
-          { type: "ALL", name: "All Members", description: "All active members", icon: "Users" },
-          { type: "TIER_BRONZE", name: "Bronze Tier", description: "Bronze tier members", icon: "Medal" },
-          { type: "TIER_SILVER", name: "Silver Tier", description: "Silver tier members", icon: "Award" },
-          { type: "TIER_GOLD", name: "Gold Tier", description: "Gold tier members", icon: "Star" },
-          { type: "TIER_PLATINUM", name: "Platinum Tier", description: "Platinum tier members", icon: "Crown" },
+        const tierSegments: SegmentDefinition[] = tierSystemType !== "NONE" ? [
+          { type: "TIER_1" as SegmentType, name: `${tierNames.tier1} Tier`, description: `${tierNames.tier1} tier members`, icon: "Medal" },
+          { type: "TIER_2" as SegmentType, name: `${tierNames.tier2} Tier`, description: `${tierNames.tier2} tier members`, icon: "Award" },
+          { type: "TIER_3" as SegmentType, name: `${tierNames.tier3} Tier`, description: `${tierNames.tier3} tier members`, icon: "Star" },
+          { type: "TIER_4" as SegmentType, name: `${tierNames.tier4} Tier`, description: `${tierNames.tier4} tier members`, icon: "Crown" },
+        ] : [];
+        
+        const vipDormantSegments: SegmentDefinition[] = tierSystemType !== "NONE" ? [
           { type: "VIP", name: "VIP (Points)", description: "High-value by points", icon: "Gem", requiresConfig: true, configType: "vipThreshold" },
           { type: "DORMANT", name: "Dormant", description: "Inactive members", icon: "Clock", requiresConfig: true, configType: "dormantDays" },
+        ] : [];
+
+        return [
+          { type: "ALL", name: "All Members", description: "All active members", icon: "Users" },
+          ...tierSegments,
+          ...vipDormantSegments,
           ...commonSegments,
         ];
 
@@ -325,17 +390,19 @@ class NotificationService {
     segmentConfig?: BroadcastOptions["segmentConfig"],
     program?: ProgramInfo
   ): string {
+    const tierNames = this.getTierNames(program);
+    
     switch (segment) {
       case "ALL":
         return "All active members with installed passes";
-      case "TIER_BRONZE":
-        return `Bronze tier (0-${program?.tier_bronze_max || 999} points)`;
-      case "TIER_SILVER":
-        return `Silver tier (${(program?.tier_bronze_max || 999) + 1}-${program?.tier_silver_max || 4999} points)`;
-      case "TIER_GOLD":
-        return `Gold tier (${(program?.tier_silver_max || 4999) + 1}-${program?.tier_gold_max || 14999} points)`;
-      case "TIER_PLATINUM":
-        return `Platinum tier (${(program?.tier_gold_max || 14999) + 1}+ points)`;
+      case "TIER_1":
+        return `${tierNames.tier1} tier (0-${program?.tier_bronze_max || 999} points)`;
+      case "TIER_2":
+        return `${tierNames.tier2} tier (${(program?.tier_bronze_max || 999) + 1}-${program?.tier_silver_max || 4999} points)`;
+      case "TIER_3":
+        return `${tierNames.tier3} tier (${(program?.tier_silver_max || 4999) + 1}-${program?.tier_gold_max || 14999} points)`;
+      case "TIER_4":
+        return `${tierNames.tier4} tier (${(program?.tier_gold_max || 14999) + 1}+ points)`;
       case "VIP":
         return `High-value members (${segmentConfig?.vipThreshold || 500}+ points)`;
       case "DORMANT":
@@ -343,6 +410,9 @@ class NotificationService {
       case "GEO":
         const zips = segmentConfig?.zipCodes?.join(", ") || "specified ZIP codes";
         return `Members in ZIP codes: ${zips}`;
+      case "CITY":
+        const cities = segmentConfig?.cities?.join(", ") || "specified cities";
+        return `Members in cities: ${cities}`;
       case "CSV":
         return `Targeted list (${segmentConfig?.memberIds?.length || 0} member IDs)`;
       case "ALL_ACTIVE":
@@ -437,7 +507,8 @@ class NotificationService {
         email,
         first_name,
         last_name,
-        zip
+        zip,
+        city
       ),
       protocol_membership (
         points_balance,
@@ -478,28 +549,28 @@ class NotificationService {
       case "ALL":
         return allPasses;
 
-      case "TIER_BRONZE": {
+      case "TIER_1": {
         return allPasses.filter((pass: any) => {
           const tierPoints = pass.protocol_membership?.tier_points || 0;
           return tierPoints <= program.tier_bronze_max;
         });
       }
 
-      case "TIER_SILVER": {
+      case "TIER_2": {
         return allPasses.filter((pass: any) => {
           const tierPoints = pass.protocol_membership?.tier_points || 0;
           return tierPoints > program.tier_bronze_max && tierPoints <= program.tier_silver_max;
         });
       }
 
-      case "TIER_GOLD": {
+      case "TIER_3": {
         return allPasses.filter((pass: any) => {
           const tierPoints = pass.protocol_membership?.tier_points || 0;
           return tierPoints > program.tier_silver_max && tierPoints <= program.tier_gold_max;
         });
       }
 
-      case "TIER_PLATINUM": {
+      case "TIER_4": {
         return allPasses.filter((pass: any) => {
           const tierPoints = pass.protocol_membership?.tier_points || 0;
           return tierPoints > program.tier_gold_max;
@@ -533,6 +604,17 @@ class NotificationService {
         return allPasses.filter((pass: any) => {
           const userZip = pass.users?.zip || "";
           return zipCodes.some((zip) => userZip.startsWith(zip));
+        });
+      }
+
+      case "CITY": {
+        const cities = segmentConfig?.cities || [];
+        if (cities.length === 0) return allPasses;
+
+        const normalizedCities = cities.map((c) => c.toLowerCase().trim());
+        return allPasses.filter((pass: any) => {
+          const userCity = (pass.users?.city || "").toLowerCase().trim();
+          return normalizedCities.some((city) => userCity.includes(city) || city.includes(userCity));
         });
       }
 
@@ -1110,6 +1192,8 @@ class NotificationService {
       silver: number;
       gold: number;
     };
+    tierSystemType?: TierSystemType;
+    tierNames?: { tier1: string; tier2: string; tier3: string; tier4: string };
     error?: string;
   }> {
     try {
@@ -1118,13 +1202,13 @@ class NotificationService {
         return { success: false, error: validation.error };
       }
 
-      const segments = this.getSegmentsForProtocol(protocol);
+      const program = validation.program;
+      const segments = this.getSegmentsForProtocol(protocol, program);
 
       const client = this.getClient();
-      const program = validation.program;
 
       for (const segment of segments) {
-        if (!segment.requiresConfig && segment.type !== "GEO" && segment.type !== "CSV") {
+        if (!segment.requiresConfig && segment.type !== "GEO" && segment.type !== "CSV" && segment.type !== "CITY") {
           try {
             const passes = await this.getTargetedPasses(client, program, segment.type, {});
             segment.estimatedCount = passes.length;
@@ -1134,14 +1218,18 @@ class NotificationService {
         }
       }
 
+      const tierNames = this.getTierNames(program);
+
       return {
         success: true,
         segments,
-        tierThresholds: protocol === "MEMBERSHIP" ? {
+        tierThresholds: protocol === "MEMBERSHIP" && program.tier_system_type !== "NONE" ? {
           bronze: program.tier_bronze_max,
           silver: program.tier_silver_max,
           gold: program.tier_gold_max,
         } : undefined,
+        tierSystemType: program.tier_system_type,
+        tierNames,
       };
     } catch (error) {
       return {
