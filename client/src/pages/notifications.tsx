@@ -620,54 +620,68 @@ export default function NotificationsPage() {
               </p>
             </div>
 
-            <div className="space-y-3">
-              <Label>
-                Target Segment
-                {selectedProgram && (
+            {selectedProgram && (
+              <div className="space-y-3">
+                <Label>
+                  Target Segment
                   <span className="ml-2 text-xs text-muted-foreground">
                     ({segments.length} available for {selectedProgram.protocol})
                   </span>
-                )}
-              </Label>
-              {segmentsQuery.isLoading ? (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <RadioGroup
-                  value={selectedSegment}
-                  onValueChange={(v) => setSelectedSegment(v)}
-                  className="grid grid-cols-2 gap-2 sm:grid-cols-3"
-                >
-                  {segments.map((seg) => (
-                    <div key={seg.type} className="relative">
-                      <RadioGroupItem
-                        value={seg.type}
-                        id={seg.type}
-                        className="peer sr-only"
-                        data-testid={`radio-segment-${seg.type.toLowerCase()}`}
-                      />
-                      <Label
-                        htmlFor={seg.type}
-                        className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-card/50 p-3 hover:bg-card hover:border-muted-foreground/50 peer-data-[state=checked]:border-primary cursor-pointer transition-colors"
-                      >
-                        <span className={`mb-1 rounded-full p-1.5 ${getSegmentColor(seg.type)}`}>
-                          {renderSegmentIcon(seg.icon)}
-                        </span>
-                        <span className="text-xs font-medium">{seg.name}</span>
-                        {seg.estimatedCount !== undefined && (
-                          <span className="text-[10px] text-muted-foreground mt-0.5">
-                            ~{seg.estimatedCount.toLocaleString()}
+                </Label>
+                {segmentsQuery.isLoading ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full" />
+                    ))}
+                  </div>
+                ) : segments.length > 0 ? (
+                  <RadioGroup
+                    value={selectedSegment}
+                    onValueChange={(v) => setSelectedSegment(v)}
+                    className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+                  >
+                    {segments.map((seg) => (
+                      <div key={seg.type} className="relative">
+                        <RadioGroupItem
+                          value={seg.type}
+                          id={seg.type}
+                          className="peer sr-only"
+                          data-testid={`radio-segment-${seg.type.toLowerCase()}`}
+                        />
+                        <Label
+                          htmlFor={seg.type}
+                          className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-card/50 p-3 hover:bg-card hover:border-muted-foreground/50 peer-data-[state=checked]:border-primary cursor-pointer transition-colors"
+                        >
+                          <span className={`mb-1 rounded-full p-1.5 ${getSegmentColor(seg.type)}`}>
+                            {renderSegmentIcon(seg.icon)}
                           </span>
-                        )}
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              )}
-            </div>
+                          <span className="text-xs font-medium">{seg.name}</span>
+                          {seg.estimatedCount !== undefined && (
+                            <span className="text-[10px] text-muted-foreground mt-0.5">
+                              ~{seg.estimatedCount.toLocaleString()}
+                            </span>
+                          )}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                ) : (
+                  <div className="flex items-center justify-center p-6 rounded-md border border-dashed border-muted-foreground/30 text-muted-foreground text-sm">
+                    No segments available for this program
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!selectedProgram && (
+              <div className="space-y-3">
+                <Label className="text-muted-foreground">Target Segment</Label>
+                <div className="flex items-center justify-center p-6 rounded-md border border-dashed border-muted-foreground/30 text-muted-foreground text-sm">
+                  <Users className="h-4 w-4 mr-2" />
+                  Select a tenant and program to view available segments
+                </div>
+              </div>
+            )}
 
             {selectedSegment === "VIP" && (
               <div className="space-y-2 p-3 rounded-md bg-muted/30 border border-border">
