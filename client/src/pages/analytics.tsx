@@ -5,9 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
-import { TrendingUp, PieChartIcon, BarChart3 } from "lucide-react";
 
-const COLORS = ["#2563eb", "#dc2626", "#1e3a5f", "#64748b", "#93c5fd"];
+const COLORS = ["hsl(0, 0%, 25%)", "hsl(0, 0%, 45%)", "hsl(0, 0%, 65%)", "hsl(0, 0%, 75%)", "hsl(0, 0%, 85%)"];
 
 export default function AnalyticsPage() {
   const { user, mockMode } = useAuth();
@@ -41,11 +40,15 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-analytics-title">Analytics</h1>
-          <p className="text-muted-foreground">Detailed insights into your loyalty program</p>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-analytics-title">
+            Analytics
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Detailed insights into your loyalty program
+          </p>
         </div>
         {mockMode && (
-          <Badge variant="secondary" data-testid="badge-mock-mode">Mock Data</Badge>
+          <Badge variant="outline" data-testid="badge-mock-mode">Test Mode</Badge>
         )}
       </div>
 
@@ -58,13 +61,10 @@ export default function AnalyticsPage() {
       ) : analytics ? (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border-border bg-card/80" data-testid="card-enrollment-distribution">
+            <Card className="border-border" data-testid="card-enrollment-distribution">
               <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <PieChartIcon className="h-5 w-5 text-primary" />
-                  Enrollment Distribution
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
+                <CardTitle className="text-foreground text-lg">Enrollment Distribution</CardTitle>
+                <CardDescription className="text-muted-foreground text-sm">
                   Breakdown by enrollment source
                 </CardDescription>
               </CardHeader>
@@ -91,7 +91,7 @@ export default function AnalyticsPage() {
                         contentStyle={{ 
                           backgroundColor: 'hsl(var(--card))', 
                           border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           color: 'hsl(var(--foreground))'
                         }}
                         labelStyle={{ color: 'hsl(var(--foreground))' }}
@@ -105,13 +105,10 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border bg-card/80" data-testid="card-retention-rate">
+            <Card className="border-border" data-testid="card-retention-rate">
               <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  Retention Rate
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
+                <CardTitle className="text-foreground text-lg">Retention Rate</CardTitle>
+                <CardDescription className="text-muted-foreground text-sm">
                   Active vs churned members
                 </CardDescription>
               </CardHeader>
@@ -130,14 +127,14 @@ export default function AnalyticsPage() {
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
-                        <Cell fill="#2563eb" />
-                        <Cell fill="#dc2626" />
+                        <Cell fill="hsl(0, 0%, 25%)" />
+                        <Cell fill="hsl(0, 0%, 65%)" />
                       </Pie>
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'hsl(var(--card))', 
                           border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           color: 'hsl(var(--foreground))'
                         }}
                       />
@@ -146,7 +143,7 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="mt-4 text-center">
-                  <p className="text-3xl font-bold text-primary" data-testid="text-retention-rate">
+                  <p className="text-3xl font-semibold text-foreground" data-testid="text-retention-rate">
                     {analytics.totals.total > 0 
                       ? Math.round((analytics.totals.active / analytics.totals.total) * 100) 
                       : 0}%
@@ -157,13 +154,10 @@ export default function AnalyticsPage() {
             </Card>
           </div>
 
-          <Card className="border-border bg-card/80" data-testid="card-source-performance">
+          <Card className="border-border" data-testid="card-source-performance">
             <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-primary" />
-                Source Performance
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
+              <CardTitle className="text-foreground text-lg">Source Performance</CardTitle>
+              <CardDescription className="text-muted-foreground text-sm">
                 Active vs churned by enrollment source
               </CardDescription>
             </CardHeader>
@@ -172,40 +166,40 @@ export default function AnalyticsPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                     <Tooltip 
                       contentStyle={{ 
                         backgroundColor: 'hsl(var(--card))', 
                         border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
+                        borderRadius: '6px',
                         color: 'hsl(var(--foreground))'
                       }}
                       labelStyle={{ color: 'hsl(var(--foreground))' }}
                     />
                     <Legend wrapperStyle={{ color: 'hsl(var(--muted-foreground))' }} />
-                    <Bar dataKey="active" name="Active" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="churned" name="Churned" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="active" name="Active" fill="hsl(0, 0%, 25%)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="churned" name="Churned" fill="hsl(0, 0%, 65%)" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card/80" data-testid="card-summary-table">
+          <Card className="border-border" data-testid="card-summary-table">
             <CardHeader>
-              <CardTitle className="text-foreground">Summary Table</CardTitle>
+              <CardTitle className="text-foreground text-lg">Summary Table</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="text-left py-3 px-4 text-muted-foreground">Source</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground">Total</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground">Active</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground">Churned</th>
-                      <th className="text-right py-3 px-4 text-muted-foreground">Retention</th>
+                      <th className="text-left py-3 px-4 text-xs text-muted-foreground uppercase tracking-wider">Source</th>
+                      <th className="text-right py-3 px-4 text-xs text-muted-foreground uppercase tracking-wider">Total</th>
+                      <th className="text-right py-3 px-4 text-xs text-muted-foreground uppercase tracking-wider">Active</th>
+                      <th className="text-right py-3 px-4 text-xs text-muted-foreground uppercase tracking-wider">Churned</th>
+                      <th className="text-right py-3 px-4 text-xs text-muted-foreground uppercase tracking-wider">Retention</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -213,19 +207,19 @@ export default function AnalyticsPage() {
                       <tr key={source} className="border-b border-border/50">
                         <td className="py-3 px-4 text-foreground">{source}</td>
                         <td className="py-3 px-4 text-right text-foreground">{data.total.toLocaleString()}</td>
-                        <td className="py-3 px-4 text-right text-primary">{data.active.toLocaleString()}</td>
-                        <td className="py-3 px-4 text-right text-secondary">{data.churned.toLocaleString()}</td>
-                        <td className="py-3 px-4 text-right text-primary">
+                        <td className="py-3 px-4 text-right text-foreground">{data.active.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-right text-muted-foreground">{data.churned.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-right text-foreground">
                           {data.total > 0 ? Math.round((data.active / data.total) * 100) : 0}%
                         </td>
                       </tr>
                     ))}
-                    <tr className="font-bold">
+                    <tr className="font-medium">
                       <td className="py-3 px-4 text-foreground">Total</td>
                       <td className="py-3 px-4 text-right text-foreground">{analytics.totals.total.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right text-primary">{analytics.totals.active.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right text-secondary">{analytics.totals.churned.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right text-primary">
+                      <td className="py-3 px-4 text-right text-foreground">{analytics.totals.active.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right text-muted-foreground">{analytics.totals.churned.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right text-foreground">
                         {analytics.totals.total > 0 ? Math.round((analytics.totals.active / analytics.totals.total) * 100) : 0}%
                       </td>
                     </tr>
@@ -236,9 +230,9 @@ export default function AnalyticsPage() {
           </Card>
         </>
       ) : (
-        <Card className="border-border bg-card/80">
+        <Card className="border-border">
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">No analytics data available</p>
+            <p className="text-muted-foreground text-sm">No analytics data available</p>
           </CardContent>
         </Card>
       )}

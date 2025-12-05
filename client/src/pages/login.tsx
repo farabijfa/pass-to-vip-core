@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogIn, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -39,26 +38,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
-      <Card className="w-full max-w-md border-border bg-card/80 backdrop-blur">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md border-border">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Sparkles className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle className="text-2xl text-foreground">Client Portal</CardTitle>
-          <CardDescription className="text-muted-foreground">
+          <CardTitle className="text-2xl font-semibold text-foreground tracking-tight">
+            Pass To Vip
+          </CardTitle>
+          <CardDescription className="text-muted-foreground mt-2">
             Sign in to access your loyalty program dashboard
           </CardDescription>
           {mockMode && (
-            <Badge variant="secondary" className="mt-2" data-testid="badge-mock-mode">
-              Mock Mode Active
+            <Badge variant="outline" className="mt-3" data-testid="badge-mock-mode">
+              Test Mode
             </Badge>
           )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground">Email</Label>
+              <Label htmlFor="email" className="text-foreground text-sm">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -66,12 +64,12 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
                 data-testid="input-email"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-foreground">Password</Label>
+              <Label htmlFor="password" className="text-foreground text-sm">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -79,13 +77,13 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
                 data-testid="input-password"
               />
             </div>
             
             {error && (
-              <div className="text-sm text-destructive-foreground bg-destructive/20 p-3 rounded-md" data-testid="text-error">
+              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
                 {error}
               </div>
             )}
@@ -96,17 +94,7 @@ export default function LoginPage() {
               disabled={isLoading}
               data-testid="button-login"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Sign In
-                </>
-              )}
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
@@ -122,7 +110,6 @@ export default function LoginPage() {
                 disabled={isLoading}
                 data-testid="button-mock-login"
               >
-                <Sparkles className="mr-2 h-4 w-4" />
                 Demo Login
               </Button>
             </div>

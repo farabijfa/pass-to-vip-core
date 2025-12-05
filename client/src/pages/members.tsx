@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Users, RefreshCw, User, Mail, Phone, Coins } from "lucide-react";
 
 export default function MembersPage() {
   const { mockMode } = useAuth();
@@ -41,39 +40,38 @@ export default function MembersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-members-title">Member Lookup</h1>
-          <p className="text-muted-foreground">Search and manage your loyalty program members</p>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-members-title">
+            Member Lookup
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Search and manage your loyalty program members
+          </p>
         </div>
         {mockMode && (
-          <Badge variant="secondary" data-testid="badge-mock-mode">Mock Data</Badge>
+          <Badge variant="outline" data-testid="badge-mock-mode">Test Mode</Badge>
         )}
       </div>
 
-      <Card className="border-border bg-card/80">
+      <Card className="border-border">
         <CardHeader>
-          <CardTitle className="text-foreground flex items-center gap-2">
-            <Search className="h-5 w-5 text-primary" />
-            Search Members
-          </CardTitle>
-          <CardDescription className="text-muted-foreground">
+          <CardTitle className="text-foreground text-lg">Search Members</CardTitle>
+          <CardDescription className="text-muted-foreground text-sm">
             Search by name, email, or external ID
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="flex-1 min-w-[200px]">
               <Input
                 placeholder="Search members..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="pl-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
+                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
                 data-testid="input-search"
               />
             </div>
             <Button onClick={handleSearch} data-testid="button-search">
-              <Search className="h-4 w-4 mr-2" />
               Search
             </Button>
             {activeSearch && (
@@ -86,22 +84,21 @@ export default function MembersPage() {
               onClick={() => refetch()} 
               data-testid="button-refresh"
             >
-              <RefreshCw className="h-4 w-4" />
+              Refresh
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="border-border bg-card/80">
+      <Card className="border-border">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-foreground flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
+            <CardTitle className="text-foreground text-lg">
               {activeSearch ? "Search Results" : "All Members"}
             </CardTitle>
-            <Badge variant="outline" className="text-foreground" data-testid="badge-member-count">
+            <span className="text-sm text-muted-foreground" data-testid="badge-member-count">
               {membersResult?.data?.count || 0} members
-            </Badge>
+            </span>
           </div>
         </CardHeader>
         <CardContent>
@@ -113,8 +110,7 @@ export default function MembersPage() {
             </div>
           ) : members.length === 0 ? (
             <div className="text-center py-12">
-              <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 {activeSearch ? "No members found matching your search" : "No members in this program yet"}
               </p>
             </div>
@@ -123,13 +119,13 @@ export default function MembersPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border">
-                    <TableHead className="text-muted-foreground">Member</TableHead>
-                    <TableHead className="text-muted-foreground">External ID</TableHead>
-                    <TableHead className="text-muted-foreground">Contact</TableHead>
-                    <TableHead className="text-muted-foreground">Points</TableHead>
-                    <TableHead className="text-muted-foreground">Tier</TableHead>
-                    <TableHead className="text-muted-foreground">Status</TableHead>
-                    <TableHead className="text-muted-foreground">Source</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">Member</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">External ID</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">Contact</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">Points</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">Tier</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">Status</TableHead>
+                    <TableHead className="text-xs text-muted-foreground uppercase tracking-wider">Source</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -147,77 +143,47 @@ export default function MembersPage() {
 }
 
 function MemberRow({ member }: { member: Member }) {
-  const statusColors: Record<string, string> = {
-    INSTALLED: "bg-primary/20 text-primary",
-    UNINSTALLED: "bg-secondary/20 text-secondary",
-    PENDING: "bg-muted/50 text-muted-foreground",
-  };
-
-  const sourceColors: Record<string, string> = {
-    SMARTPASS: "bg-primary/20 text-primary",
-    CSV: "bg-secondary/20 text-secondary",
-    CLAIM_CODE: "bg-muted/30 text-foreground",
-  };
-
   return (
     <TableRow 
-      className="border-border/50 hover:bg-muted/30"
+      className="border-border/50"
       data-testid={`row-member-${member.id}`}
     >
       <TableCell>
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-            <User className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="font-medium text-foreground">
-              {member.first_name} {member.last_name}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Joined {new Date(member.created_at).toLocaleDateString()}
-            </p>
-          </div>
+        <div>
+          <p className="font-medium text-foreground text-sm">
+            {member.first_name} {member.last_name}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Joined {new Date(member.created_at).toLocaleDateString()}
+          </p>
         </div>
       </TableCell>
       <TableCell>
-        <code className="text-sm text-foreground bg-muted/50 px-2 py-1 rounded">
+        <code className="text-xs text-foreground bg-muted/50 px-2 py-1 rounded">
           {member.external_id}
         </code>
       </TableCell>
       <TableCell>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-sm text-foreground">
-            <Mail className="h-3 w-3 text-muted-foreground" />
-            {member.email}
-          </div>
+        <div className="space-y-0.5">
+          <p className="text-sm text-foreground">{member.email}</p>
           {member.phone && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Phone className="h-3 w-3" />
-              {member.phone}
-            </div>
+            <p className="text-xs text-muted-foreground">{member.phone}</p>
           )}
         </div>
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <Coins className="h-4 w-4 text-secondary" />
-          <span className="font-medium text-foreground">{member.points_balance.toLocaleString()}</span>
-        </div>
+        <span className="font-medium text-foreground">{member.points_balance.toLocaleString()}</span>
       </TableCell>
       <TableCell>
-        <Badge variant="outline" className="text-foreground">
-          {member.tier_name}
-        </Badge>
+        <span className="text-sm text-foreground">{member.tier_name}</span>
       </TableCell>
       <TableCell>
-        <Badge className={statusColors[member.status] || "bg-muted/50 text-muted-foreground"}>
+        <span className={`text-xs ${member.status === 'INSTALLED' ? 'text-foreground' : 'text-muted-foreground'}`}>
           {member.status}
-        </Badge>
+        </span>
       </TableCell>
       <TableCell>
-        <Badge className={sourceColors[member.enrollment_source] || "bg-muted/50 text-muted-foreground"}>
-          {member.enrollment_source}
-        </Badge>
+        <span className="text-xs text-muted-foreground">{member.enrollment_source}</span>
       </TableCell>
     </TableRow>
   );

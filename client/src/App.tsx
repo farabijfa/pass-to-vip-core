@@ -8,7 +8,6 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
 
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
@@ -32,7 +31,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-sm text-muted-foreground">Loading...</div>
       </div>
     );
   }

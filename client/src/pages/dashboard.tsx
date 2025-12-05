@@ -5,19 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Users, 
-  TrendingUp, 
-  TrendingDown, 
-  Activity, 
-  Smartphone, 
-  Mail, 
-  QrCode,
-  Send,
-  CheckCircle,
-  XCircle,
-  Clock
-} from "lucide-react";
 
 export default function DashboardPage() {
   const { user, mockMode } = useAuth();
@@ -45,51 +32,50 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-dashboard-title">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back to your loyalty program</p>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-dashboard-title">
+            Dashboard
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Welcome back to your loyalty program
+          </p>
         </div>
         {mockMode && (
-          <Badge variant="secondary" data-testid="badge-mock-mode">Mock Data</Badge>
+          <Badge variant="outline" data-testid="badge-mock-mode">Test Mode</Badge>
         )}
       </div>
 
       {user && (
-        <Card className="border-border bg-card/80">
+        <Card className="border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-foreground flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
+            <CardTitle className="text-foreground text-lg" data-testid="text-program-name">
               {user.programName}
             </CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <CardDescription className="text-muted-foreground text-sm">
               Program ID: {user.programId}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Protocol</p>
-                <Badge variant="outline" className="mt-1" data-testid="badge-protocol">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Protocol</p>
+                <p className="text-sm font-medium text-foreground mt-1" data-testid="badge-protocol">
                   {user.protocol}
-                </Badge>
+                </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <Badge 
-                  variant={user.isSuspended ? "destructive" : "default"} 
-                  className="mt-1"
-                  data-testid="badge-status"
-                >
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
+                <p className={`text-sm font-medium mt-1 ${user.isSuspended ? 'text-destructive' : 'text-foreground'}`} data-testid="badge-status">
                   {user.isSuspended ? "Suspended" : "Active"}
-                </Badge>
+                </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">PassKit ID</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">PassKit ID</p>
                 <code className="text-sm text-muted-foreground block mt-1 truncate" data-testid="text-passkit-id">
                   {user.passkitProgramId}
                 </code>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Member Since</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Member Since</p>
                 <p className="text-sm text-foreground mt-1" data-testid="text-created-at">
                   {new Date(user.createdAt).toLocaleDateString()}
                 </p>
@@ -103,23 +89,18 @@ export default function DashboardPage() {
         <StatCard
           title="Total Members"
           value={analytics?.totals.total}
-          icon={<Users className="h-5 w-5" />}
           loading={analyticsLoading}
           testId="stat-total-members"
         />
         <StatCard
           title="Active Passes"
           value={analytics?.totals.active}
-          icon={<TrendingUp className="h-5 w-5" />}
-          variant="success"
           loading={analyticsLoading}
           testId="stat-active-passes"
         />
         <StatCard
           title="Churned"
           value={analytics?.totals.churned}
-          icon={<TrendingDown className="h-5 w-5" />}
-          variant="warning"
           loading={analyticsLoading}
           testId="stat-churned"
         />
@@ -127,18 +108,16 @@ export default function DashboardPage() {
           title="Retention Rate"
           value={retentionRate}
           suffix="%"
-          icon={<Activity className="h-5 w-5" />}
-          variant={retentionRate >= 70 ? "success" : retentionRate >= 50 ? "default" : "warning"}
           loading={analyticsLoading}
           testId="stat-retention"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-border bg-card/80">
+        <Card className="border-border">
           <CardHeader>
-            <CardTitle className="text-foreground">Enrollment Sources</CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <CardTitle className="text-foreground text-lg">Enrollment Sources</CardTitle>
+            <CardDescription className="text-muted-foreground text-sm">
               How members are joining your program
             </CardDescription>
           </CardHeader>
@@ -153,39 +132,30 @@ export default function DashboardPage() {
               <div className="space-y-4">
                 <SourceCard
                   title="SmartPass / QR"
-                  icon={<QrCode className="h-5 w-5" />}
                   data={analytics.sources.smartpass}
-                  color="blue"
                   testId="source-smartpass"
                 />
                 <SourceCard
                   title="Direct Mail"
-                  icon={<Mail className="h-5 w-5" />}
                   data={analytics.sources.csv}
-                  color="red"
                   testId="source-csv"
                 />
                 <SourceCard
                   title="Claim Codes"
-                  icon={<Smartphone className="h-5 w-5" />}
                   data={analytics.sources.claimCode}
-                  color="white"
                   testId="source-claim-code"
                 />
               </div>
             ) : (
-              <p className="text-muted-foreground text-center py-8">No analytics data available</p>
+              <p className="text-muted-foreground text-center py-8 text-sm">No analytics data available</p>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card/80">
+        <Card className="border-border">
           <CardHeader>
-            <CardTitle className="text-foreground flex items-center gap-2">
-              <Send className="h-5 w-5 text-primary" />
-              Recent Campaigns
-            </CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <CardTitle className="text-foreground text-lg">Recent Campaigns</CardTitle>
+            <CardDescription className="text-muted-foreground text-sm">
               Your latest notification campaigns
             </CardDescription>
           </CardHeader>
@@ -204,8 +174,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <Send className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                <p className="text-muted-foreground">No campaigns sent yet</p>
+                <p className="text-muted-foreground text-sm">No campaigns sent yet</p>
               </div>
             )}
           </CardContent>
@@ -218,44 +187,27 @@ export default function DashboardPage() {
 function StatCard({ 
   title, 
   value, 
-  icon, 
-  variant = "default", 
   loading,
   testId,
   suffix = ""
 }: { 
   title: string; 
   value?: number; 
-  icon: React.ReactNode;
-  variant?: "default" | "success" | "warning";
   loading?: boolean;
   testId: string;
   suffix?: string;
 }) {
-  const colorClasses = {
-    default: "text-primary",
-    success: "text-primary",
-    warning: "text-secondary",
-  };
-
   return (
-    <Card className="border-border bg-card/80" data-testid={testId}>
+    <Card className="border-border" data-testid={testId}>
       <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            {loading ? (
-              <Skeleton className="h-8 w-20 mt-1 bg-muted" />
-            ) : (
-              <p className={`text-2xl font-bold ${colorClasses[variant]}`}>
-                {value?.toLocaleString() ?? "-"}{suffix}
-              </p>
-            )}
-          </div>
-          <div className={`${colorClasses[variant]} opacity-50`}>
-            {icon}
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider">{title}</p>
+        {loading ? (
+          <Skeleton className="h-8 w-20 mt-2 bg-muted" />
+        ) : (
+          <p className="text-2xl font-semibold text-foreground mt-2">
+            {value?.toLocaleString() ?? "-"}{suffix}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -263,53 +215,32 @@ function StatCard({
 
 function SourceCard({ 
   title, 
-  icon, 
   data, 
-  color,
   testId 
 }: { 
   title: string; 
-  icon: React.ReactNode;
   data: { total: number; active: number; churned: number };
-  color: "blue" | "red" | "white";
   testId: string;
 }) {
-  const colorClasses = {
-    blue: "text-primary",
-    red: "text-secondary",
-    white: "text-foreground",
-  };
-
-  const bgClasses = {
-    blue: "bg-primary/10",
-    red: "bg-secondary/10",
-    white: "bg-muted/30",
-  };
-
   const activeRate = data.total > 0 ? Math.round((data.active / data.total) * 100) : 0;
 
   return (
-    <div className={`rounded-lg p-4 ${bgClasses[color]}`} data-testid={testId}>
+    <div className="rounded-md border border-border p-4" data-testid={testId}>
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className={colorClasses[color]}>{icon}</span>
-          <span className={`font-medium ${colorClasses[color]}`}>{title}</span>
-        </div>
-        <Badge variant="outline" className="text-xs">
-          {activeRate}% active
-        </Badge>
+        <span className="font-medium text-foreground text-sm">{title}</span>
+        <span className="text-xs text-muted-foreground">{activeRate}% active</span>
       </div>
       <div className="grid grid-cols-3 gap-4 text-center">
         <div>
-          <p className="text-xl font-bold text-foreground">{data.total.toLocaleString()}</p>
+          <p className="text-xl font-semibold text-foreground">{data.total.toLocaleString()}</p>
           <p className="text-xs text-muted-foreground">Total</p>
         </div>
         <div>
-          <p className="text-xl font-bold text-primary">{data.active.toLocaleString()}</p>
+          <p className="text-xl font-semibold text-foreground">{data.active.toLocaleString()}</p>
           <p className="text-xs text-muted-foreground">Active</p>
         </div>
         <div>
-          <p className="text-xl font-bold text-secondary">{data.churned.toLocaleString()}</p>
+          <p className="text-xl font-semibold text-muted-foreground">{data.churned.toLocaleString()}</p>
           <p className="text-xs text-muted-foreground">Churned</p>
         </div>
       </div>
@@ -322,28 +253,24 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
   
   return (
     <div 
-      className="rounded-lg border border-border bg-muted/20 p-4"
+      className="rounded-md border border-border p-4"
       data-testid={`campaign-${campaign.id}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
         <div>
-          <h4 className="font-medium text-foreground">{campaign.name}</h4>
+          <h4 className="font-medium text-foreground text-sm">{campaign.name}</h4>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="text-xs">
+            <span className="text-xs text-muted-foreground">
               {campaign.targetSegment}
-            </Badge>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+            </span>
+            <span className="text-xs text-muted-foreground">
               {new Date(campaign.createdAt).toLocaleDateString()}
             </span>
           </div>
         </div>
-        <Badge 
-          variant={successRate >= 90 ? "default" : successRate >= 70 ? "secondary" : "outline"}
-          className="text-xs"
-        >
+        <span className="text-xs font-medium text-foreground">
           {successRate}% success
-        </Badge>
+        </span>
       </div>
       
       <div className="mt-3">
@@ -351,19 +278,13 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
           <span>Delivery Progress</span>
           <span>{campaign.successCount} / {campaign.recipientCount}</span>
         </div>
-        <Progress value={successRate} className="h-1.5" />
+        <Progress value={successRate} className="h-1" />
       </div>
 
-      <div className="flex items-center gap-4 mt-3 text-xs">
-        <span className="flex items-center gap-1 text-primary">
-          <CheckCircle className="h-3 w-3" />
-          {campaign.successCount} delivered
-        </span>
+      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+        <span>{campaign.successCount} delivered</span>
         {campaign.failedCount > 0 && (
-          <span className="flex items-center gap-1 text-secondary">
-            <XCircle className="h-3 w-3" />
-            {campaign.failedCount} failed
-          </span>
+          <span>{campaign.failedCount} failed</span>
         )}
       </div>
     </div>
