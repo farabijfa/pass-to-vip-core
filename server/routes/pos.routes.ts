@@ -474,6 +474,42 @@ router.post("/redeem", async (req: Request, res: Response) => {
     const processingTime = Date.now() - startTime;
     console.error("[POS] Redeem error:", error);
 
+    const errorMessage = error instanceof Error ? error.message : "Redeem failed";
+    
+    // Gap F: Handle INSUFFICIENT_FUNDS from atomic RPC with proper status code
+    if (errorMessage.includes("Insufficient balance")) {
+      return res.status(400).json(
+        createResponse(
+          false,
+          undefined,
+          undefined,
+          {
+            code: "INSUFFICIENT_BALANCE",
+            message: errorMessage,
+          },
+          requestId,
+          processingTime
+        )
+      );
+    }
+
+    // Handle program suspension
+    if (errorMessage.includes("Program Suspended")) {
+      return res.status(403).json(
+        createResponse(
+          false,
+          undefined,
+          undefined,
+          {
+            code: "PROGRAM_SUSPENDED",
+            message: errorMessage,
+          },
+          requestId,
+          processingTime
+        )
+      );
+    }
+
     return res.status(500).json(
       createResponse(
         false,
@@ -481,7 +517,7 @@ router.post("/redeem", async (req: Request, res: Response) => {
         undefined,
         {
           code: "PROCESSING_ERROR",
-          message: error instanceof Error ? error.message : "Redeem failed",
+          message: errorMessage,
         },
         requestId,
         processingTime

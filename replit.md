@@ -16,6 +16,7 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Protocol D:** RLS security validated - anon key blocked from direct table access
 - **Migrations 012-014:** Security policies, status tracking, nullable PassKit fields
 - **Migration 015:** Integer-based point system with earn_rate_multiplier (Casino Chip model)
+- **Migration 017:** Security hardening for Gap E (double-claim) and Gap F (race condition)
 
 ## System Architecture
 
@@ -70,6 +71,7 @@ migrations/012_secure_public_access.sql    # CRITICAL: RLS for anon key
 migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
 migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
 migrations/015_earn_rate_multiplier.sql    # Integer-based point system
+migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixes
 ```
 
 ## Key Files

@@ -37,11 +37,33 @@ interface PosActionResult {
   };
 }
 
+interface ClaimAttemptResult {
+  success: boolean;
+  data?: {
+    id: string;
+    code: string;
+    program_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+    points_initial: number;
+    tier_level: string | null;
+    claimed_at: string;
+  };
+  error?: string;
+  claimed_at?: string;
+}
+
 const MEMBERSHIP_ACTIONS: ActionType[] = ["MEMBER_EARN", "MEMBER_REDEEM", "MEMBER_ADJUST"];
 const COUPON_ACTIONS: ActionType[] = ["COUPON_ISSUE", "COUPON_REDEEM"];
 const ONE_TIME_ACTIONS: ActionType[] = ["COUPON_ISSUE", "COUPON_REDEEM", "TICKET_CHECKIN", "INSTALL", "UNINSTALL"];
 
 class LogicService {
+  /**
+   * Process a POS action (earn, redeem, adjust) with atomic transaction safety
+   * Gap F Fix: Uses process_membership_transaction_atomic for race-condition-proof redemptions
+   */
   async handlePosAction(
     externalId: string,
     actionType: ActionType,
@@ -56,50 +78,79 @@ class LogicService {
 
     const supabase = getSupabaseClient();
 
-    // Check if program is suspended before processing any action
-    const { data: passData, error: passError } = await supabase
-      .from("passes_master")
-      .select(`
-        id,
-        program:programs!inner (
-          id,
-          name,
-          is_suspended
-        )
-      `)
-      .eq("external_id", externalId)
-      .single();
-
-    if (passError) {
-      console.error("[Logic] Pass lookup error:", passError.message);
-      throw new Error(`Pass not found: ${passError.message}`);
-    }
-
-    const program = passData?.program as unknown as { id: string; name: string; is_suspended: boolean } | null;
-    if (program?.is_suspended) {
-      console.error(`[Logic] Program "${program.name}" is SUSPENDED - blocking action`);
-      throw new Error("Program Suspended. Contact Admin.");
-    }
-
-    let rpcName: string;
-    let rpcParams: Record<string, any> = {
-      p_external_id: externalId,
-      p_action: actionType,
-    };
+    let rpcResult: any;
+    let error: any;
 
     if (MEMBERSHIP_ACTIONS.includes(actionType)) {
-      rpcName = "process_membership_transaction";
-      rpcParams.p_amount = parseInt(String(amount)) || 0;
-      // Support transaction amount for currency-based earning with multiplier
-      if (transactionAmount !== undefined && actionType === "MEMBER_EARN") {
-        rpcParams.p_transaction_amount = transactionAmount;
+      // Gap F Fix: Use atomic RPC for membership transactions
+      // This prevents race conditions on concurrent redemptions
+      const rpcParams = {
+        p_external_id: externalId,
+        p_action: actionType,
+        p_amount: parseInt(String(amount)) || 0,
+        p_transaction_amount: transactionAmount !== undefined ? transactionAmount : null,
+      };
+
+      console.log("[Logic] Using atomic transaction RPC with params:", rpcParams);
+
+      const result = await supabase.rpc("process_membership_transaction_atomic", rpcParams);
+      rpcResult = result.data;
+      error = result.error;
+
+      // Handle atomic RPC error responses
+      if (!error && rpcResult && !rpcResult.success) {
+        const errorCode = rpcResult.error;
+        console.error(`[Logic] Atomic RPC returned error: ${errorCode}`);
+        
+        if (errorCode === "INSUFFICIENT_FUNDS") {
+          throw new Error(`Insufficient balance. Available: ${rpcResult.available_balance}, Requested: ${rpcResult.requested_amount}`);
+        } else if (errorCode === "MEMBER_NOT_FOUND") {
+          throw new Error("Member not found");
+        } else if (errorCode === "PROGRAM_SUSPENDED") {
+          throw new Error("Program Suspended. Contact Admin.");
+        } else if (errorCode === "INVALID_AMOUNT") {
+          throw new Error("Invalid transaction amount");
+        } else if (errorCode === "INVALID_ACTION") {
+          throw new Error(`Invalid action type: ${actionType}`);
+        }
+        throw new Error(errorCode || "Transaction failed");
       }
+
     } else if (ONE_TIME_ACTIONS.includes(actionType)) {
-      rpcName = "process_one_time_use";
+      // For one-time actions, check program suspension first
+      const { data: passData, error: passError } = await supabase
+        .from("passes_master")
+        .select(`
+          id,
+          program:programs!inner (
+            id,
+            name,
+            is_suspended
+          )
+        `)
+        .eq("external_id", externalId)
+        .single();
+
+      if (passError) {
+        console.error("[Logic] Pass lookup error:", passError.message);
+        throw new Error(`Pass not found: ${passError.message}`);
+      }
+
+      const program = passData?.program as unknown as { id: string; name: string; is_suspended: boolean } | null;
+      if (program?.is_suspended) {
+        console.error(`[Logic] Program "${program.name}" is SUSPENDED - blocking action`);
+        throw new Error("Program Suspended. Contact Admin.");
+      }
+
+      const result = await supabase.rpc("process_one_time_use", {
+        p_external_id: externalId,
+        p_action: actionType,
+      });
+      rpcResult = result.data;
+      error = result.error;
     } else {
       throw new Error(`Unknown Action Type: ${actionType}`);
     }
-    const { data: rpcResult, error } = await supabase.rpc(rpcName, rpcParams);
 
     if (error) {
       console.error("[Logic] Supabase RPC Error:", error.message);
@@ -223,6 +274,93 @@ class LogicService {
     } catch (error) {
       console.error("[Logic] Member lookup error:", error);
       return { success: false, error: error instanceof Error ? error.message : "Lookup failed" };
+    }
+  }
+
+  /**
+   * Process a claim code attempt with atomic one-time-use guarantee
+   * Gap E Fix: Uses process_claim_attempt RPC to prevent double-claims
+   * 
+   * @param code The claim code (e.g., from a postcard)
+   * @param programId The program UUID
+   * @returns Claim result with member data or error
+   */
+  async processClaimAttempt(
+    code: string,
+    programId: string
+  ): Promise<ClaimAttemptResult> {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase is not configured");
+    }
+
+    console.log(`[Logic] Processing claim attempt for code: ${code.substring(0, 8)}...`);
+
+    const supabase = getSupabaseClient();
+
+    // Call the atomic claim RPC
+    const { data: claimResult, error: claimError } = await supabase.rpc("process_claim_attempt", {
+      p_code: code,
+      p_program_id: programId,
+    });
+
+    if (claimError) {
+      console.error("[Logic] Claim RPC error:", claimError.message);
+      throw new Error(claimError.message);
+    }
+
+    // Handle the RPC response
+    if (!claimResult.success) {
+      const errorCode = claimResult.error;
+      console.warn(`[Logic] Claim attempt failed: ${errorCode}`);
+
+      if (errorCode === "ALREADY_CLAIMED") {
+        const claimedAt = claimResult.claimed_at 
+          ? new Date(claimResult.claimed_at).toLocaleDateString()
+          : "previously";
+        return {
+          success: false,
+          error: "ALREADY_CLAIMED",
+          claimed_at: claimResult.claimed_at,
+        };
+      }
+
+      if (errorCode === "INVALID_CODE") {
+        return {
+          success: false,
+          error: "INVALID_CODE",
+        };
+      }
+
+      return {
+        success: false,
+        error: errorCode || "CLAIM_FAILED",
+      };
+    }
+
+    console.log("[Logic] Claim code validated and burned successfully");
+
+    return {
+      success: true,
+      data: claimResult.data,
+    };
+  }
+
+  /**
+   * Get a user-friendly error message for claim failures
+   */
+  getClaimErrorMessage(error: string, claimedAt?: string): string {
+    switch (error) {
+      case "ALREADY_CLAIMED":
+        if (claimedAt) {
+          return `This code was already claimed on ${new Date(claimedAt).toLocaleDateString()}`;
+        }
+        return "This code has already been claimed";
+      case "INVALID_CODE":
+        return "Invalid claim code";
+      case "CLAIM_FAILED":
+        return "Failed to process claim";
+      default:
+        return error || "An error occurred";
     }
   }
 
