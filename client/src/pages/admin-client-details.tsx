@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,210 @@ import {
   Key,
   ExternalLink
 } from "lucide-react";
+
+const MOCK_PROFILES: Record<string, TenantProfile> = {
+  "mock-user-001-aaaa-bbbb-cccc": {
+    user: {
+      id: "mock-user-001-aaaa-bbbb-cccc",
+      email: "joe@joespizza.com",
+      name: "Joe Carlucci",
+      createdAt: "2024-11-15T10:30:00Z",
+    },
+    program: {
+      id: "prog-001",
+      name: "Joe's Pizza VIP Club",
+      protocol: "MEMBERSHIP",
+      dashboardSlug: "joes-pizza",
+      enrollmentUrl: "https://pub1.pskt.io/c/joespizza",
+      isSuspended: false,
+      timezone: "America/New_York",
+      earnRateMultiplier: 10,
+      memberLimit: 500,
+      postgridTemplateId: "template_pizza_001",
+      passkit: {
+        status: "provisioned",
+        programId: "pk_pizza_vip_001",
+        tierId: "tier_gold_001",
+      },
+    },
+    billing: {
+      activeMembers: 347,
+      churnedMembers: 23,
+      memberLimit: 500,
+      usagePercent: 69,
+      isOverLimit: false,
+      lastSnapshotAt: "2024-12-04T06:00:00Z",
+    },
+    apiKeys: [
+      {
+        id: "key-001",
+        keyPrefix: "pk_live_aBc",
+        createdAt: "2024-11-15T10:30:00Z",
+        lastUsedAt: "2024-12-05T14:22:00Z",
+        isActive: true,
+      },
+      {
+        id: "key-002",
+        keyPrefix: "pk_test_xYz",
+        createdAt: "2024-11-20T08:15:00Z",
+        lastUsedAt: null,
+        isActive: true,
+      },
+    ],
+  },
+  "mock-user-002-dddd-eeee-ffff": {
+    user: {
+      id: "mock-user-002-dddd-eeee-ffff",
+      email: "maria@downtowndeli.com",
+      name: "Maria Santos",
+      createdAt: "2024-12-01T14:15:00Z",
+    },
+    program: {
+      id: "prog-002",
+      name: "Downtown Deli Rewards",
+      protocol: "MEMBERSHIP",
+      dashboardSlug: "downtown-deli",
+      enrollmentUrl: "https://pub1.pskt.io/c/downtowndeli",
+      isSuspended: false,
+      timezone: "America/Chicago",
+      earnRateMultiplier: 15,
+      memberLimit: null,
+      postgridTemplateId: null,
+      passkit: {
+        status: "provisioned",
+        programId: "pk_deli_rewards_002",
+        tierId: "tier_silver_002",
+      },
+    },
+    billing: {
+      activeMembers: 128,
+      churnedMembers: 8,
+      memberLimit: null,
+      usagePercent: 0,
+      isOverLimit: false,
+      lastSnapshotAt: "2024-12-05T06:00:00Z",
+    },
+    apiKeys: [],
+  },
+  "mock-user-003-gggg-hhhh-iiii": {
+    user: {
+      id: "mock-user-003-gggg-hhhh-iiii",
+      email: "events@summerfest.org",
+      name: "Summer Music Festival",
+      createdAt: "2024-10-20T09:00:00Z",
+    },
+    program: {
+      id: "prog-003",
+      name: "Summer Music Festival 2025",
+      protocol: "EVENT_TICKET",
+      dashboardSlug: "summer-fest-2025",
+      enrollmentUrl: null,
+      isSuspended: false,
+      timezone: "America/Los_Angeles",
+      earnRateMultiplier: 1,
+      memberLimit: 5000,
+      postgridTemplateId: "template_event_003",
+      passkit: {
+        status: "manual_required",
+        programId: "pk_music_fest_003",
+        tierId: null,
+      },
+    },
+    billing: {
+      activeMembers: 1250,
+      churnedMembers: 0,
+      memberLimit: 5000,
+      usagePercent: 25,
+      isOverLimit: false,
+      lastSnapshotAt: "2024-12-04T06:00:00Z",
+    },
+    apiKeys: [
+      {
+        id: "key-003",
+        keyPrefix: "pk_live_fEst",
+        createdAt: "2024-10-20T09:00:00Z",
+        lastUsedAt: "2024-12-01T18:45:00Z",
+        isActive: true,
+      },
+    ],
+  },
+  "mock-user-004-jjjj-kkkk-llll": {
+    user: {
+      id: "mock-user-004-jjjj-kkkk-llll",
+      email: "manager@harborcoffee.com",
+      name: "Harbor Coffee House",
+      createdAt: "2024-09-05T16:45:00Z",
+    },
+    program: {
+      id: "prog-004",
+      name: "Harbor Coffee House",
+      protocol: "MEMBERSHIP",
+      dashboardSlug: "harbor-coffee",
+      enrollmentUrl: "https://pub1.pskt.io/c/harborcoffee",
+      isSuspended: true,
+      timezone: "America/New_York",
+      earnRateMultiplier: 8,
+      memberLimit: 200,
+      postgridTemplateId: null,
+      passkit: {
+        status: "provisioned",
+        programId: "pk_coffee_harbor_004",
+        tierId: "tier_bronze_004",
+      },
+    },
+    billing: {
+      activeMembers: 89,
+      churnedMembers: 156,
+      memberLimit: 200,
+      usagePercent: 45,
+      isOverLimit: false,
+      lastSnapshotAt: "2024-11-01T06:00:00Z",
+    },
+    apiKeys: [],
+  },
+  "mock-user-005-mmmm-nnnn-oooo": {
+    user: {
+      id: "mock-user-005-mmmm-nnnn-oooo",
+      email: "promo@flashsale.com",
+      name: "Flash Sale Marketing",
+      createdAt: "2024-11-28T11:20:00Z",
+    },
+    program: {
+      id: "prog-005",
+      name: "Flash Sale 50% Off",
+      protocol: "COUPON",
+      dashboardSlug: "flash-sale-50",
+      enrollmentUrl: "https://pub1.pskt.io/c/flashsale50",
+      isSuspended: false,
+      timezone: "America/New_York",
+      earnRateMultiplier: 1,
+      memberLimit: 10000,
+      postgridTemplateId: "template_coupon_005",
+      passkit: {
+        status: "provisioned",
+        programId: "pk_flash_sale_005",
+        tierId: "tier_coupon_005",
+      },
+    },
+    billing: {
+      activeMembers: 2847,
+      churnedMembers: 523,
+      memberLimit: 10000,
+      usagePercent: 28,
+      isOverLimit: false,
+      lastSnapshotAt: "2024-12-05T06:00:00Z",
+    },
+    apiKeys: [
+      {
+        id: "key-005",
+        keyPrefix: "pk_live_SaLe",
+        createdAt: "2024-11-28T11:20:00Z",
+        lastUsedAt: "2024-12-05T09:15:00Z",
+        isActive: true,
+      },
+    ],
+  },
+};
 
 interface TenantProfile {
   user: {
@@ -123,7 +327,7 @@ async function retryPassKitSync(programId: string): Promise<{ enrollmentUrl?: st
 export default function AdminClientDetailsPage() {
   const { userId } = useParams<{ userId: string }>();
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, mockMode } = useAuth();
   
   const [configForm, setConfigForm] = useState({
     memberLimit: "",
@@ -133,11 +337,18 @@ export default function AdminClientDetailsPage() {
   });
   const [copied, setCopied] = useState(false);
 
-  const { data: profile, isLoading, error, refetch } = useQuery({
+  const { data: fetchedProfile, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-tenant-profile", userId],
     queryFn: () => fetchTenantProfile(userId!),
-    enabled: isAdmin && !!userId,
+    enabled: isAdmin && !!userId && !mockMode,
   });
+
+  const profile = useMemo(() => {
+    if (mockMode && userId) {
+      return MOCK_PROFILES[userId] || null;
+    }
+    return fetchedProfile;
+  }, [mockMode, userId, fetchedProfile]);
 
   useEffect(() => {
     if (profile) {
@@ -220,7 +431,7 @@ export default function AdminClientDetailsPage() {
     );
   }
 
-  if (isLoading) {
+  if (isLoading && !mockMode) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
@@ -233,7 +444,7 @@ export default function AdminClientDetailsPage() {
     );
   }
 
-  if (error || !profile) {
+  if ((error && !mockMode) || !profile) {
     return (
       <div className="space-y-6">
         <Link href="/admin/clients">
@@ -266,11 +477,18 @@ export default function AdminClientDetailsPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-client-name">
-              {profile.program.name}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-client-name">
+                {profile.program.name}
+              </h1>
+              {mockMode && (
+                <Badge variant="secondary" className="bg-amber-500/20 text-amber-600 border-amber-500/30" data-testid="badge-mock-mode">
+                  Test Mode
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Client Command Center
+              {mockMode ? "Viewing sample client data for testing" : "Client Command Center"}
             </p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,89 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient } from "@/lib/queryClient";
 import { ChevronRight, AlertTriangle, Check } from "lucide-react";
+
+const MOCK_TENANTS: Tenant[] = [
+  {
+    id: "mock-user-001-aaaa-bbbb-cccc",
+    role: "CLIENT_ADMIN",
+    created_at: "2024-11-15T10:30:00Z",
+    programs: {
+      id: "prog-001",
+      name: "Joe's Pizza VIP Club",
+      passkit_program_id: "pk_pizza_vip_001",
+      passkit_status: "provisioned",
+      protocol: "MEMBERSHIP",
+      is_suspended: false,
+      dashboard_slug: "joes-pizza",
+      enrollment_url: "https://pub1.pskt.io/c/joespizza",
+      earn_rate_multiplier: 10,
+    },
+  },
+  {
+    id: "mock-user-002-dddd-eeee-ffff",
+    role: "CLIENT_ADMIN",
+    created_at: "2024-12-01T14:15:00Z",
+    programs: {
+      id: "prog-002",
+      name: "Downtown Deli Rewards",
+      passkit_program_id: "pk_deli_rewards_002",
+      passkit_status: "provisioned",
+      protocol: "MEMBERSHIP",
+      is_suspended: false,
+      dashboard_slug: "downtown-deli",
+      enrollment_url: "https://pub1.pskt.io/c/downtowndeli",
+      earn_rate_multiplier: 15,
+    },
+  },
+  {
+    id: "mock-user-003-gggg-hhhh-iiii",
+    role: "CLIENT_ADMIN",
+    created_at: "2024-10-20T09:00:00Z",
+    programs: {
+      id: "prog-003",
+      name: "Summer Music Festival 2025",
+      passkit_program_id: "pk_music_fest_003",
+      passkit_status: "manual_required",
+      protocol: "EVENT_TICKET",
+      is_suspended: false,
+      dashboard_slug: "summer-fest-2025",
+      enrollment_url: undefined,
+      earn_rate_multiplier: 1,
+    },
+  },
+  {
+    id: "mock-user-004-jjjj-kkkk-llll",
+    role: "CLIENT_ADMIN",
+    created_at: "2024-09-05T16:45:00Z",
+    programs: {
+      id: "prog-004",
+      name: "Harbor Coffee House",
+      passkit_program_id: "pk_coffee_harbor_004",
+      passkit_status: "provisioned",
+      protocol: "MEMBERSHIP",
+      is_suspended: true,
+      dashboard_slug: "harbor-coffee",
+      enrollment_url: "https://pub1.pskt.io/c/harborcoffee",
+      earn_rate_multiplier: 8,
+    },
+  },
+  {
+    id: "mock-user-005-mmmm-nnnn-oooo",
+    role: "CLIENT_ADMIN",
+    created_at: "2024-11-28T11:20:00Z",
+    programs: {
+      id: "prog-005",
+      name: "Flash Sale 50% Off",
+      passkit_program_id: "pk_flash_sale_005",
+      passkit_status: "provisioned",
+      protocol: "COUPON",
+      is_suspended: false,
+      dashboard_slug: "flash-sale-50",
+      enrollment_url: "https://pub1.pskt.io/c/flashsale50",
+      earn_rate_multiplier: 1,
+    },
+  },
+];
 
 interface Tenant {
   id: string;
@@ -90,7 +173,7 @@ async function deleteTenant(userId: string): Promise<void> {
 
 export default function AdminClientsPage() {
   const { toast } = useToast();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, user, mockMode } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<ProvisionRequest>({
@@ -104,8 +187,15 @@ export default function AdminClientsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin-tenants"],
     queryFn: fetchTenants,
-    enabled: isAdmin,
+    enabled: isAdmin && !mockMode,
   });
+
+  const displayData = useMemo(() => {
+    if (mockMode) {
+      return { tenants: MOCK_TENANTS, count: MOCK_TENANTS.length };
+    }
+    return data;
+  }, [mockMode, data]);
 
   const provisionMutation = useMutation({
     mutationFn: provisionTenant,
@@ -197,11 +287,18 @@ export default function AdminClientsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-admin-clients-title">
-            Client Management
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-admin-clients-title">
+              Client Management
+            </h1>
+            {mockMode && (
+              <Badge variant="secondary" className="bg-amber-500/20 text-amber-600 border-amber-500/30" data-testid="badge-mock-mode">
+                Test Mode
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Provision and manage client accounts
+            {mockMode ? "Viewing sample client data for testing" : "Provision and manage client accounts"}
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -314,25 +411,25 @@ export default function AdminClientsPage() {
         </Dialog>
       </div>
 
-      {error ? (
+      {error && !mockMode ? (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="py-8 text-center">
             <p className="text-destructive text-sm">{(error as Error).message}</p>
           </CardContent>
         </Card>
-      ) : isLoading ? (
+      ) : isLoading && !mockMode ? (
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-24 bg-muted" />
           ))}
         </div>
-      ) : data?.tenants && data.tenants.length > 0 ? (
+      ) : displayData?.tenants && displayData.tenants.length > 0 ? (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            {data.count} client{data.count !== 1 ? "s" : ""} registered
+            {displayData.count} client{displayData.count !== 1 ? "s" : ""} registered
           </p>
           <div className="grid gap-4">
-            {data.tenants.map((tenant) => {
+            {displayData.tenants.map((tenant) => {
               const passkitStatus = tenant.programs?.passkit_status || "manual_required";
               const isPasskitSynced = passkitStatus === "provisioned";
               
