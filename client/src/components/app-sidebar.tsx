@@ -19,6 +19,7 @@ const menuItems = [
   { title: "Dashboard", path: "/dashboard", testId: "link-dashboard" },
   { title: "Analytics", path: "/analytics", testId: "link-analytics" },
   { title: "Members", path: "/members", testId: "link-members" },
+  { title: "Assets", path: "/assets", testId: "link-assets" },
   { title: "POS Simulator", path: "/pos", testId: "link-pos" },
 ];
 

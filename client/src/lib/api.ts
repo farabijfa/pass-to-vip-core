@@ -11,6 +11,8 @@ export interface ClientContext {
   protocol: string;
   isSuspended: boolean;
   birthdayMessage: string | null;
+  enrollmentUrl: string | null;
+  dashboardSlug: string | null;
   createdAt: string;
 }
 
@@ -90,6 +92,8 @@ const mockClientContext: ClientContext = {
   protocol: "MEMBERSHIP",
   isSuspended: false,
   birthdayMessage: "Happy Birthday! Enjoy 2x points today!",
+  enrollmentUrl: "https://passtovip.com/enroll/demo-pizza",
+  dashboardSlug: "demo-pizza",
   createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
 };
 

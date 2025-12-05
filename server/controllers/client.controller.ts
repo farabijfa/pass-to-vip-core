@@ -171,6 +171,8 @@ class ClientController {
             protocol,
             is_suspended,
             birthday_message,
+            enrollment_url,
+            dashboard_slug,
             created_at
           )
         `)
@@ -203,6 +205,8 @@ class ClientController {
           protocol: program?.protocol,
           isSuspended: program?.is_suspended || false,
           birthdayMessage: program?.birthday_message,
+          enrollmentUrl: program?.enrollment_url,
+          dashboardSlug: program?.dashboard_slug,
           createdAt: profile.created_at,
         },
         metadata: {

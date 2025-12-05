@@ -13,6 +13,7 @@ import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import AnalyticsPage from "@/pages/analytics";
 import MembersPage from "@/pages/members";
+import AssetsPage from "@/pages/assets";
 import POSPage from "@/pages/pos";
 import AdminClientsPage from "@/pages/admin-clients";
 import EnrollPage from "@/pages/enroll";
@@ -90,6 +91,11 @@ function Router() {
       <Route path="/members">
         <AuthenticatedLayout>
           <ProtectedRoute component={MembersPage} />
+        </AuthenticatedLayout>
+      </Route>
+      <Route path="/assets">
+        <AuthenticatedLayout>
+          <ProtectedRoute component={AssetsPage} />
         </AuthenticatedLayout>
       </Route>
       <Route path="/pos">
