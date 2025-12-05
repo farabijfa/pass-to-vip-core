@@ -1,13 +1,20 @@
 # Pass To VIP - Phygital Loyalty Ecosystem
 
 ## Overview
-A multi-tenant SaaS platform designed to bridge physical mail campaigns with digital wallet technology. The platform enables businesses, particularly in Retail, Hospitality, and Event Management, to manage loyalty programs, engage with customers via direct mail, and integrate with digital wallets like Apple Wallet and Google Pay. Its core purpose is to provide a comprehensive solution for customer enrollment, engagement, and loyalty management across both physical and digital touchpoints.
+A production-ready multi-tenant SaaS platform designed to bridge physical mail campaigns with digital wallet technology. The platform enables businesses in Retail, Hospitality, and Event Management to manage loyalty programs, engage with customers via direct mail, and integrate with Apple Wallet and Google Pay. System has passed 4 production validation protocols ensuring commercial readiness.
 
 ## User Preferences
 - Iterative development preferred
 - Ask before making major changes to the codebase
 - Detailed explanations for new features or complex logic
 - Do NOT modify the `/admin` folder (legacy HTML pages)
+
+## Recent Changes (December 2024)
+- **Protocol A:** Soft-fail provisioning - clients created even if PassKit API fails
+- **Protocol B:** PassKit webhook churn tracking via `/api/callbacks/passkit`
+- **Protocol C:** POS clerk protection - redeem requires confirmation modal
+- **Protocol D:** RLS security validated - anon key blocked from direct table access
+- **Migrations 012-014:** Security policies, status tracking, nullable PassKit fields
 
 ## System Architecture
 
@@ -32,12 +39,96 @@ Branding includes a "Pass To VIP" logo in the header and "Operated by Oakmont Lo
 
 ### Feature Specifications
 - **Client Dashboard:** Features include a login page, a program overview dashboard, analytics (enrollment charts, retention), member management, a POS simulator, and an admin interface for client management (for `PLATFORM_ADMIN`).
-- **POS Simulator:** Offers dual scanning modes and supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`).
+- **POS Simulator:** Offers dual scanning modes, supports various member ID prefixes (`PUB-`, `CLM-`, `MBR-`), and includes a confirmation modal for redeem actions (Protocol C).
 - **API Endpoints:** Separated into Client Dashboard API (JWT protected), Admin API (API key protected), Internal POS API (JWT protected), External POS Webhooks (API key protected with idempotency), Public Enrollment API (Supabase ANON key with RLS), and PassKit Callbacks (HMAC signature verified).
 - **Role-Based Access Control:** Granular permissions define access levels for different user roles across various API endpoints.
 
+## Production Validation Protocols
+
+The system has been hardened with 4 validation protocols:
+
+| Protocol | Name | Status |
+|----------|------|--------|
+| **A** | Soft-Fail Provisioning | PASSED - Client created with `passkit_status: manual_required` when API fails |
+| **B** | Webhook Churn Tracking | PASSED - `pass.uninstalled` updates `passes_master.status` to UNINSTALLED |
+| **C** | Clerk Proof POS | PASSED - Modal appears before redeem, Enter key confirms |
+| **D** | RLS Security | PASSED - `SELECT * FROM programs` returns error 42501 for anon role |
+
+## Database Migrations
+
+Run in order in Supabase SQL Editor:
+```
+migrations/001_performance_indexes.sql      # Performance optimization
+migrations/002_program_suspension.sql       # Kill switch feature
+migrations/003_passkit_tier_id.sql         # Tier-based programs
+migrations/004_rpc_functions_verification.sql  # Core RPC functions
+migrations/010_dashboard_slug.sql          # Unique enrollment URLs
+migrations/011_pos_integration.sql         # POS API keys & transactions
+migrations/012_secure_public_access.sql    # CRITICAL: RLS for anon key
+migrations/013_passkit_status_tracking.sql # Soft-fail provisioning support
+migrations/014_nullable_passkit_fields.sql # CRITICAL: Non-destructive onboarding
+```
+
+## Key Files
+
+### Controllers
+- `server/controllers/passkit-webhook.controller.ts` - Handles wallet install/uninstall events, updates `passes_master` table
+- `server/controllers/admin.controller.ts` - Tenant provisioning with soft-fail PassKit
+- `server/controllers/pos.controller.ts` - POS lookup/earn/redeem operations
+
+### Services
+- `server/services/passkit-provision.service.ts` - Auto-provisions PassKit programs with soft-fail
+- `server/services/admin.service.ts` - Client provisioning orchestration
+- `server/services/logic.service.ts` - Core POS transaction logic
+
+### Routes
+- `server/routes/callbacks.routes.ts` - PassKit webhook endpoint (no API key, uses HMAC)
+- `server/routes/admin.routes.ts` - Admin API (API key protected)
+- `server/routes/pos.routes.ts` - POS endpoints (JWT protected)
+
+### Frontend
+- `client/src/pages/pos.tsx` - POS with confirmation modal (lines 143-159, 297-312)
+- `client/src/pages/dashboard.tsx` - Program overview
+- `client/src/pages/members.tsx` - Member management
+
+### Documentation
+- `docs/SECURITY_VALIDATION.md` - Protocol D test procedures
+- `docs/POS_INTEGRATION.md` - External POS webhook guide
+
 ## External Dependencies
 
--   **Supabase:** Utilized for PostgreSQL database, authentication, and RPC functions for core business logic.
--   **PassKit:** Integrated for digital wallet functionality (Apple Wallet, Google Pay passes) and real-time wallet updates via webhooks.
--   **PostGrid:** Used for direct mail campaigns, including postcards and letters, with dynamic template management.
+- **Supabase:** PostgreSQL database, authentication, and RPC functions for core business logic.
+- **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay passes) and real-time wallet updates via webhooks.
+- **PostGrid:** Direct mail campaigns, including postcards and letters, with dynamic template management.
+
+## Environment Variables
+
+### Required
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Service role key for admin operations
+- `SUPABASE_ANON_KEY` - Anonymous key for public endpoints (locked down with RLS)
+- `ADMIN_API_KEY` - API key for external admin calls
+- `SESSION_SECRET` - Session encryption key
+
+### Optional (for full functionality)
+- `PASSKIT_API_KEY` - PassKit credentials for wallet sync
+- `PASSKIT_API_SECRET` - For HMAC webhook verification
+- `POSTGRID_API_KEY` - For physical mail campaigns
+- `APP_URL` - Production URL for QR codes
+
+## Known Gaps for Future Improvement
+
+High Priority:
+- Webhook retry queue for failed PassKit callbacks
+- Audit logging for admin actions
+
+Medium Priority:
+- Analytics caching layer
+- PassKit rate limiting with backoff
+- API key rotation UI
+- Structured JSON logging
+
+Low Priority:
+- Mobile POS native app
+- Multi-language support
+- Dark mode completion
