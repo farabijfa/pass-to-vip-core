@@ -264,6 +264,13 @@ migrations/013_passkit_status_tracking.sql  # Adds passkit_status and timezone c
 migrations/014_nullable_passkit_fields.sql  # CRITICAL: Enables soft-fail provisioning
 ```
 
+## Security Validation
+
+See `docs/SECURITY_VALIDATION.md` for RLS testing protocol. Run these tests to verify:
+- Anon key cannot access data tables directly
+- RPC functions return only public data
+- All tables have RLS enabled
+
 ## Development Commands
 
 ```bash
