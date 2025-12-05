@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import path from "path";
 import { campaignController } from "../controllers/campaign.controller";
-import { basicAuth } from "../middleware/auth.middleware";
+import { jwtAuth } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -79,8 +79,15 @@ const validateCampaignOptions = (req: Request, res: Response, next: NextFunction
 };
 
 router.post(
+  "/preview-csv",
+  jwtAuth,
+  upload.single("file"),
+  campaignController.previewCsv.bind(campaignController)
+);
+
+router.post(
   "/upload-csv",
-  basicAuth,
+  jwtAuth,
   upload.single("file"),
   validateCampaignOptions,
   campaignController.uploadCsv.bind(campaignController)

@@ -428,6 +428,102 @@ class CampaignService {
       }
     });
   }
+  async previewCsv(filePath: string): Promise<{
+    total: number;
+    valid: number;
+    invalid: number;
+    missingFields: string[];
+    sampleContacts: Array<{
+      firstName: string;
+      lastName: string;
+      city: string;
+      state: string;
+      valid: boolean;
+      issues?: string[];
+    }>;
+  }> {
+    return new Promise((resolve, reject) => {
+      const rows: CampaignContact[] = [];
+      let headers: string[] = [];
+
+      try {
+        const rawContent = fs.readFileSync(filePath, "utf-8");
+        const fixedContent = this.preprocessCsvContent(rawContent);
+        
+        const stream = Readable.from([fixedContent]);
+        
+        stream
+          .pipe(csv())
+          .on("headers", (h: string[]) => {
+            headers = h;
+          })
+          .on("data", (data: CampaignContact) => rows.push(data))
+          .on("error", (error) => {
+            reject(new Error(`CSV parsing failed: ${error.message}`));
+          })
+          .on("end", async () => {
+            const headerValidation = this.validateCsvHeaders(headers);
+            
+            let validCount = 0;
+            let invalidCount = 0;
+            const sampleContacts: Array<{
+              firstName: string;
+              lastName: string;
+              city: string;
+              state: string;
+              valid: boolean;
+              issues?: string[];
+            }> = [];
+
+            for (const row of rows) {
+              const contact = this.normalizeContact(row);
+              const issues: string[] = [];
+              
+              if (!contact.addressLine1) issues.push("address");
+              if (!contact.city) issues.push("city");
+              if (!contact.state) issues.push("state");
+              if (!contact.postalCode) issues.push("zip");
+
+              const isValid = issues.length === 0;
+              
+              if (isValid) {
+                validCount++;
+              } else {
+                invalidCount++;
+              }
+
+              if (sampleContacts.length < 5) {
+                sampleContacts.push({
+                  firstName: contact.firstName || "(no name)",
+                  lastName: contact.lastName || "",
+                  city: contact.city || "(missing)",
+                  state: contact.state || "(missing)",
+                  valid: isValid,
+                  issues: issues.length > 0 ? issues : undefined,
+                });
+              }
+            }
+
+            try {
+              fs.unlinkSync(filePath);
+            } catch (e) {
+              console.log(`⚠️ Could not delete temp file: ${filePath}`);
+            }
+
+            resolve({
+              total: rows.length,
+              valid: validCount,
+              invalid: invalidCount,
+              missingFields: headerValidation.missing,
+              sampleContacts,
+            });
+          });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        reject(new Error(`Failed to read CSV file: ${errorMessage}`));
+      }
+    });
+  }
 }
 
 export const campaignService = new CampaignService();

@@ -24,6 +24,56 @@ function createResponse<T>(
 }
 
 export class CampaignController {
+  async previewCsv(req: MulterRequest, res: Response, next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+
+    try {
+      if (!req.file) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "NO_FILE",
+              message: "No CSV file uploaded",
+            },
+            requestId
+          )
+        );
+      }
+
+      console.log(`📂 CSV preview request: ${req.file.originalname}`);
+
+      const result = await campaignService.previewCsv(req.file.path);
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          {
+            preview: result,
+            filename: req.file.originalname,
+          },
+          undefined,
+          requestId
+        )
+      );
+    } catch (error) {
+      console.error("Campaign preview error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message:
+              error instanceof Error ? error.message : "Failed to preview CSV",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
   async uploadCsv(req: MulterRequest, res: Response, next: NextFunction) {
     const requestId = (req.headers["x-request-id"] as string) || generate();
     const startTime = Date.now();

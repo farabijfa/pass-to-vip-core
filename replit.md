@@ -19,6 +19,7 @@ A production-ready multi-tenant SaaS platform designed to bridge physical mail c
 - **Migration 017:** Security hardening for Gap E (double-claim) and Gap F (race condition)
 - **Migration 018:** Billing and quotas system for Gap G (revenue leakage prevention)
 - **Gap H:** Program Assets page - QR code downloads, social sharing links (no backend changes needed)
+- **Gap I:** Campaign Launcher page - CSV upload with preview, cost estimation, and PostGrid integration
 
 ## System Architecture
 
@@ -123,6 +124,7 @@ Automation options:
 - `client/src/pages/dashboard.tsx` - Program overview
 - `client/src/pages/members.tsx` - Member management
 - `client/src/pages/assets.tsx` - Program Assets (QR codes, downloads, social links)
+- `client/src/pages/campaigns.tsx` - Campaign Launcher (CSV upload, preview, cost estimation, launch)
 
 ### Documentation
 - `docs/SECURITY_VALIDATION.md` - Protocol D test procedures

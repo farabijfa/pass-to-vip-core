@@ -14,6 +14,7 @@ import DashboardPage from "@/pages/dashboard";
 import AnalyticsPage from "@/pages/analytics";
 import MembersPage from "@/pages/members";
 import AssetsPage from "@/pages/assets";
+import CampaignsPage from "@/pages/campaigns";
 import POSPage from "@/pages/pos";
 import AdminClientsPage from "@/pages/admin-clients";
 import EnrollPage from "@/pages/enroll";
@@ -96,6 +97,11 @@ function Router() {
       <Route path="/assets">
         <AuthenticatedLayout>
           <ProtectedRoute component={AssetsPage} />
+        </AuthenticatedLayout>
+      </Route>
+      <Route path="/campaigns">
+        <AuthenticatedLayout>
+          <ProtectedRoute component={CampaignsPage} />
         </AuthenticatedLayout>
       </Route>
       <Route path="/pos">

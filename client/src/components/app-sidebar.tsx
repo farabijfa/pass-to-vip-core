@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Analytics", path: "/analytics", testId: "link-analytics" },
   { title: "Members", path: "/members", testId: "link-members" },
   { title: "Assets", path: "/assets", testId: "link-assets" },
+  { title: "Campaigns", path: "/campaigns", testId: "link-campaigns" },
   { title: "POS Simulator", path: "/pos", testId: "link-pos" },
 ];
 
