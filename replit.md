@@ -105,6 +105,23 @@ The PassKit enrollment webhook (`/api/webhooks/passkit/enrollment`) handles high
 - **Birthday Validation:** Validates and formats dates before storing
 - **Spike Protection:** Always returns HTTP 200 to prevent webhook retries
 
+### POS Webhook Integration
+External POS systems can integrate via authenticated webhook endpoints:
+- **POST /api/webhooks/pos/lookup** - Member lookup by external_id or scan code
+- **POST /api/webhooks/pos/earn** - Add points with validation
+- **POST /api/webhooks/pos/redeem** - Deduct points with balance check
+
+**Authentication:** `x-api-key` header with `pk_live_*` format keys  
+**Idempotency:** `Idempotency-Key` header prevents duplicate processing  
+**Rate Limiting:** 60 requests/min per API key (configurable)  
+**Documentation:** See `docs/POS_INTEGRATION.md` for full integration guide
+
+### Internal POS Simulator
+- **POST /api/pos/lookup** - Dashboard-authenticated member lookup
+- **POST /api/pos/earn** - Dashboard-authenticated point earning
+- **POST /api/pos/redeem** - Dashboard-authenticated point redemption
+- Mock mode (VITE_MOCK_MODE=true) for development/testing
+
 ## External Dependencies
 
 -   **Supabase (Required):**
