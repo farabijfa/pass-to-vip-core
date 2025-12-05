@@ -6,8 +6,11 @@ const provisionTenantSchema = z.object({
   businessName: z.string().min(1, "Business name is required"),
   email: z.string().email("Valid email is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  passkitProgramId: z.string().min(1, "PassKit Program ID is required"),
+  passkitProgramId: z.string().optional(),
+  passkitTierId: z.string().optional(),
   protocol: z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]).default("MEMBERSHIP"),
+  timezone: z.string().default("America/New_York"),
+  autoProvision: z.boolean().default(true),
 });
 
 class AdminController {
@@ -29,14 +32,26 @@ class AdminController {
         return;
       }
 
-      const { businessName, email, password, passkitProgramId, protocol } = validation.data;
+      const { 
+        businessName, 
+        email, 
+        password, 
+        passkitProgramId, 
+        passkitTierId,
+        protocol, 
+        timezone,
+        autoProvision,
+      } = validation.data;
 
       const result = await adminService.createTenant({
         businessName,
         email,
         password,
         passkitProgramId,
+        passkitTierId,
         protocol,
+        timezone,
+        autoProvision,
       });
 
       const processingTime = Date.now() - startTime;
@@ -63,6 +78,14 @@ class AdminController {
           programId: result.programId,
           email: result.email,
           businessName: result.businessName,
+          dashboardSlug: result.dashboardSlug,
+          dashboardUrl: result.dashboardUrl,
+          passkit: {
+            status: result.passkitStatus,
+            programId: result.passkitProgramId,
+            tierId: result.passkitTierId,
+            enrollmentUrl: result.enrollmentUrl,
+          },
         },
         metadata: {
           processingTime,

@@ -1,13 +1,17 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { config, isSupabaseConfigured } from "../config";
 import short from "short-uuid";
+import { passKitProvisionService } from "./passkit-provision.service";
 
 interface CreateTenantParams {
   businessName: string;
   email: string;
   password: string;
-  passkitProgramId: string;
+  passkitProgramId?: string;
+  passkitTierId?: string;
   protocol: "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
+  timezone?: string;
+  autoProvision?: boolean;
 }
 
 interface CreateTenantResult {
@@ -18,6 +22,10 @@ interface CreateTenantResult {
   businessName?: string;
   dashboardSlug?: string;
   dashboardUrl?: string;
+  passkitStatus?: "provisioned" | "manual_required" | "skipped";
+  passkitProgramId?: string;
+  passkitTierId?: string;
+  enrollmentUrl?: string;
   error?: string;
 }
 
@@ -53,22 +61,72 @@ class AdminService {
   }
 
   async createTenant(params: CreateTenantParams): Promise<CreateTenantResult> {
-    const { businessName, email, password, passkitProgramId, protocol } = params;
+    const { 
+      businessName, 
+      email, 
+      password, 
+      passkitProgramId: providedProgramId, 
+      passkitTierId: providedTierId,
+      protocol,
+      timezone = "America/New_York",
+      autoProvision = true,
+    } = params;
 
     console.log(`🏢 Creating new tenant: ${businessName}`);
     console.log(`   Email: ${email}`);
-    console.log(`   PassKit Program: ${passkitProgramId}`);
     console.log(`   Protocol: ${protocol}`);
+    console.log(`   Auto-Provision: ${autoProvision}`);
+    if (providedProgramId) {
+      console.log(`   Provided PassKit Program: ${providedProgramId}`);
+    }
+
+    let passkitData = {
+      programId: providedProgramId || null as string | null,
+      tierId: providedTierId || null as string | null,
+      enrollmentUrl: null as string | null,
+      status: "skipped" as "provisioned" | "manual_required" | "skipped",
+    };
 
     try {
       const client = this.getClient();
 
-      // Step 0: Check for duplicate business name or PassKit Program ID
+      if (autoProvision && !providedProgramId && protocol === "MEMBERSHIP") {
+        console.log("🚀 Attempting auto-provision of PassKit program...");
+        try {
+          const pkResult = await passKitProvisionService.createMembershipProgram({
+            clientName: businessName,
+            timezone,
+          });
+          
+          if (pkResult.success && pkResult.programId) {
+            passkitData.programId = pkResult.programId;
+            passkitData.tierId = pkResult.tierId || null;
+            passkitData.enrollmentUrl = pkResult.enrollmentUrl || null;
+            passkitData.status = "provisioned";
+            console.log(`✅ PassKit auto-provisioned: ${pkResult.programId}`);
+          } else {
+            console.warn("⚠️ PassKit provisioning failed (soft-fail):", pkResult.error);
+            passkitData.status = "manual_required";
+          }
+        } catch (pkError) {
+          console.warn("⚠️ PassKit provisioning exception (soft-fail):", pkError);
+          passkitData.status = "manual_required";
+        }
+      } else if (providedProgramId) {
+        passkitData.status = "provisioned";
+        console.log(`   Using provided PassKit Program: ${providedProgramId}`);
+      }
+
       console.log("🔍 Step 0: Checking for duplicates...");
+      let duplicateQuery = `name.eq.${businessName}`;
+      if (passkitData.programId) {
+        duplicateQuery += `,passkit_program_id.eq.${passkitData.programId}`;
+      }
+      
       const { data: existingPrograms, error: duplicateError } = await client
         .from("programs")
         .select("id, name, passkit_program_id")
-        .or(`name.eq.${businessName},passkit_program_id.eq.${passkitProgramId}`);
+        .or(duplicateQuery);
 
       if (duplicateError) {
         console.error("❌ Duplicate check failed:", duplicateError.message);
@@ -87,11 +145,11 @@ class AdminService {
             error: `A program with the name "${businessName}" already exists`,
           };
         }
-        if (duplicate.passkit_program_id === passkitProgramId) {
-          console.error(`❌ PassKit Program ID "${passkitProgramId}" already exists`);
+        if (passkitData.programId && duplicate.passkit_program_id === passkitData.programId) {
+          console.error(`❌ PassKit Program ID "${passkitData.programId}" already exists`);
           return {
             success: false,
-            error: `A program with PassKit ID "${passkitProgramId}" already exists`,
+            error: `A program with PassKit ID "${passkitData.programId}" already exists`,
           };
         }
       }
@@ -136,7 +194,9 @@ class AdminService {
       
       const programInsert: Record<string, any> = {
         name: businessName,
-        passkit_program_id: passkitProgramId,
+        passkit_program_id: passkitData.programId,
+        passkit_tier_id: passkitData.tierId,
+        enrollment_url: passkitData.enrollmentUrl,
         protocol: protocol,
       };
       
@@ -144,6 +204,10 @@ class AdminService {
         programInsert.dashboard_slug = dashboardSlug;
         console.log(`   Dashboard slug: ${dashboardSlug}`);
       }
+      
+      console.log(`   PassKit Program ID: ${passkitData.programId || "PENDING"}`);
+      console.log(`   PassKit Tier ID: ${passkitData.tierId || "PENDING"}`);
+      console.log(`   Enrollment URL: ${passkitData.enrollmentUrl || "PENDING"}`);
       
       const { data: programData, error: programError } = await client
         .from("programs")
@@ -191,6 +255,7 @@ class AdminService {
       console.log(`   User ID: ${userId}`);
       console.log(`   Program ID: ${programId}`);
       console.log(`   Business: ${businessName}`);
+      console.log(`   PassKit Status: ${passkitData.status}`);
 
       const result: CreateTenantResult = {
         success: true,
@@ -198,6 +263,10 @@ class AdminService {
         programId,
         email,
         businessName,
+        passkitStatus: passkitData.status,
+        passkitProgramId: passkitData.programId || undefined,
+        passkitTierId: passkitData.tierId || undefined,
+        enrollmentUrl: passkitData.enrollmentUrl || undefined,
       };
 
       if (hasDashboardSlug) {
