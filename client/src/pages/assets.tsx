@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { ExternalLink } from "lucide-react";
 import QRCode from "qrcode";
 
 export default function AssetsPage() {
@@ -15,14 +16,15 @@ export default function AssetsPage() {
   const [isGenerating, setIsGenerating] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const enrollmentUrl = user?.enrollmentUrl;
+  const passkitEnrollmentUrl = user?.enrollmentUrl;
   const dashboardSlug = user?.dashboardSlug;
   const appUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const fullEnrollmentUrl = enrollmentUrl || (dashboardSlug ? `${appUrl}/enroll/${dashboardSlug}` : null);
+  const landingPageUrl = dashboardSlug ? `${appUrl}/enroll/${dashboardSlug}` : null;
+  const qrCodeUrl = landingPageUrl || passkitEnrollmentUrl;
 
   useEffect(() => {
     async function generateQR() {
-      if (!fullEnrollmentUrl) {
+      if (!qrCodeUrl) {
         setIsGenerating(false);
         return;
       }
@@ -30,7 +32,7 @@ export default function AssetsPage() {
       try {
         setIsGenerating(true);
 
-        const dataUrl = await QRCode.toDataURL(fullEnrollmentUrl, {
+        const dataUrl = await QRCode.toDataURL(qrCodeUrl, {
           width: 400,
           margin: 2,
           color: {
@@ -40,7 +42,7 @@ export default function AssetsPage() {
         });
         setQrDataUrl(dataUrl);
 
-        const svg = await QRCode.toString(fullEnrollmentUrl, {
+        const svg = await QRCode.toString(qrCodeUrl, {
           type: "svg",
           width: 400,
           margin: 2,
@@ -63,17 +65,17 @@ export default function AssetsPage() {
     }
 
     generateQR();
-  }, [fullEnrollmentUrl, toast]);
+  }, [qrCodeUrl, toast]);
 
   const downloadPng = async () => {
-    if (!fullEnrollmentUrl) return;
+    if (!qrCodeUrl) return;
 
     try {
       const canvas = document.createElement("canvas");
       canvas.width = 1024;
       canvas.height = 1024;
 
-      await QRCode.toCanvas(canvas, fullEnrollmentUrl, {
+      await QRCode.toCanvas(canvas, qrCodeUrl, {
         width: 1024,
         margin: 2,
         color: {
@@ -149,7 +151,7 @@ export default function AssetsPage() {
         )}
       </div>
 
-      {!fullEnrollmentUrl ? (
+      {!qrCodeUrl ? (
         <Card className="border-border">
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground" data-testid="text-no-enrollment-url">
@@ -215,58 +217,79 @@ export default function AssetsPage() {
 
           <Card className="border-border">
             <CardHeader>
-              <CardTitle className="text-foreground text-lg">Social Media Links</CardTitle>
+              <CardTitle className="text-foreground text-lg">Enrollment Links</CardTitle>
               <CardDescription className="text-muted-foreground text-sm">
                 Copy links for Instagram, Facebook, or your website
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-2">
-                  Full Enrollment URL
-                </label>
-                <div className="flex gap-2">
-                  <code
-                    className="flex-1 text-sm bg-muted p-3 rounded-md text-foreground break-all"
-                    data-testid="text-enrollment-url"
-                  >
-                    {fullEnrollmentUrl}
-                  </code>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(fullEnrollmentUrl, "Enrollment URL")}
-                    data-testid="button-copy-url"
-                  >
-                    <CopyIcon className="w-4 h-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Paste in your Instagram bio, Facebook page, or email signature
-                </p>
-              </div>
-
-              {dashboardSlug && (
+              {landingPageUrl && (
                 <div>
                   <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-2">
-                    Short Link
+                    Branded Landing Page
                   </label>
                   <div className="flex gap-2">
                     <code
-                      className="flex-1 text-sm bg-muted p-3 rounded-md text-foreground"
-                      data-testid="text-short-link"
+                      className="flex-1 text-sm bg-muted p-3 rounded-md text-foreground break-all"
+                      data-testid="text-landing-page-url"
                     >
-                      {appUrl}/enroll/{dashboardSlug}
+                      {landingPageUrl}
                     </code>
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => copyToClipboard(`${appUrl}/enroll/${dashboardSlug}`, "Short link")}
-                      data-testid="button-copy-short-link"
+                      onClick={() => copyToClipboard(landingPageUrl, "Landing page URL")}
+                      data-testid="button-copy-landing-url"
                     >
                       <CopyIcon className="w-4 h-4" />
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    QR code points to this branded landing page
+                  </p>
+                </div>
+              )}
+
+              {passkitEnrollmentUrl && (
+                <div>
+                  <label className="text-xs text-muted-foreground uppercase tracking-wider block mb-2">
+                    Direct PassKit Enrollment
+                  </label>
+                  <div className="flex gap-2">
+                    <code
+                      className="flex-1 text-sm bg-muted p-3 rounded-md text-foreground break-all"
+                      data-testid="text-passkit-url"
+                    >
+                      {passkitEnrollmentUrl}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(passkitEnrollmentUrl, "PassKit URL")}
+                      data-testid="button-copy-passkit-url"
+                    >
+                      <CopyIcon className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => window.open(passkitEnrollmentUrl, "_blank")}
+                      data-testid="button-open-passkit-url"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Direct link to PassKit enrollment form
+                  </p>
+                </div>
+              )}
+
+              {!landingPageUrl && !passkitEnrollmentUrl && (
+                <div className="text-center py-4">
+                  <p className="text-muted-foreground text-sm">
+                    No enrollment URLs configured
+                  </p>
                 </div>
               )}
 
