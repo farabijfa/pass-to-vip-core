@@ -11,6 +11,7 @@ import type {
 
 interface GenerateClaimCodeParams {
   passkitProgramId: string;
+  programId?: string;
   contact: BatchCampaignContact;
 }
 
@@ -18,6 +19,7 @@ interface GenerateClaimCodeResult {
   success: boolean;
   claimCode?: string;
   passkitProgramId?: string;
+  programId?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -214,6 +216,7 @@ class SupabaseService {
         p_state: params.contact.state,
         p_postal_code: params.contact.postalCode,
         p_country: params.contact.country || 'US',
+        p_program_id: params.programId || null,
       });
 
       if (error) {
@@ -224,11 +227,12 @@ class SupabaseService {
         };
       }
 
-      console.log(`🎟️ Generated claim code: ${data?.claim_code}`);
+      console.log(`🎟️ Generated claim code: ${data?.claim_code} for program: ${params.programId || 'auto-resolved'}`);
 
       return {
         success: true,
         claimCode: data?.claim_code,
+        programId: data?.program_id || params.programId,
         passkitProgramId: params.passkitProgramId,
         firstName: params.contact.firstName,
         lastName: params.contact.lastName,

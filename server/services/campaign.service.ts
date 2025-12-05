@@ -37,6 +37,7 @@ interface CampaignResult {
 interface CampaignOptions {
   filePath: string;
   programId: string;
+  passkitProgramId?: string;
   templateId: string;
   frontTemplateId?: string;
   backTemplateId?: string;
@@ -186,6 +187,7 @@ class CampaignService {
     const {
       filePath,
       programId,
+      passkitProgramId,
       templateId,
       frontTemplateId,
       backTemplateId,
@@ -271,7 +273,8 @@ class CampaignService {
                 console.log(`🎟️ Generating claim code for ${contactName}...`);
 
                 const claimResult = await supabaseService.generateClaimCode({
-                  passkitProgramId: programId,
+                  passkitProgramId: passkitProgramId || programId,
+                  programId: programId,
                   contact: {
                     firstName: contact.firstName,
                     lastName: contact.lastName,

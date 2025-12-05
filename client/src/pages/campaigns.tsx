@@ -21,6 +21,14 @@ interface ClientProgram {
   userId?: string;
   passkit_status?: string;
   postgrid_template_id?: string;
+  is_primary?: boolean;
+}
+
+interface Tenant {
+  id: string;
+  email: string;
+  name: string;
+  programs: ClientProgram[];
 }
 
 interface ClientProfile {
@@ -145,27 +153,64 @@ const MAILING_CLASSES = [
   { value: "first_class", label: "First Class (3-5 days)" },
 ];
 
-async function fetchClients(): Promise<{ programs: ClientProgram[] }> {
+async function fetchClients(): Promise<{ tenants: Tenant[]; programs: ClientProgram[] }> {
   if (isMockMode()) {
-    return {
-      programs: [
-        { id: "prog-1", name: "Demo Pizza Rewards", passkit_program_id: "pk_demo_1", protocol: "MEMBERSHIP", userId: "mock-user-001", passkit_status: "provisioned", postgrid_template_id: "tmpl_mock_1" },
-        { id: "prog-2", name: "Coffee Club VIP", passkit_program_id: "pk_demo_2", protocol: "MEMBERSHIP", userId: "mock-user-002", passkit_status: "manual_required", postgrid_template_id: undefined },
-        { id: "prog-3", name: "Stadium Events", passkit_program_id: "pk_demo_3", protocol: "EVENT_TICKET", userId: "mock-user-003", passkit_status: "skipped", postgrid_template_id: "tmpl_mock_2" },
-      ],
-    };
+    const tenants: Tenant[] = [
+      {
+        id: "mock-user-001",
+        email: "pizza@example.com",
+        name: "Pizza Palace Inc.",
+        programs: [
+          { id: "prog-1", name: "VIP Rewards Club", passkit_program_id: "pk_demo_1", protocol: "MEMBERSHIP", userId: "mock-user-001", passkit_status: "provisioned", postgrid_template_id: "tmpl_mock_1", is_primary: true },
+          { id: "prog-1b", name: "Summer Concert Series", passkit_program_id: "pk_demo_1b", protocol: "EVENT_TICKET", userId: "mock-user-001", passkit_status: "provisioned", postgrid_template_id: undefined, is_primary: false },
+        ],
+      },
+      {
+        id: "mock-user-002",
+        email: "coffee@example.com",
+        name: "Java Joe's Coffee",
+        programs: [
+          { id: "prog-2", name: "Coffee Club VIP", passkit_program_id: "pk_demo_2", protocol: "MEMBERSHIP", userId: "mock-user-002", passkit_status: "manual_required", postgrid_template_id: undefined, is_primary: true },
+        ],
+      },
+      {
+        id: "mock-user-003",
+        email: "stadium@example.com",
+        name: "Metro Stadium",
+        programs: [
+          { id: "prog-3", name: "Stadium Events", passkit_program_id: "pk_demo_3", protocol: "EVENT_TICKET", userId: "mock-user-003", passkit_status: "skipped", postgrid_template_id: "tmpl_mock_2", is_primary: true },
+          { id: "prog-3b", name: "Flash Sale Coupons", passkit_program_id: "pk_demo_3b", protocol: "COUPON", userId: "mock-user-003", passkit_status: "provisioned", postgrid_template_id: undefined, is_primary: false },
+        ],
+      },
+    ];
+    const programs = tenants.flatMap((t) => t.programs);
+    return { tenants, programs };
   }
+
   const token = localStorage.getItem("auth_token");
   const response = await fetch("/api/client/admin/tenants", {
     headers: { Authorization: `Bearer ${token}` },
   });
   const result = await response.json();
   if (!result.success) throw new Error(result.error?.message || "Failed to fetch clients");
-  
-  const tenants = result.data?.tenants || [];
-  const programs: ClientProgram[] = tenants
-    .filter((t: any) => t.programs && t.programs.id && t.programs.name)
-    .map((t: any) => ({
+
+  const rawTenants = result.data?.tenants || [];
+  const tenantsMap = new Map<string, Tenant>();
+
+  for (const t of rawTenants) {
+    if (!t.programs || !t.programs.id) continue;
+
+    if (!tenantsMap.has(t.id)) {
+      tenantsMap.set(t.id, {
+        id: t.id,
+        email: t.email || "",
+        name: t.name || t.email || "Unknown",
+        programs: [],
+      });
+    }
+
+    const tenant = tenantsMap.get(t.id)!;
+    tenant.programs.push({
       id: t.programs.id,
       name: t.programs.name,
       passkit_program_id: t.programs.passkit_program_id || "",
@@ -173,9 +218,14 @@ async function fetchClients(): Promise<{ programs: ClientProgram[] }> {
       userId: t.id,
       passkit_status: t.programs.passkit_status || "manual_required",
       postgrid_template_id: t.programs.postgrid_template_id || undefined,
-    }));
-  
-  return { programs };
+      is_primary: t.programs.is_primary ?? false,
+    });
+  }
+
+  const tenants = Array.from(tenantsMap.values());
+  const programs = tenants.flatMap((t) => t.programs);
+
+  return { tenants, programs };
 }
 
 async function fetchTemplates(): Promise<{ templates: PostGridTemplate[] }> {
@@ -227,6 +277,7 @@ export default function CampaignsPage() {
 
   const [activeTab, setActiveTab] = useState<string>("launcher");
   const [clientMode, setClientMode] = useState<"dropdown" | "manual">("dropdown");
+  const [selectedTenant, setSelectedTenant] = useState<string>("");
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [manualClientId, setManualClientId] = useState<string>("");
   const [validatedClient, setValidatedClient] = useState<ValidatedClient | null>(null);
@@ -267,11 +318,26 @@ export default function CampaignsPage() {
     enabled: isAdmin && activeTab === "history",
   });
 
-  const selectedProgram = clientsData?.programs.find(p => p.id === selectedClient);
+  const selectedTenantData = clientsData?.tenants.find(t => t.id === selectedTenant);
+  const tenantPrograms = selectedTenantData?.programs || [];
+  const selectedProgram = tenantPrograms.find(p => p.id === selectedClient) || clientsData?.programs.find(p => p.id === selectedClient);
   const currentSize = resourceType === "postcard" ? postcardSize : letterSize;
   const filteredTemplates = templatesData?.templates.filter(t => t.type === resourceType) || [];
 
   const effectiveClient = clientMode === "dropdown" ? selectedProgram : validatedClient;
+
+  useEffect(() => {
+    if (selectedTenant && tenantPrograms.length > 0) {
+      const primaryProgram = tenantPrograms.find(p => p.is_primary);
+      if (primaryProgram) {
+        setSelectedClient(primaryProgram.id);
+      } else {
+        setSelectedClient(tenantPrograms[0].id);
+      }
+    } else if (!selectedTenant) {
+      setSelectedClient("");
+    }
+  }, [selectedTenant, tenantPrograms.length]);
 
   useEffect(() => {
     if (preview && preview.valid > 0) {
@@ -665,7 +731,7 @@ export default function CampaignsPage() {
                 <Button
                   variant={clientMode === "manual" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => { setClientMode("manual"); setSelectedClient(""); }}
+                  onClick={() => { setClientMode("manual"); setSelectedTenant(""); setSelectedClient(""); }}
                   data-testid="button-mode-manual"
                 >
                   Enter Client ID
@@ -675,42 +741,102 @@ export default function CampaignsPage() {
               {clientMode === "dropdown" ? (
                 <>
                   {isLoadingClients ? (
-                    <Skeleton className="h-10 w-full" />
+                    <div className="space-y-3">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <Select value={selectedClient} onValueChange={setSelectedClient}>
-                        <SelectTrigger className="flex-1" data-testid="select-client">
-                          <SelectValue placeholder="Select a client program..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {clientsData?.programs
-                            .filter((program) => program.id && program.id.trim() !== "")
-                            .map((program) => (
-                              <SelectItem key={program.id} value={program.id}>
-                                {program.name} ({program.protocol})
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      {selectedProgram?.userId && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => window.open(`/admin/clients/${selectedProgram.userId}`, '_blank')}
-                          title="View Client Settings"
-                          data-testid="button-view-client"
-                        >
-                          <ExternalLinkIcon className="w-4 h-4" />
-                        </Button>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm text-foreground font-medium">Step 1: Select Client</Label>
+                        <div className="flex gap-2">
+                          <Select value={selectedTenant} onValueChange={(val) => { setSelectedTenant(val); setSelectedClient(""); }}>
+                            <SelectTrigger className="flex-1" data-testid="select-tenant">
+                              <SelectValue placeholder="Select a client (tenant)..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {clientsData?.tenants.map((tenant) => (
+                                <SelectItem key={tenant.id} value={tenant.id}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{tenant.name}</span>
+                                    <Badge variant="outline" className="text-xs ml-1">
+                                      {tenant.programs.length} program{tenant.programs.length !== 1 ? "s" : ""}
+                                    </Badge>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedTenantData && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => window.open(`/admin/clients/${selectedTenantData.id}`, '_blank')}
+                              title="View Client Settings"
+                              data-testid="button-view-client"
+                            >
+                              <ExternalLinkIcon className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {selectedTenant && tenantPrograms.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-sm text-foreground font-medium">Step 2: Select Target Program</Label>
+                          <Select value={selectedClient} onValueChange={setSelectedClient}>
+                            <SelectTrigger className="w-full" data-testid="select-program">
+                              <SelectValue placeholder="Select a program..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tenantPrograms.map((program) => (
+                                <SelectItem key={program.id} value={program.id}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{program.name}</span>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${
+                                        program.protocol === "MEMBERSHIP" ? "border-blue-500 text-blue-600" :
+                                        program.protocol === "EVENT_TICKET" ? "border-purple-500 text-purple-600" :
+                                        program.protocol === "COUPON" ? "border-orange-500 text-orange-600" :
+                                        ""
+                                      }`}
+                                    >
+                                      {program.protocol === "EVENT_TICKET" ? "EVENT" : program.protocol}
+                                    </Badge>
+                                    {program.is_primary && (
+                                      <Badge variant="secondary" className="text-xs">Primary</Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       )}
                     </div>
                   )}
+
                   {selectedProgram && (
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">{selectedProgram.protocol}</Badge>
+                    <div className="p-3 rounded-md bg-muted/50 border border-border">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs ${
+                            selectedProgram.protocol === "MEMBERSHIP" ? "border-blue-500 text-blue-600" :
+                            selectedProgram.protocol === "EVENT_TICKET" ? "border-purple-500 text-purple-600" :
+                            selectedProgram.protocol === "COUPON" ? "border-orange-500 text-orange-600" :
+                            ""
+                          }`}
+                        >
+                          {selectedProgram.protocol === "EVENT_TICKET" ? "EVENT TICKET" : selectedProgram.protocol}
+                        </Badge>
                         <span className="text-xs text-muted-foreground">
-                          PassKit ID: {selectedProgram.passkit_program_id || "Not configured"}
+                          Program ID: {selectedProgram.id}
+                        </span>
+                        <span className="text-xs text-muted-foreground">|</span>
+                        <span className="text-xs text-muted-foreground">
+                          PassKit: {selectedProgram.passkit_program_id || "Not configured"}
                         </span>
                         {selectedProgram.passkit_status === "provisioned" && (
                           <Badge variant="outline" className="text-xs border-green-500 text-green-600">Synced</Badge>
@@ -718,6 +844,7 @@ export default function CampaignsPage() {
                       </div>
                     </div>
                   )}
+
                   {showPassKitWarning && (
                     <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-2" data-testid="alert-passkit-warning">
                       <AlertIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
