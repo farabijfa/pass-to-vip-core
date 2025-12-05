@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient } from "@/lib/queryClient";
+import { ChevronRight, AlertTriangle, Check } from "lucide-react";
 
 interface Tenant {
   id: string;
@@ -20,10 +22,12 @@ interface Tenant {
     id: string;
     name: string;
     passkit_program_id: string;
+    passkit_status?: string;
     protocol: string;
     is_suspended: boolean;
     dashboard_slug?: string;
     enrollment_url?: string;
+    earn_rate_multiplier?: number;
   } | null;
 }
 
@@ -328,97 +332,124 @@ export default function AdminClientsPage() {
             {data.count} client{data.count !== 1 ? "s" : ""} registered
           </p>
           <div className="grid gap-4">
-            {data.tenants.map((tenant) => (
-              <Card key={tenant.id} className="border-border" data-testid={`card-tenant-${tenant.id}`}>
-                <CardHeader className="pb-2">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <CardTitle className="text-foreground text-lg">
-                        {tenant.programs?.name || "Unknown Program"}
-                      </CardTitle>
-                      <CardDescription className="mt-1 text-sm">
-                        User ID: {tenant.id.slice(0, 8)}...
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span 
-                        className={`text-xs ${tenant.programs?.is_suspended ? 'text-destructive' : 'text-foreground'}`}
-                        data-testid={`badge-status-${tenant.id}`}
-                      >
-                        {tenant.programs?.is_suspended ? "Suspended" : "Active"}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(tenant.id, tenant.programs?.name || "this client")}
-                        disabled={deleteMutation.isPending}
-                        data-testid={`button-delete-${tenant.id}`}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {tenant.programs?.dashboard_slug && (
-                    <div className="p-3 bg-muted/30 rounded-md border border-border">
-                      <p className="text-xs text-muted-foreground mb-1">Enrollment URL</p>
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm text-foreground flex-1 truncate" data-testid={`text-enrollment-url-${tenant.id}`}>
-                          {window.location.origin}/enroll/{tenant.programs.dashboard_slug}
-                        </code>
+            {data.tenants.map((tenant) => {
+              const passkitStatus = tenant.programs?.passkit_status || "manual_required";
+              const isPasskitSynced = passkitStatus === "provisioned";
+              
+              return (
+                <Card key={tenant.id} className="border-border hover-elevate cursor-pointer" data-testid={`card-tenant-${tenant.id}`}>
+                  <Link href={`/admin/clients/${tenant.id}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <CardTitle className="text-foreground text-lg flex items-center gap-2">
+                            {tenant.programs?.name || "Unknown Program"}
+                            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                          </CardTitle>
+                          <CardDescription className="mt-1 text-sm">
+                            User ID: {tenant.id.slice(0, 8)}...
+                          </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={tenant.programs?.is_suspended ? "destructive" : "default"}
+                            data-testid={`badge-status-${tenant.id}`}
+                          >
+                            {tenant.programs?.is_suspended ? "Suspended" : "Active"}
+                          </Badge>
+                          <Badge 
+                            variant={isPasskitSynced ? "default" : "secondary"}
+                            className={isPasskitSynced ? "bg-green-600" : "bg-amber-500"}
+                            data-testid={`badge-passkit-${tenant.id}`}
+                          >
+                            {isPasskitSynced ? (
+                              <><Check className="w-3 h-3 mr-1" /> Synced</>
+                            ) : (
+                              <><AlertTriangle className="w-3 h-3 mr-1" /> Pending</>
+                            )}
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Link>
+                  <CardContent className="space-y-4">
+                    {tenant.programs?.dashboard_slug && (
+                      <div className="p-3 bg-muted/30 rounded-md border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">Enrollment URL</p>
+                        <div className="flex items-center gap-2">
+                          <code className="text-sm text-foreground flex-1 truncate" data-testid={`text-enrollment-url-${tenant.id}`}>
+                            {window.location.origin}/enroll/{tenant.programs.dashboard_slug}
+                          </code>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const url = `${window.location.origin}/enroll/${tenant.programs?.dashboard_slug}`;
+                              navigator.clipboard.writeText(url);
+                              toast({
+                                title: "URL Copied",
+                                description: "Enrollment URL copied to clipboard.",
+                              });
+                            }}
+                            data-testid={`button-copy-url-${tenant.id}`}
+                          >
+                            Copy
+                          </Button>
+                          <a
+                            href={`/enroll/${tenant.programs.dashboard_slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`link-open-url-${tenant.id}`}
+                          >
+                            Open
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Protocol</p>
+                        <p className="text-foreground mt-1">{tenant.programs?.protocol || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Role</p>
+                        <p className="text-foreground mt-1">{tenant.role}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Earn Rate</p>
+                        <p className="text-foreground mt-1">{tenant.programs?.earn_rate_multiplier || 10}x</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Created</p>
+                        <p className="text-foreground mt-1">
+                          {new Date(tenant.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-end justify-end">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            const url = `${window.location.origin}/enroll/${tenant.programs?.dashboard_slug}`;
-                            navigator.clipboard.writeText(url);
-                            toast({
-                              title: "URL Copied",
-                              description: "Enrollment URL copied to clipboard.",
-                            });
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDelete(tenant.id, tenant.programs?.name || "this client");
                           }}
-                          data-testid={`button-copy-url-${tenant.id}`}
+                          disabled={deleteMutation.isPending}
+                          className="text-destructive hover:text-destructive"
+                          data-testid={`button-delete-${tenant.id}`}
                         >
-                          Copy
+                          Delete
                         </Button>
-                        <a
-                          href={`/enroll/${tenant.programs.dashboard_slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
-                          data-testid={`link-open-url-${tenant.id}`}
-                        >
-                          Open
-                        </a>
                       </div>
                     </div>
-                  )}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Protocol</p>
-                      <p className="text-foreground mt-1">{tenant.programs?.protocol || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Role</p>
-                      <p className="text-foreground mt-1">{tenant.role}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">PassKit ID</p>
-                      <code className="text-xs text-muted-foreground block mt-1 truncate">
-                        {tenant.programs?.passkit_program_id || "N/A"}
-                      </code>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Created</p>
-                      <p className="text-foreground mt-1">
-                        {new Date(tenant.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       ) : (

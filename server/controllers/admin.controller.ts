@@ -410,6 +410,120 @@ class AdminController {
       });
     }
   }
+
+  async getTenantProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_USER_ID",
+            message: "User ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.getTenantFullProfile(userId);
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        res.status(isNotFound ? 404 : 500).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : "FETCH_FAILED",
+            message: result.error || "Failed to fetch profile",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.profile,
+      });
+
+    } catch (error) {
+      console.error("Get tenant profile error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async updateTenantConfig(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PROGRAM_ID",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const updateConfigSchema = z.object({
+        earnRateMultiplier: z.number().int().min(1).max(1000).optional(),
+        memberLimit: z.number().int().min(0).nullable().optional(),
+        postgridTemplateId: z.string().nullable().optional(),
+        isSuspended: z.boolean().optional(),
+      });
+
+      const validation = updateConfigSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.updateTenantConfig(programId, validation.data);
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        res.status(isNotFound ? 404 : 400).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : "UPDATE_FAILED",
+            message: result.error || "Failed to update configuration",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.program,
+        message: "Configuration updated successfully",
+      });
+
+    } catch (error) {
+      console.error("Update tenant config error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
 }
 
 export const adminController = new AdminController();

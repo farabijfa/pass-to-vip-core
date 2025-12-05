@@ -681,6 +681,295 @@ class AdminService {
       status: "connected",
     };
   }
+
+  async getTenantFullProfile(userId: string): Promise<{
+    success: boolean;
+    profile?: {
+      user: {
+        id: string;
+        email: string;
+        name: string;
+        createdAt: string;
+      };
+      program: {
+        id: string;
+        name: string;
+        protocol: string;
+        dashboardSlug: string;
+        enrollmentUrl: string | null;
+        isSuspended: boolean;
+        timezone: string;
+        earnRateMultiplier: number;
+        memberLimit: number | null;
+        postgridTemplateId: string | null;
+        passkit: {
+          status: string;
+          programId: string | null;
+          tierId: string | null;
+        };
+      };
+      billing: {
+        activeMembers: number;
+        churnedMembers: number;
+        memberLimit: number | null;
+        usagePercent: number;
+        isOverLimit: boolean;
+        lastSnapshotAt: string | null;
+      };
+      apiKeys: Array<{
+        id: string;
+        keyPrefix: string;
+        createdAt: string;
+        lastUsedAt: string | null;
+        isActive: boolean;
+      }>;
+    };
+    error?: string;
+  }> {
+    console.log(`📊 Fetching full profile for user: ${userId}`);
+    
+    try {
+      const client = this.getClient();
+
+      // Get user details from auth
+      const { data: userData, error: userError } = await client.auth.admin.getUserById(userId);
+      
+      if (userError || !userData.user) {
+        return { success: false, error: userError?.message || "User not found" };
+      }
+
+      // Get admin profile with program details
+      const { data: profile, error: profileError } = await client
+        .from("admin_profiles")
+        .select(`
+          id,
+          role,
+          created_at,
+          programs:program_id (
+            id,
+            name,
+            passkit_program_id,
+            passkit_tier_id,
+            passkit_status,
+            protocol,
+            timezone,
+            is_suspended,
+            dashboard_slug,
+            enrollment_url,
+            earn_rate_multiplier,
+            member_limit,
+            postgrid_template_id
+          )
+        `)
+        .eq("id", userId)
+        .single();
+
+      if (profileError || !profile) {
+        return { success: false, error: profileError?.message || "Profile not found" };
+      }
+
+      const program = profile.programs as any;
+      if (!program) {
+        return { success: false, error: "No program associated with this user" };
+      }
+
+      // Get billing snapshot for this program
+      let billingData = {
+        activeMembers: 0,
+        churnedMembers: 0,
+        lastSnapshotAt: null as string | null,
+      };
+
+      const { data: snapshot } = await client
+        .from("billing_snapshots")
+        .select("active_members, churned_members, created_at")
+        .eq("program_id", program.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (snapshot) {
+        billingData.activeMembers = snapshot.active_members || 0;
+        billingData.churnedMembers = snapshot.churned_members || 0;
+        billingData.lastSnapshotAt = snapshot.created_at;
+      } else {
+        // If no snapshot, count members directly
+        const { count: activeCount } = await client
+          .from("passes_master")
+          .select("*", { count: "exact", head: true })
+          .eq("program_id", program.id)
+          .neq("status", "CHURNED");
+
+        const { count: churnedCount } = await client
+          .from("passes_master")
+          .select("*", { count: "exact", head: true })
+          .eq("program_id", program.id)
+          .eq("status", "CHURNED");
+
+        billingData.activeMembers = activeCount || 0;
+        billingData.churnedMembers = churnedCount || 0;
+      }
+
+      // Get POS API keys
+      const { data: apiKeys } = await client
+        .from("pos_api_keys")
+        .select("id, key_prefix, created_at, last_used_at, is_active")
+        .eq("program_id", program.id)
+        .order("created_at", { ascending: false });
+
+      const memberLimit = program.member_limit || null;
+      const usagePercent = memberLimit ? Math.round((billingData.activeMembers / memberLimit) * 100) : 0;
+
+      console.log(`✅ Full profile loaded for ${userData.user.email}`);
+
+      return {
+        success: true,
+        profile: {
+          user: {
+            id: userData.user.id,
+            email: userData.user.email || "",
+            name: userData.user.user_metadata?.business_name || program.name || "",
+            createdAt: userData.user.created_at || "",
+          },
+          program: {
+            id: program.id,
+            name: program.name,
+            protocol: program.protocol || "MEMBERSHIP",
+            dashboardSlug: program.dashboard_slug || "",
+            enrollmentUrl: program.enrollment_url || null,
+            isSuspended: program.is_suspended || false,
+            timezone: program.timezone || "America/New_York",
+            earnRateMultiplier: program.earn_rate_multiplier || 10,
+            memberLimit: program.member_limit || null,
+            postgridTemplateId: program.postgrid_template_id || null,
+            passkit: {
+              status: program.passkit_status || "manual_required",
+              programId: program.passkit_program_id || null,
+              tierId: program.passkit_tier_id || null,
+            },
+          },
+          billing: {
+            activeMembers: billingData.activeMembers,
+            churnedMembers: billingData.churnedMembers,
+            memberLimit,
+            usagePercent,
+            isOverLimit: memberLimit ? billingData.activeMembers > memberLimit : false,
+            lastSnapshotAt: billingData.lastSnapshotAt,
+          },
+          apiKeys: (apiKeys || []).map((key: any) => ({
+            id: key.id,
+            keyPrefix: key.key_prefix || key.id.slice(0, 8),
+            createdAt: key.created_at,
+            lastUsedAt: key.last_used_at,
+            isActive: key.is_active !== false,
+          })),
+        },
+      };
+
+    } catch (error) {
+      console.error("❌ Get tenant full profile error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async updateTenantConfig(
+    programId: string,
+    config: {
+      earnRateMultiplier?: number;
+      memberLimit?: number | null;
+      postgridTemplateId?: string | null;
+      isSuspended?: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    program?: {
+      id: string;
+      earnRateMultiplier: number;
+      memberLimit: number | null;
+      postgridTemplateId: string | null;
+      isSuspended: boolean;
+    };
+    error?: string;
+  }> {
+    console.log(`⚙️ Updating config for program: ${programId}`);
+    
+    try {
+      const client = this.getClient();
+
+      // Check if program exists
+      const { data: existingProgram, error: fetchError } = await client
+        .from("programs")
+        .select("id, name")
+        .eq("id", programId)
+        .single();
+
+      if (fetchError || !existingProgram) {
+        return { success: false, error: "Program not found" };
+      }
+
+      const updates: Record<string, any> = {};
+
+      if (config.earnRateMultiplier !== undefined) {
+        if (config.earnRateMultiplier < 1 || config.earnRateMultiplier > 1000) {
+          return { success: false, error: "Earn rate multiplier must be between 1 and 1000" };
+        }
+        updates.earn_rate_multiplier = config.earnRateMultiplier;
+      }
+
+      if (config.memberLimit !== undefined) {
+        if (config.memberLimit !== null && config.memberLimit < 0) {
+          return { success: false, error: "Member limit cannot be negative" };
+        }
+        updates.member_limit = config.memberLimit;
+      }
+
+      if (config.postgridTemplateId !== undefined) {
+        updates.postgrid_template_id = config.postgridTemplateId;
+      }
+
+      if (config.isSuspended !== undefined) {
+        updates.is_suspended = config.isSuspended;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return { success: false, error: "No valid fields to update" };
+      }
+
+      const { data: updatedProgram, error: updateError } = await client
+        .from("programs")
+        .update(updates)
+        .eq("id", programId)
+        .select("id, earn_rate_multiplier, member_limit, postgrid_template_id, is_suspended")
+        .single();
+
+      if (updateError) {
+        return { success: false, error: updateError.message };
+      }
+
+      console.log(`✅ Config updated for program ${programId}`);
+
+      return {
+        success: true,
+        program: {
+          id: updatedProgram.id,
+          earnRateMultiplier: updatedProgram.earn_rate_multiplier || 10,
+          memberLimit: updatedProgram.member_limit || null,
+          postgridTemplateId: updatedProgram.postgrid_template_id || null,
+          isSuspended: updatedProgram.is_suspended || false,
+        },
+      };
+
+    } catch (error) {
+      console.error("❌ Update tenant config error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 }
 
 export const adminService = new AdminService();

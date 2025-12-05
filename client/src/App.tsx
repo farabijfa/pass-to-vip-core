@@ -17,6 +17,7 @@ import AssetsPage from "@/pages/assets";
 import CampaignsPage from "@/pages/campaigns";
 import POSPage from "@/pages/pos";
 import AdminClientsPage from "@/pages/admin-clients";
+import AdminClientDetailsPage from "@/pages/admin-client-details";
 import EnrollPage from "@/pages/enroll";
 import NotFound from "@/pages/not-found";
 
@@ -107,6 +108,11 @@ function Router() {
       <Route path="/admin/clients">
         <AuthenticatedLayout>
           <ProtectedRoute component={AdminClientsPage} />
+        </AuthenticatedLayout>
+      </Route>
+      <Route path="/admin/clients/:userId">
+        <AuthenticatedLayout>
+          <ProtectedRoute component={AdminClientDetailsPage} />
         </AuthenticatedLayout>
       </Route>
       <Route path="/admin/campaigns">

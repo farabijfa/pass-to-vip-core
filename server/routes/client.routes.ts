@@ -48,4 +48,19 @@ router.delete(
   clientController.deleteTenantAsAdmin.bind(clientController)
 );
 
+router.get(
+  "/admin/tenants/:userId/full-profile",
+  clientController.getTenantProfileAsAdmin.bind(clientController)
+);
+
+router.patch(
+  "/admin/tenants/:programId/config",
+  clientController.updateTenantConfigAsAdmin.bind(clientController)
+);
+
+router.post(
+  "/admin/tenants/:programId/retry-passkit",
+  clientController.retryPassKitSyncAsAdmin.bind(clientController)
+);
+
 export default router;

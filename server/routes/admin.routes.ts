@@ -22,6 +22,18 @@ router.get(
   adminController.getTenant.bind(adminController)
 );
 
+router.get(
+  "/tenants/:userId/full-profile",
+  checkApiKey,
+  adminController.getTenantProfile.bind(adminController)
+);
+
+router.patch(
+  "/tenants/:programId/config",
+  checkApiKey,
+  adminController.updateTenantConfig.bind(adminController)
+);
+
 router.delete(
   "/tenants/:userId",
   checkApiKey,

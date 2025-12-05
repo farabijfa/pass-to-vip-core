@@ -926,6 +926,207 @@ class ClientController {
       });
     }
   }
+
+  async getTenantProfileAsAdmin(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { userId } = req.params;
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_USER_ID",
+            message: "User ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.getTenantFullProfile(userId);
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        res.status(isNotFound ? 404 : 500).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : "FETCH_FAILED",
+            message: result.error || "Failed to fetch profile",
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.profile,
+        metadata: { processingTime },
+      });
+
+    } catch (error) {
+      console.error("Get tenant profile error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async updateTenantConfigAsAdmin(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PROGRAM_ID",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const updateConfigSchema = z.object({
+        earnRateMultiplier: z.number().int().min(1).max(1000).optional(),
+        memberLimit: z.number().int().min(0).nullable().optional(),
+        postgridTemplateId: z.string().nullable().optional(),
+        isSuspended: z.boolean().optional(),
+      });
+
+      const validation = updateConfigSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.updateTenantConfig(programId, validation.data);
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        res.status(isNotFound ? 404 : 400).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : "UPDATE_FAILED",
+            message: result.error || "Failed to update configuration",
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.program,
+        message: "Configuration updated successfully",
+        metadata: { processingTime },
+      });
+
+    } catch (error) {
+      console.error("Update tenant config error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async retryPassKitSyncAsAdmin(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const admin = await this.validateAdminAccess(req, res);
+      if (!admin) return;
+
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PROGRAM_ID",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await adminService.retryPassKitProvisioning(programId);
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        const isNotFound = result.error?.includes("not found");
+        const isValidationError = result.error?.includes("already has") || 
+                                   result.error?.includes("Cannot retry") ||
+                                   result.error?.includes("only supports");
+        const statusCode = isNotFound ? 404 : isValidationError ? 400 : 500;
+        
+        res.status(statusCode).json({
+          success: false,
+          error: {
+            code: isNotFound ? "NOT_FOUND" : isValidationError ? "VALIDATION_ERROR" : "PROVISIONING_FAILED",
+            message: result.error,
+          },
+          data: {
+            programId: result.programId,
+            passkitStatus: result.passkitStatus,
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          programId: result.programId,
+          passkit: {
+            status: result.passkitStatus,
+            programId: result.passkitProgramId,
+            tierId: result.passkitTierId,
+            enrollmentUrl: result.enrollmentUrl,
+          },
+        },
+        metadata: { processingTime },
+      });
+
+    } catch (error) {
+      console.error("Retry PassKit sync error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
 }
 
 export const clientController = new ClientController();
