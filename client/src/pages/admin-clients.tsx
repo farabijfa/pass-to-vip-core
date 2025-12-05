@@ -11,23 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient } from "@/lib/queryClient";
-import { 
-  Users, 
-  Plus, 
-  Building2, 
-  Mail, 
-  Key, 
-  Loader2,
-  CheckCircle,
-  XCircle,
-  Trash2,
-  Eye,
-  EyeOff,
-  ShieldAlert,
-  Copy,
-  Link,
-  ExternalLink
-} from "lucide-react";
 
 interface Tenant {
   id: string;
@@ -194,15 +177,14 @@ export default function AdminClientsPage() {
   if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <ShieldAlert className="h-16 w-16 text-muted-foreground opacity-50" />
         <h2 className="text-xl font-semibold text-foreground">Access Restricted</h2>
-        <p className="text-muted-foreground text-center max-w-md">
+        <p className="text-muted-foreground text-center max-w-md text-sm">
           You need administrator privileges to access this page. 
           Contact your platform administrator for access.
         </p>
-        <Badge variant="outline" className="mt-2">
+        <span className="text-sm text-muted-foreground mt-2">
           Current Role: {user?.role || "Unknown"}
-        </Badge>
+        </span>
       </div>
     );
   }
@@ -211,17 +193,16 @@ export default function AdminClientsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-admin-clients-title">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-admin-clients-title">
             Client Management
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground mt-1">
             Provision and manage client accounts
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-client">
-              <Plus className="h-4 w-4 mr-2" />
               Add Client
             </Button>
           </DialogTrigger>
@@ -234,10 +215,7 @@ export default function AdminClientsPage() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label htmlFor="businessName" className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Business Name
-                </Label>
+                <Label htmlFor="businessName" className="text-sm">Business Name</Label>
                 <Input
                   id="businessName"
                   placeholder="Joe's Pizza"
@@ -247,10 +225,7 @@ export default function AdminClientsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  Login Email
-                </Label>
+                <Label htmlFor="email" className="text-sm">Login Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -261,10 +236,7 @@ export default function AdminClientsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="flex items-center gap-2">
-                  <Key className="h-4 w-4" />
-                  Password
-                </Label>
+                <Label htmlFor="password" className="text-sm">Password</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -277,17 +249,17 @@ export default function AdminClientsPage() {
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     className="absolute right-0 top-0 h-full px-3"
                     onClick={() => setShowPassword(!showPassword)}
                     data-testid="button-toggle-password"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? "Hide" : "Show"}
                   </Button>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="passkitProgramId">PassKit Program ID</Label>
+                <Label htmlFor="passkitProgramId" className="text-sm">PassKit Program ID</Label>
                 <Input
                   id="passkitProgramId"
                   placeholder="pk_xxxxxxxx"
@@ -297,7 +269,7 @@ export default function AdminClientsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="protocol">Protocol Type</Label>
+                <Label htmlFor="protocol" className="text-sm">Protocol Type</Label>
                 <Select
                   value={formData.protocol}
                   onValueChange={(value: "MEMBERSHIP" | "COUPON" | "EVENT_TICKET") => 
@@ -330,14 +302,7 @@ export default function AdminClientsPage() {
                   disabled={provisionMutation.isPending}
                   data-testid="button-create-client"
                 >
-                  {provisionMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    "Create Client"
-                  )}
+                  {provisionMutation.isPending ? "Creating..." : "Create Client"}
                 </Button>
               </div>
             </form>
@@ -348,8 +313,7 @@ export default function AdminClientsPage() {
       {error ? (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="py-8 text-center">
-            <XCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
-            <p className="text-destructive">{(error as Error).message}</p>
+            <p className="text-destructive text-sm">{(error as Error).message}</p>
           </CardContent>
         </Card>
       ) : isLoading ? (
@@ -360,108 +324,93 @@ export default function AdminClientsPage() {
         </div>
       ) : data?.tenants && data.tenants.length > 0 ? (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>{data.count} client{data.count !== 1 ? "s" : ""} registered</span>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {data.count} client{data.count !== 1 ? "s" : ""} registered
+          </p>
           <div className="grid gap-4">
             {data.tenants.map((tenant) => (
-              <Card key={tenant.id} className="border-border bg-card/80" data-testid={`card-tenant-${tenant.id}`}>
+              <Card key={tenant.id} className="border-border" data-testid={`card-tenant-${tenant.id}`}>
                 <CardHeader className="pb-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <CardTitle className="text-foreground flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-primary" />
+                      <CardTitle className="text-foreground text-lg">
                         {tenant.programs?.name || "Unknown Program"}
                       </CardTitle>
-                      <CardDescription className="mt-1">
+                      <CardDescription className="mt-1 text-sm">
                         User ID: {tenant.id.slice(0, 8)}...
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge 
-                        variant={tenant.programs?.is_suspended ? "destructive" : "default"}
+                      <span 
+                        className={`text-xs ${tenant.programs?.is_suspended ? 'text-destructive' : 'text-foreground'}`}
                         data-testid={`badge-status-${tenant.id}`}
                       >
-                        {tenant.programs?.is_suspended ? (
-                          <>
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Suspended
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Active
-                          </>
-                        )}
-                      </Badge>
+                        {tenant.programs?.is_suspended ? "Suspended" : "Active"}
+                      </span>
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="sm"
                         onClick={() => handleDelete(tenant.id, tenant.programs?.name || "this client")}
                         disabled={deleteMutation.isPending}
                         data-testid={`button-delete-${tenant.id}`}
                       >
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        Delete
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {tenant.programs?.dashboard_slug && (
-                    <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-md border border-primary/20">
-                      <Link className="h-4 w-4 text-primary flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-muted-foreground mb-1">Enrollment URL</p>
-                        <code className="text-sm text-foreground block truncate" data-testid={`text-enrollment-url-${tenant.id}`}>
+                    <div className="p-3 bg-muted/30 rounded-md border border-border">
+                      <p className="text-xs text-muted-foreground mb-1">Enrollment URL</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm text-foreground flex-1 truncate" data-testid={`text-enrollment-url-${tenant.id}`}>
                           {window.location.origin}/enroll/{tenant.programs.dashboard_slug}
                         </code>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const url = `${window.location.origin}/enroll/${tenant.programs?.dashboard_slug}`;
+                            navigator.clipboard.writeText(url);
+                            toast({
+                              title: "URL Copied",
+                              description: "Enrollment URL copied to clipboard.",
+                            });
+                          }}
+                          data-testid={`button-copy-url-${tenant.id}`}
+                        >
+                          Copy
+                        </Button>
+                        <a
+                          href={`/enroll/${tenant.programs.dashboard_slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                          data-testid={`link-open-url-${tenant.id}`}
+                        >
+                          Open
+                        </a>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          const url = `${window.location.origin}/enroll/${tenant.programs?.dashboard_slug}`;
-                          navigator.clipboard.writeText(url);
-                          toast({
-                            title: "URL Copied",
-                            description: "Enrollment URL copied to clipboard.",
-                          });
-                        }}
-                        data-testid={`button-copy-url-${tenant.id}`}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <a
-                        href={`/enroll/${tenant.programs.dashboard_slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-primary transition-colors"
-                        data-testid={`link-open-url-${tenant.id}`}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
                     </div>
                   )}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Protocol</p>
-                      <Badge variant="outline" className="mt-1">
-                        {tenant.programs?.protocol || "N/A"}
-                      </Badge>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Protocol</p>
+                      <p className="text-foreground mt-1">{tenant.programs?.protocol || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Role</p>
-                      <p className="text-foreground font-medium mt-1">{tenant.role}</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Role</p>
+                      <p className="text-foreground mt-1">{tenant.role}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">PassKit ID</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider">PassKit ID</p>
                       <code className="text-xs text-muted-foreground block mt-1 truncate">
                         {tenant.programs?.passkit_program_id || "N/A"}
                       </code>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Created</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider">Created</p>
                       <p className="text-foreground mt-1">
                         {new Date(tenant.created_at).toLocaleDateString()}
                       </p>
@@ -473,15 +422,13 @@ export default function AdminClientsPage() {
           </div>
         </div>
       ) : (
-        <Card className="border-border bg-card/80">
+        <Card className="border-border">
           <CardContent className="py-12 text-center">
-            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
             <h3 className="text-lg font-medium text-foreground mb-2">No Clients Yet</h3>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-muted-foreground text-sm mb-4">
               Get started by provisioning your first client account.
             </p>
             <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-first-client">
-              <Plus className="h-4 w-4 mr-2" />
               Add Your First Client
             </Button>
           </CardContent>
