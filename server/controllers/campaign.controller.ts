@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { campaignService } from "../services/campaign.service";
+import { postGridService } from "../services/postgrid.service";
+import { supabaseService } from "../services/supabase.service";
 import { generate } from "short-uuid";
 
 interface MulterRequest extends Request {
@@ -242,6 +244,329 @@ export class CampaignController {
       );
     }
   }
+
+  async getTemplates(req: Request, res: Response, _next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+
+    try {
+      const result = await postGridService.listTemplates();
+
+      if (result.error) {
+        return res.status(500).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "POSTGRID_ERROR",
+              message: result.error,
+            },
+            requestId
+          )
+        );
+      }
+
+      const templates = result.templates.map((t: any) => ({
+        id: t.id,
+        name: t.description || t.id,
+        description: t.description,
+        type: t.object === "letter_template" ? "letter" : "postcard",
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      }));
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          { templates },
+          undefined,
+          requestId
+        )
+      );
+    } catch (error) {
+      console.error("Get templates error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: error instanceof Error ? error.message : "Failed to fetch templates",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
+  async validateClient(req: Request, res: Response, _next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+
+    try {
+      const { clientId } = req.body;
+
+      if (!clientId) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "MISSING_CLIENT_ID",
+              message: "Client ID is required",
+            },
+            requestId
+          )
+        );
+      }
+
+      const result = await supabaseService.validateClientById(clientId);
+
+      if (!result.success || !result.client) {
+        return res.status(404).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "CLIENT_NOT_FOUND",
+              message: result.error || "Client not found",
+            },
+            requestId
+          )
+        );
+      }
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          {
+            client: result.client,
+            valid: true,
+          },
+          undefined,
+          requestId
+        )
+      );
+    } catch (error) {
+      console.error("Validate client error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: error instanceof Error ? error.message : "Failed to validate client",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
+  async estimateCost(req: Request, res: Response, _next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+
+    try {
+      const { contact_count, resource_type, size, mailing_class } = req.body;
+
+      if (!contact_count || contact_count < 1) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "INVALID_CONTACT_COUNT",
+              message: "Contact count must be at least 1",
+            },
+            requestId
+          )
+        );
+      }
+
+      const pricing = getCampaignPricing(resource_type, size, mailing_class);
+      const totalCostCents = pricing.unitCostCents * contact_count;
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          {
+            contactCount: contact_count,
+            resourceType: resource_type,
+            size,
+            mailingClass: mailing_class,
+            unitCostCents: pricing.unitCostCents,
+            totalCostCents,
+            breakdown: pricing.breakdown,
+          },
+          undefined,
+          requestId
+        )
+      );
+    } catch (error) {
+      console.error("Estimate cost error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: error instanceof Error ? error.message : "Failed to estimate cost",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
+  async getCampaignHistory(req: Request, res: Response, _next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+
+    try {
+      const { program_id, limit = 20, offset = 0 } = req.query;
+
+      const result = await supabaseService.getCampaignHistory(
+        program_id as string | undefined,
+        Number(limit),
+        Number(offset)
+      );
+
+      if (!result.success) {
+        return res.status(500).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "FETCH_ERROR",
+              message: result.error || "Failed to fetch campaign history",
+            },
+            requestId
+          )
+        );
+      }
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          {
+            campaigns: result.campaigns,
+            total: result.total,
+          },
+          undefined,
+          requestId
+        )
+      );
+    } catch (error) {
+      console.error("Get campaign history error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: error instanceof Error ? error.message : "Failed to fetch campaign history",
+          },
+          requestId
+        )
+      );
+    }
+  }
+
+  async getCampaignDetails(req: Request, res: Response, _next: NextFunction) {
+    const requestId = (req.headers["x-request-id"] as string) || generate();
+
+    try {
+      const { campaignId } = req.params;
+
+      if (!campaignId) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "MISSING_CAMPAIGN_ID",
+              message: "Campaign ID is required",
+            },
+            requestId
+          )
+        );
+      }
+
+      const result = await supabaseService.getCampaignDetails(campaignId);
+
+      if (!result.success) {
+        return res.status(404).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "CAMPAIGN_NOT_FOUND",
+              message: result.error || "Campaign not found",
+            },
+            requestId
+          )
+        );
+      }
+
+      return res.status(200).json(
+        createResponse(
+          true,
+          {
+            campaign: result.campaign,
+            contacts: result.contacts,
+          },
+          undefined,
+          requestId
+        )
+      );
+    } catch (error) {
+      console.error("Get campaign details error:", error);
+      return res.status(500).json(
+        createResponse(
+          false,
+          undefined,
+          {
+            code: "INTERNAL_ERROR",
+            message: error instanceof Error ? error.message : "Failed to fetch campaign details",
+          },
+          requestId
+        )
+      );
+    }
+  }
+}
+
+function getCampaignPricing(
+  resourceType: string,
+  size: string,
+  mailingClass: string
+): { unitCostCents: number; breakdown: { printing: number; postage: number; processing: number } } {
+  const pricing: Record<string, Record<string, { printing: number; postage: number; processing: number }>> = {
+    postcard: {
+      "4x6": { printing: 15, postage: 35, processing: 5 },
+      "6x4": { printing: 15, postage: 35, processing: 5 },
+      "6x9": { printing: 25, postage: 45, processing: 5 },
+      "9x6": { printing: 25, postage: 45, processing: 5 },
+      "6x11": { printing: 35, postage: 55, processing: 5 },
+      "11x6": { printing: 35, postage: 55, processing: 5 },
+    },
+    letter: {
+      "us_letter": { printing: 50, postage: 60, processing: 10 },
+      "us_legal": { printing: 55, postage: 65, processing: 10 },
+      "a4": { printing: 50, postage: 60, processing: 10 },
+    },
+  };
+
+  const mailingClassMultiplier = mailingClass === "first_class" ? 1.5 : 1.0;
+
+  const basePricing = pricing[resourceType]?.[size] || { printing: 50, postage: 50, processing: 10 };
+  const adjustedPostage = Math.round(basePricing.postage * mailingClassMultiplier);
+
+  return {
+    unitCostCents: basePricing.printing + adjustedPostage + basePricing.processing,
+    breakdown: {
+      printing: basePricing.printing,
+      postage: adjustedPostage,
+      processing: basePricing.processing,
+    },
+  };
 }
 
 export const campaignController = new CampaignController();

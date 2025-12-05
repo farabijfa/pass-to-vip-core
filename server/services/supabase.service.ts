@@ -623,6 +623,409 @@ class SupabaseService {
       };
     }
   }
+
+  async validateClientById(clientId: string): Promise<{
+    success: boolean;
+    client?: {
+      id: string;
+      name: string;
+      programId: string;
+      programName: string;
+      passkitProgramId: string;
+      protocol: string;
+    };
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("tenants")
+        .select(`
+          id,
+          business_name,
+          programs!inner (
+            id,
+            name,
+            passkit_program_id,
+            protocol
+          )
+        `)
+        .eq("id", clientId)
+        .limit(1);
+
+      if (error) {
+        console.error("Validate client by ID error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to validate client",
+        };
+      }
+
+      const tenant = data?.[0];
+      if (!tenant) {
+        return {
+          success: false,
+          error: "Client not found",
+        };
+      }
+
+      const program = Array.isArray(tenant.programs) 
+        ? tenant.programs[0] 
+        : tenant.programs;
+
+      if (!program) {
+        return {
+          success: false,
+          error: "Client has no associated program",
+        };
+      }
+
+      return {
+        success: true,
+        client: {
+          id: tenant.id,
+          name: tenant.business_name || "Unknown",
+          programId: program.id,
+          programName: program.name || "Unknown Program",
+          passkitProgramId: program.passkit_program_id || "",
+          protocol: program.protocol || "MEMBERSHIP",
+        },
+      };
+    } catch (error) {
+      console.error("Validate client by ID error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async getCampaignHistory(
+    programId?: string,
+    limit: number = 20,
+    offset: number = 0
+  ): Promise<{
+    success: boolean;
+    campaigns?: any[];
+    total?: number;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      let query = client
+        .from("campaign_runs")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (programId) {
+        query = query.eq("program_id", programId);
+      }
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error("Get campaign history error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to fetch campaign history",
+        };
+      }
+
+      return {
+        success: true,
+        campaigns: data || [],
+        total: count || 0,
+      };
+    } catch (error) {
+      console.error("Get campaign history error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async getCampaignDetails(campaignId: string): Promise<{
+    success: boolean;
+    campaign?: any;
+    contacts?: any[];
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data: campaign, error: campaignError } = await client
+        .from("campaign_runs")
+        .select("*")
+        .eq("id", campaignId)
+        .single();
+
+      if (campaignError) {
+        console.error("Get campaign details error:", campaignError);
+        return {
+          success: false,
+          error: campaignError.message || "Failed to fetch campaign",
+        };
+      }
+
+      if (!campaign) {
+        return {
+          success: false,
+          error: "Campaign not found",
+        };
+      }
+
+      const { data: contacts, error: contactsError } = await client
+        .from("campaign_contacts")
+        .select("*")
+        .eq("campaign_run_id", campaignId)
+        .order("created_at", { ascending: true });
+
+      if (contactsError) {
+        console.warn("Could not fetch campaign contacts:", contactsError.message);
+      }
+
+      return {
+        success: true,
+        campaign,
+        contacts: contacts || [],
+      };
+    } catch (error) {
+      console.error("Get campaign details error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async createCampaignRun(campaignData: {
+    programId: string;
+    clientId?: string;
+    resourceType: string;
+    size?: string;
+    mailingClass?: string;
+    templateId?: string;
+    frontTemplateId?: string;
+    backTemplateId?: string;
+    protocol?: string;
+    description?: string;
+    name?: string;
+    totalContacts: number;
+    estimatedCostCents?: number;
+    createdBy: string;
+  }): Promise<{
+    success: boolean;
+    campaignId?: string;
+    error?: string;
+  }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("campaign_runs")
+        .insert({
+          program_id: campaignData.programId,
+          client_id: campaignData.clientId,
+          resource_type: campaignData.resourceType,
+          size: campaignData.size,
+          mailing_class: campaignData.mailingClass || "standard_class",
+          template_id: campaignData.templateId,
+          front_template_id: campaignData.frontTemplateId,
+          back_template_id: campaignData.backTemplateId,
+          protocol: campaignData.protocol,
+          description: campaignData.description,
+          name: campaignData.name,
+          total_contacts: campaignData.totalContacts,
+          estimated_cost_cents: campaignData.estimatedCostCents,
+          created_by: campaignData.createdBy,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Create campaign run error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to create campaign run",
+        };
+      }
+
+      return {
+        success: true,
+        campaignId: data?.id,
+      };
+    } catch (error) {
+      console.error("Create campaign run error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async updateCampaignStatus(
+    campaignId: string,
+    status: string,
+    successCount?: number,
+    failedCount?: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const client = this.getClient();
+
+      const updateData: Record<string, any> = { status };
+
+      if (successCount !== undefined) {
+        updateData.success_count = successCount;
+      }
+      if (failedCount !== undefined) {
+        updateData.failed_count = failedCount;
+      }
+
+      if (status === "processing") {
+        updateData.started_at = new Date().toISOString();
+      } else if (status === "completed" || status === "failed") {
+        updateData.completed_at = new Date().toISOString();
+      }
+
+      const { error } = await client
+        .from("campaign_runs")
+        .update(updateData)
+        .eq("id", campaignId);
+
+      if (error) {
+        console.error("Update campaign status error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to update campaign status",
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Update campaign status error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async createCampaignContact(contactData: {
+    campaignRunId: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country?: string;
+    claimCode?: string;
+    claimUrl?: string;
+  }): Promise<{ success: boolean; contactId?: string; error?: string }> {
+    try {
+      const client = this.getClient();
+
+      const { data, error } = await client
+        .from("campaign_contacts")
+        .insert({
+          campaign_run_id: contactData.campaignRunId,
+          first_name: contactData.firstName,
+          last_name: contactData.lastName,
+          email: contactData.email,
+          phone: contactData.phone,
+          address_line_1: contactData.addressLine1,
+          address_line_2: contactData.addressLine2,
+          city: contactData.city,
+          state: contactData.state,
+          postal_code: contactData.postalCode,
+          country: contactData.country || "US",
+          claim_code: contactData.claimCode,
+          claim_url: contactData.claimUrl,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Create campaign contact error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to create campaign contact",
+        };
+      }
+
+      return {
+        success: true,
+        contactId: data?.id,
+      };
+    } catch (error) {
+      console.error("Create campaign contact error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  async updateCampaignContact(
+    contactId: string,
+    updates: {
+      status?: string;
+      errorMessage?: string;
+      postgridMailId?: string;
+      postgridStatus?: string;
+      estimatedDeliveryDate?: string;
+      passkitPassId?: string;
+      passkitStatus?: string;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const client = this.getClient();
+
+      const updateData: Record<string, any> = {};
+
+      if (updates.status) updateData.status = updates.status;
+      if (updates.errorMessage) updateData.error_message = updates.errorMessage;
+      if (updates.postgridMailId) updateData.postgrid_mail_id = updates.postgridMailId;
+      if (updates.postgridStatus) updateData.postgrid_status = updates.postgridStatus;
+      if (updates.estimatedDeliveryDate) updateData.estimated_delivery_date = updates.estimatedDeliveryDate;
+      if (updates.passkitPassId) updateData.passkit_pass_id = updates.passkitPassId;
+      if (updates.passkitStatus) updateData.passkit_status = updates.passkitStatus;
+
+      if (updates.status === "sent" || updates.status === "processing") {
+        updateData.processed_at = new Date().toISOString();
+      }
+
+      const { error } = await client
+        .from("campaign_contacts")
+        .update(updateData)
+        .eq("id", contactId);
+
+      if (error) {
+        console.error("Update campaign contact error:", error);
+        return {
+          success: false,
+          error: error.message || "Failed to update campaign contact",
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Update campaign contact error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
 }
 
 export const supabaseService = new SupabaseService();

@@ -6,8 +6,12 @@ import { jwtAuth } from "../middleware/auth.middleware";
 
 const router = Router();
 
-const VALID_POSTCARD_SIZES = ["6x4", "9x6", "11x6"] as const;
+const VALID_POSTCARD_SIZES = ["4x6", "6x4", "6x9", "9x6", "6x11", "11x6"] as const;
+const VALID_LETTER_SIZES = ["us_letter", "us_legal", "a4"] as const;
+const VALID_MAILING_CLASSES = ["standard_class", "first_class"] as const;
 type PostcardSize = typeof VALID_POSTCARD_SIZES[number];
+type LetterSize = typeof VALID_LETTER_SIZES[number];
+type MailingClass = typeof VALID_MAILING_CLASSES[number];
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -43,7 +47,7 @@ const upload = multer({
 });
 
 const validateCampaignOptions = (req: Request, res: Response, next: NextFunction) => {
-  const { resource_type, size } = req.body;
+  const { resource_type, size, mailing_class } = req.body;
 
   const resourceType = resource_type || "postcard";
   
@@ -73,6 +77,37 @@ const validateCampaignOptions = (req: Request, res: Response, next: NextFunction
     req.body.size = postcardSize;
   }
 
+  if (resourceType === "letter") {
+    const letterSize = size || "us_letter";
+    
+    if (!VALID_LETTER_SIZES.includes(letterSize as LetterSize)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "INVALID_LETTER_SIZE",
+          message: `letter size must be one of: ${VALID_LETTER_SIZES.join(", ")}`,
+        },
+      });
+    }
+
+    req.body.size = letterSize;
+  }
+
+  if (mailing_class) {
+    if (!VALID_MAILING_CLASSES.includes(mailing_class as MailingClass)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "INVALID_MAILING_CLASS",
+          message: `mailing_class must be one of: ${VALID_MAILING_CLASSES.join(", ")}`,
+        },
+      });
+    }
+    req.body.mailing_class = mailing_class;
+  } else {
+    req.body.mailing_class = "standard_class";
+  }
+
   req.body.resource_type = resourceType;
 
   next();
@@ -91,6 +126,53 @@ router.post(
   upload.single("file"),
   validateCampaignOptions,
   campaignController.uploadCsv.bind(campaignController)
+);
+
+router.get(
+  "/templates",
+  jwtAuth,
+  campaignController.getTemplates.bind(campaignController)
+);
+
+router.post(
+  "/validate-client",
+  jwtAuth,
+  campaignController.validateClient.bind(campaignController)
+);
+
+router.post(
+  "/estimate-cost",
+  jwtAuth,
+  validateCampaignOptions,
+  campaignController.estimateCost.bind(campaignController)
+);
+
+router.get(
+  "/history",
+  jwtAuth,
+  campaignController.getCampaignHistory.bind(campaignController)
+);
+
+router.get(
+  "/:campaignId",
+  jwtAuth,
+  campaignController.getCampaignDetails.bind(campaignController)
+);
+
+router.get(
+  "/config/options",
+  jwtAuth,
+  (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: {
+        postcardSizes: VALID_POSTCARD_SIZES,
+        letterSizes: VALID_LETTER_SIZES,
+        mailingClasses: VALID_MAILING_CLASSES,
+        resourceTypes: ["postcard", "letter"],
+      },
+    });
+  }
 );
 
 export default router;
