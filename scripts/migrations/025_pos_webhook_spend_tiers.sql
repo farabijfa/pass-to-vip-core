@@ -122,7 +122,9 @@ COMMENT ON TABLE pos_api_keys IS 'API keys for external POS system authenticatio
 ALTER TABLE spend_ledger ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role full access (for backend operations)
-CREATE POLICY IF NOT EXISTS "Service role has full access to spend_ledger" 
+-- Drop existing policy if it exists, then create
+DROP POLICY IF EXISTS "Service role has full access to spend_ledger" ON spend_ledger;
+CREATE POLICY "Service role has full access to spend_ledger" 
 ON spend_ledger 
 FOR ALL 
 USING (auth.role() = 'service_role');
