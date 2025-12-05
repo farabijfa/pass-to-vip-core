@@ -138,6 +138,10 @@ class ProgramsController {
         "name",
         "is_suspended",
         "enrollment_url",
+        "passkit_program_id",
+        "passkit_tier_id",
+        "passkit_status",
+        "timezone",
       ];
 
       const sanitizedUpdates: Record<string, any> = {};
@@ -172,6 +176,9 @@ class ProgramsController {
           id,
           name,
           passkit_program_id,
+          passkit_tier_id,
+          passkit_status,
+          timezone,
           birthday_bot_enabled,
           birthday_reward_points,
           birthday_message,

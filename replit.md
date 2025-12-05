@@ -112,6 +112,7 @@ The `passkit-provision.service.ts` orchestrates automatic digital wallet program
 **Provisioning Status Values:**
 | Status | Description |
 |--------|-------------|
+| `pending` | Provisioning in progress (retry attempt) |
 | `provisioned` | PassKit program/tier created automatically |
 | `manual_required` | Auto-provision failed; manual setup needed |
 | `skipped` | Protocol doesn't support auto-provisioning |
@@ -159,10 +160,14 @@ Raw: pub-abc123 → PUB-ABC123
 - **GET /api/client/members** - Paginated members with search
 - **GET /api/client/campaigns** - Campaign/notification history
 
-### Admin API (SUPER_ADMIN or PLATFORM_ADMIN)
-- **GET /api/client/admin/tenants** - List all clients with dashboard_slug
-- **POST /api/client/admin/provision** - Create new client account
-- **DELETE /api/client/admin/tenants/:userId** - Remove client
+### Admin API (API Key Authentication)
+- **GET /api/admin/tenants** - List all clients with dashboard_slug and passkit_status
+- **GET /api/admin/tenants/:userId** - Get single tenant details
+- **POST /api/admin/provision** - Create new client account with auto PassKit provisioning
+- **DELETE /api/admin/tenants/:userId** - Remove client
+- **POST /api/admin/tenants/:programId/retry-passkit** - Retry PassKit provisioning (for manual_required/skipped)
+- **PATCH /api/admin/tenants/:programId/passkit** - Manually update PassKit settings
+- **GET /api/admin/passkit/status** - Check PassKit API health
 
 ### Internal POS API (JWT Authentication)
 - **POST /api/pos/lookup** - Member lookup by external_id
@@ -248,6 +253,7 @@ migrations/004_rpc_functions_verification.sql
 migrations/010_dashboard_slug.sql
 migrations/011_pos_integration.sql
 migrations/012_secure_public_access.sql  # CRITICAL: Locks down anon key access
+migrations/013_passkit_status_tracking.sql  # Adds passkit_status and timezone columns
 ```
 
 ## Development Commands
@@ -279,6 +285,11 @@ npx tsx scripts/prod-validation.ts
 - **Template Management:** Dynamic content
 
 ## Recent Changes
+- **PassKit Retry Provisioning:** POST `/api/admin/tenants/:programId/retry-passkit` to retry failed provisioning
+- **PassKit Settings Update:** PATCH `/api/admin/tenants/:programId/passkit` to manually configure PassKit IDs with duplicate detection
+- **PassKit Health Check:** GET `/api/admin/passkit/status` to verify PassKit API credentials
+- **Status Tracking:** Migration 013 adds `passkit_status` (pending/provisioned/manual_required/skipped) and `timezone` columns
+- **Improved Error Codes:** Duplicate detection returns specific codes (DUPLICATE_BUSINESS_NAME, DUPLICATE_PASSKIT_ID)
 - **PassKit Auto-Provisioning:** New orchestration service creates programs/tiers automatically with soft-fail approach
 - **Admin API Enhanced:** passkitProgramId now optional; response includes PassKit status, tier ID, enrollment URL
 - **POS Clerk Override:** Redemption actions require confirmation modal to prevent accidental point deductions

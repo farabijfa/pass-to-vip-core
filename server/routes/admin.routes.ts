@@ -28,4 +28,22 @@ router.delete(
   adminController.deleteTenant.bind(adminController)
 );
 
+router.post(
+  "/tenants/:programId/retry-passkit",
+  checkApiKey,
+  adminController.retryPassKitProvisioning.bind(adminController)
+);
+
+router.patch(
+  "/tenants/:programId/passkit",
+  checkApiKey,
+  adminController.updatePassKitSettings.bind(adminController)
+);
+
+router.get(
+  "/passkit/status",
+  checkApiKey,
+  adminController.getPassKitHealth.bind(adminController)
+);
+
 export default router;
