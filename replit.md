@@ -20,6 +20,7 @@ The client dashboard employs a USA Patriotic Color Scheme: Primary Blue (`#2563e
 ### Technical Implementations
 - **Authentication:** JWT with role-based access control (`SUPER_ADMIN`, `PLATFORM_ADMIN`, `CLIENT_ADMIN`).
 - **Data Management:** PostgreSQL via Supabase, leveraging RPC functions and Row Level Security (RLS) for multi-tenancy.
+- **Multi-Program Architecture:** One client (tenant) can manage multiple programs (verticals) simultaneously. Programs table has `tenant_id` FK and `is_primary` boolean. Each vertical (MEMBERSHIP, EVENT_TICKET, COUPON) can have its own PassKit credentials and enrollment URLs.
 - **Scanning:** Supports dual QR/barcode scanning (keyboard-wedge and mobile camera via `html5-qrcode`).
 - **Code Parsing:** Smart parser extracts member IDs from various formats.
 - **Digital Wallet Integration:** Managed by `passkit-provision.service.ts`, supporting "soft-fail" provisioning.
