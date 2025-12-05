@@ -64,59 +64,70 @@ export async function registerRoutes(
 
   app.use("/claim", claimRoutes);
 
-  app.get("/admin/campaign", basicAuth, (_req, res) => {
-    const adminPath = path.join(process.cwd(), "public", "admin.html");
-    if (fs.existsSync(adminPath)) {
-      res.sendFile(adminPath);
-    } else {
-      res.status(404).send("Admin page not found");
-    }
-  });
+  // SECURITY: Legacy HTML admin pages - only enabled in development
+  // Production should use the secure React dashboard at /admin/clients
+  const isProduction = process.env.NODE_ENV === "production";
 
-  app.get("/admin.html", basicAuth, (_req, res) => {
-    const adminPath = path.join(process.cwd(), "public", "admin.html");
-    if (fs.existsSync(adminPath)) {
-      res.sendFile(adminPath);
-    } else {
-      res.status(404).send("Admin page not found");
-    }
-  });
+  if (!isProduction) {
+    app.get("/admin/campaign", basicAuth, (_req, res) => {
+      const adminPath = path.join(process.cwd(), "public", "admin.html");
+      if (fs.existsSync(adminPath)) {
+        res.sendFile(adminPath);
+      } else {
+        res.status(404).send("Admin page not found");
+      }
+    });
 
-  app.get("/admin", basicAuth, (_req, res) => {
-    const indexPath = path.join(process.cwd(), "public", "admin-index.html");
-    if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
-    } else {
-      res.status(404).send("Admin dashboard not found");
-    }
-  });
+    app.get("/admin.html", basicAuth, (_req, res) => {
+      const adminPath = path.join(process.cwd(), "public", "admin.html");
+      if (fs.existsSync(adminPath)) {
+        res.sendFile(adminPath);
+      } else {
+        res.status(404).send("Admin page not found");
+      }
+    });
 
-  app.get("/admin/tenants", basicAuth, (_req, res) => {
-    const tenantsPath = path.join(process.cwd(), "public", "admin-tenants.html");
-    if (fs.existsSync(tenantsPath)) {
-      res.sendFile(tenantsPath);
-    } else {
-      res.status(404).send("Tenants page not found");
-    }
-  });
+    app.get("/admin", basicAuth, (_req, res) => {
+      const indexPath = path.join(process.cwd(), "public", "admin-index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send("Admin dashboard not found");
+      }
+    });
 
-  app.get("/admin/provision", basicAuth, (_req, res) => {
-    const provisionPath = path.join(process.cwd(), "public", "admin-provision.html");
-    if (fs.existsSync(provisionPath)) {
-      res.sendFile(provisionPath);
-    } else {
-      res.status(404).send("Provision page not found");
-    }
-  });
+    app.get("/admin/tenants", basicAuth, (_req, res) => {
+      const tenantsPath = path.join(process.cwd(), "public", "admin-tenants.html");
+      if (fs.existsSync(tenantsPath)) {
+        res.sendFile(tenantsPath);
+      } else {
+        res.status(404).send("Tenants page not found");
+      }
+    });
 
-  app.get("/admin/qr", basicAuth, (_req, res) => {
-    const qrPath = path.join(process.cwd(), "public", "admin-qr.html");
-    if (fs.existsSync(qrPath)) {
-      res.sendFile(qrPath);
-    } else {
-      res.status(404).send("QR viewer page not found");
-    }
-  });
+    app.get("/admin/provision", basicAuth, (_req, res) => {
+      const provisionPath = path.join(process.cwd(), "public", "admin-provision.html");
+      if (fs.existsSync(provisionPath)) {
+        res.sendFile(provisionPath);
+      } else {
+        res.status(404).send("Provision page not found");
+      }
+    });
+
+    app.get("/admin/qr", basicAuth, (_req, res) => {
+      const qrPath = path.join(process.cwd(), "public", "admin-qr.html");
+      if (fs.existsSync(qrPath)) {
+        res.sendFile(qrPath);
+      } else {
+        res.status(404).send("QR viewer page not found");
+      }
+    });
+  } else {
+    // In production, redirect legacy admin routes to React dashboard
+    app.get(["/admin", "/admin/*", "/admin.html"], (_req, res) => {
+      res.redirect("/admin/clients");
+    });
+  }
 
   app.use("/api/*", notFoundHandler);
 

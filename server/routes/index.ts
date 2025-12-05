@@ -12,6 +12,7 @@ import webhookRoutes from "./webhook.routes";
 import programsRoutes from "./programs.routes";
 import customersRoutes from "./customers.routes";
 import clientRoutes from "./client.routes";
+import enrollRoutes from "./enroll.routes";
 import { posRateLimiter, notifyRateLimiter } from "../middleware";
 
 const router = Router();
@@ -41,5 +42,7 @@ router.use("/programs", programsRoutes);
 router.use("/customers", customersRoutes);
 
 router.use("/client", clientRoutes);
+
+router.use("/enroll", enrollRoutes);
 
 export default router;

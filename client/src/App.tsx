@@ -16,6 +16,7 @@ import AnalyticsPage from "@/pages/analytics";
 import MembersPage from "@/pages/members";
 import POSPage from "@/pages/pos";
 import AdminClientsPage from "@/pages/admin-clients";
+import EnrollPage from "@/pages/enroll";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -102,6 +103,7 @@ function Router() {
           <ProtectedRoute component={AdminClientsPage} />
         </AuthenticatedLayout>
       </Route>
+      <Route path="/enroll/:slug" component={EnrollPage} />
       <Route path="/">
         <Redirect to="/dashboard" />
       </Route>
