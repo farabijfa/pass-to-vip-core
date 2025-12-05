@@ -40,6 +40,13 @@ Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge
   - **Client Command Center UI**: Tier configuration section now includes optional PassKit Tier ID inputs per tier level
   - **API Enhancement**: Tier threshold endpoint now accepts PassKit tier IDs for saving tier-specific pass designs
   - **Pass Design Per Tier**: When member points cross tier thresholds, can display different PassKit visual templates
+- **Tier System Visual Enhancements (v2.5.1)**: Complete tier display and celebration features
+  - **Tier Calculation Utilities**: Shared utilities (`server/utils/tier-calculator.ts`, `client/src/lib/tier-calculator.ts`) determine member tier based on points and program thresholds (Bronze ≤ bronze_max, Silver ≤ silver_max, Gold ≤ gold_max, Platinum = unlimited)
+  - **TierBadge Component**: Color-coded badges display tier status throughout the application with industry-standard colors (bronze, silver, gold, platinum)
+  - **Members Page Integration**: TierBadge displays in member table for quick tier identification
+  - **POS Tier Display**: Member info section shows current tier with TierBadge component
+  - **Tier Upgrade Celebration**: POS earn flow detects tier upgrades and shows animated celebration modal when members cross tier thresholds
+  - **Backend Tier Response**: POS earn endpoint returns `newTierName` for frontend tier upgrade detection
 
 ## User Preferences
 - Iterative development preferred
