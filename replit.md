@@ -1,7 +1,18 @@
 # Pass To VIP - Phygital Loyalty Ecosystem
 
+**Version:** 2.5.0  
+**Last Updated:** December 5, 2025  
+**Status:** Production Ready
+
 ## Overview
 Pass To VIP is a production-ready, multi-tenant SaaS platform designed to bridge physical mail campaigns with digital wallet technology. It enables businesses in Retail, Hospitality, and Event Management to manage loyalty programs, engage with customers via direct mail, and integrate with Apple Wallet and Google Pay. The platform has undergone rigorous production validation, ensuring its commercial readiness. Its core purpose is to provide a robust, secure, and scalable solution for modern loyalty and customer engagement.
+
+## Recent Changes (v2.5.0)
+- **Multi-Program Architecture**: One client can now manage multiple programs (MEMBERSHIP, EVENT_TICKET, COUPON) simultaneously
+- **Programs Management UI**: New "Programs" section in Client Command Center with add/remove/set-primary capabilities
+- **Protocol-Specific Badges**: Visual differentiation of program types with icons and colors
+- **Enhanced Admin API**: New endpoints for multi-program CRUD operations with RBAC protection
+- **Migration 020**: Added `tenant_id` and `is_primary` columns to programs table
 
 ## User Preferences
 - Iterative development preferred

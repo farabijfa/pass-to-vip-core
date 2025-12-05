@@ -1,5 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Pass%20To%20VIP-2563eb?style=for-the-badge" alt="Platform"/>
+  <img src="https://img.shields.io/badge/Version-2.5.0-blue?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Status-Production%20Ready-22c55e?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/Node.js-20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
@@ -43,6 +44,33 @@ This platform transforms physical mail recipients into digital wallet users thro
           |                                         |
           |              UNIFIED LOYALTY            |
           +----------------EXPERIENCE---------------+
+```
+
+---
+
+## What's New in v2.5.0
+
+### Multi-Program Architecture
+One tenant can now manage **multiple programs** (verticals) simultaneously:
+
+| Protocol | Use Case | Example |
+|----------|----------|---------|
+| **MEMBERSHIP** | Loyalty rewards programs | "Joe's Pizza VIP Club" |
+| **EVENT_TICKET** | Event-based passes | "Summer Music Festival 2025" |
+| **COUPON** | Promotional offers | "Flash Sale 50% Off" |
+
+**Key Features:**
+- Each program has independent PassKit credentials and enrollment URLs
+- Primary program designation for default routing
+- Protocol-specific visual badges in admin UI
+- Add/remove programs without affecting existing members
+
+**New Admin API Endpoints:**
+```
+GET    /api/client/admin/tenants/:userId/programs          # List all programs
+POST   /api/client/admin/tenants/:userId/programs          # Add new program
+DELETE /api/client/admin/tenants/:userId/programs/:id      # Remove program
+PATCH  /api/client/admin/tenants/:userId/programs/:id/primary  # Set primary
 ```
 
 ---
@@ -125,12 +153,14 @@ migrations/015_earn_rate_multiplier.sql    # Integer-based point system
 migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixes
 migrations/018_billing_and_quotas.sql      # Gap G: Revenue leakage prevention
 migrations/019_campaign_tracking.sql       # Campaign runs & contacts tracking
+migrations/020_multi_program_support.sql   # NEW: Multi-program architecture
 ```
 
 **Important:** 
 - Migrations 012 and 014 are critical for production security and resilient client provisioning.
 - Migrations 017-018 add security hardening for atomic transactions and billing quotas.
 - Migration 019 is idempotent and can be safely re-run.
+- **Migration 020** enables one tenant to manage multiple programs (verticals) simultaneously.
 
 ### 4. Start Development Server
 
@@ -221,6 +251,7 @@ This system has been hardened with **seven validation protocols** designed to br
 | Feature | Description |
 |---------|-------------|
 | **Multi-Tenant Architecture** | Secure data isolation per client with program-level access control |
+| **Multi-Program Support** | One tenant can manage multiple verticals (MEMBERSHIP, EVENT_TICKET, COUPON) simultaneously |
 | **Client Dashboard** | React-based portal for program managers with analytics, members, and POS |
 | **Digital Wallet Integration** | Apple Wallet & Google Pay passes via PassKit |
 | **Physical Mail Campaigns** | Automated postcards & letters via PostGrid |
@@ -311,7 +342,7 @@ The React-based client dashboard provides program managers with a complete view 
 | **Assets** | `/assets` | Program QR codes, PNG/SVG downloads, social sharing links |
 | **POS Simulator** | `/pos` | Point-of-sale transaction testing |
 | **Campaign Launcher** | `/admin/campaigns` | Admin-only direct mail campaign management |
-| **Admin Clients** | `/admin/clients` | Platform admin client management |
+| **Admin Clients** | `/admin/clients` | Platform admin client management with multi-program support |
 
 ### Design System
 
