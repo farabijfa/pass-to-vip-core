@@ -2,7 +2,26 @@ import type { Request, Response } from "express";
 import { notificationService } from "../services/notification.service";
 import { z } from "zod";
 
-const segmentSchema = z.enum(["ALL", "VIP", "DORMANT", "GEO", "CSV"]);
+const protocolSchema = z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]);
+
+const membershipSegmentSchema = z.enum([
+  "ALL", "TIER_BRONZE", "TIER_SILVER", "TIER_GOLD", "TIER_PLATINUM",
+  "VIP", "DORMANT", "GEO", "CSV"
+]);
+
+const couponSegmentSchema = z.enum([
+  "ALL_ACTIVE", "UNREDEEMED", "EXPIRING_SOON", "GEO", "CSV"
+]);
+
+const eventTicketSegmentSchema = z.enum([
+  "ALL_TICKETED", "NOT_CHECKED_IN", "CHECKED_IN", "GEO", "CSV"
+]);
+
+const segmentSchema = z.union([
+  membershipSegmentSchema,
+  couponSegmentSchema,
+  eventTicketSegmentSchema
+]);
 
 const segmentConfigSchema = z.object({
   vipThreshold: z.number().min(0).optional(),
@@ -12,7 +31,9 @@ const segmentConfigSchema = z.object({
 });
 
 const broadcastSchema = z.object({
+  tenantId: z.string().min(1, "Tenant ID is required"),
   programId: z.string().min(1, "Program ID is required"),
+  protocol: protocolSchema,
   message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
   segment: segmentSchema.optional(),
   segmentConfig: segmentConfigSchema.optional(),
@@ -20,23 +41,35 @@ const broadcastSchema = z.object({
 });
 
 const broadcastTestSchema = z.object({
+  tenantId: z.string().min(1, "Tenant ID is required"),
   programId: z.string().min(1, "Program ID is required"),
+  protocol: protocolSchema,
   message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
   segment: segmentSchema.optional(),
   segmentConfig: segmentConfigSchema.optional(),
 });
 
 const csvBroadcastSchema = z.object({
+  tenantId: z.string().min(1, "Tenant ID is required"),
   programId: z.string().min(1, "Program ID is required"),
+  protocol: protocolSchema,
   message: z.string().min(5, "Message too short (minimum 5 characters)").max(500, "Message too long"),
   memberIds: z.array(z.string()).min(1, "At least one member ID required"),
   campaignName: z.string().optional(),
 });
 
 const segmentPreviewSchema = z.object({
+  tenantId: z.string().min(1, "Tenant ID is required"),
   programId: z.string().min(1, "Program ID is required"),
+  protocol: protocolSchema,
   segment: segmentSchema,
   segmentConfig: segmentConfigSchema.optional(),
+});
+
+const getSegmentsSchema = z.object({
+  tenantId: z.string().min(1, "Tenant ID is required"),
+  programId: z.string().min(1, "Program ID is required"),
+  protocol: protocolSchema,
 });
 
 class NotificationController {
@@ -58,12 +91,14 @@ class NotificationController {
         return;
       }
 
-      const { programId, message, segment, segmentConfig, campaignName } = validation.data;
+      const { tenantId, programId, protocol, message, segment, segmentConfig, campaignName } = validation.data;
 
-      console.log(`📢 Broadcast request received for program: ${programId}`);
+      console.log(`Broadcast request received: tenant=${tenantId}, program=${programId}, protocol=${protocol}`);
 
       const result = await notificationService.sendBroadcast({
+        tenantId,
         programId,
+        protocol,
         message,
         segment,
         segmentConfig,
@@ -94,6 +129,7 @@ class NotificationController {
           campaignLogId: result.campaignLogId,
           segment: result.targetSegment,
           segmentDescription: result.segmentDescription,
+          protocol: result.protocol,
         },
         metadata: { processingTime },
       });
@@ -127,12 +163,14 @@ class NotificationController {
         return;
       }
 
-      const { programId, message, memberIds, campaignName } = validation.data;
+      const { tenantId, programId, protocol, message, memberIds, campaignName } = validation.data;
 
-      console.log(`📢 CSV Broadcast request for ${memberIds.length} members in program: ${programId}`);
+      console.log(`CSV Broadcast request for ${memberIds.length} members: tenant=${tenantId}, program=${programId}`);
 
       const result = await notificationService.sendToMemberIds(
+        tenantId,
         programId,
+        protocol,
         memberIds,
         message,
         campaignName,
@@ -162,6 +200,7 @@ class NotificationController {
           campaignLogId: result.campaignLogId,
           targetedCount: memberIds.length,
           matchedCount: result.totalRecipients,
+          protocol: result.protocol,
         },
         metadata: { processingTime },
       });
@@ -181,7 +220,7 @@ class NotificationController {
     const startTime = Date.now();
 
     try {
-      console.log("🎂 Birthday Bot triggered via API");
+      console.log("Birthday Bot triggered via API");
 
       const result = await notificationService.runBirthdayBot();
 
@@ -241,12 +280,14 @@ class NotificationController {
         return;
       }
 
-      const { programId, message, segment, segmentConfig } = validation.data;
+      const { tenantId, programId, protocol, message, segment, segmentConfig } = validation.data;
 
-      console.log(`🧪 Broadcast TEST (Dry Run) for program: ${programId}`);
+      console.log(`Broadcast TEST (Dry Run): tenant=${tenantId}, program=${programId}, protocol=${protocol}`);
 
       const result = await notificationService.sendBroadcast({
+        tenantId,
         programId,
+        protocol,
         message,
         segment,
         segmentConfig,
@@ -275,6 +316,7 @@ class NotificationController {
           messagePreview: result.messagePreview,
           targetSegment: result.targetSegment,
           segmentDescription: result.segmentDescription,
+          protocol: result.protocol,
           sampleRecipients: result.sampleRecipients,
         },
         metadata: { processingTime, dryRun: true },
@@ -297,7 +339,7 @@ class NotificationController {
     try {
       const { testDate } = req.query;
 
-      console.log("🧪 Birthday Bot TEST (Dry Run) triggered via API");
+      console.log("Birthday Bot TEST (Dry Run) triggered via API");
 
       let validatedTestDate: string | undefined;
       if (testDate) {
@@ -409,9 +451,15 @@ class NotificationController {
         return;
       }
 
-      const { programId, segment, segmentConfig } = validation.data;
+      const { tenantId, programId, protocol, segment, segmentConfig } = validation.data;
 
-      const result = await notificationService.getSegmentPreview(programId, segment, segmentConfig);
+      const result = await notificationService.getSegmentPreview(
+        tenantId,
+        programId,
+        protocol,
+        segment,
+        segmentConfig
+      );
       const processingTime = Date.now() - startTime;
 
       if (!result.success) {
@@ -445,20 +493,23 @@ class NotificationController {
 
   async getAvailableSegments(req: Request, res: Response): Promise<void> {
     try {
-      const { programId } = req.query;
+      const validation = getSegmentsSchema.safeParse(req.query);
 
-      if (!programId || typeof programId !== "string") {
+      if (!validation.success) {
         res.status(400).json({
           success: false,
           error: {
             code: "VALIDATION_ERROR",
-            message: "programId query parameter is required",
+            message: "tenantId, programId, and protocol are required",
+            details: validation.error.errors,
           },
         });
         return;
       }
 
-      const result = await notificationService.getAvailableSegments(programId);
+      const { tenantId, programId, protocol } = validation.data;
+
+      const result = await notificationService.getAvailableSegments(tenantId, programId, protocol);
 
       if (!result.success) {
         res.status(400).json({
@@ -475,6 +526,7 @@ class NotificationController {
         success: true,
         data: {
           segments: result.segments,
+          tierThresholds: result.tierThresholds,
         },
       });
     } catch (error) {

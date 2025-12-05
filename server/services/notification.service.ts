@@ -5,7 +5,29 @@ import { passKitService } from "./passkit.service";
 const BATCH_SIZE = 50;
 const RATE_LIMIT_DELAY_MS = 200;
 
-type SegmentType = "ALL" | "VIP" | "DORMANT" | "GEO" | "CSV";
+type ProtocolType = "MEMBERSHIP" | "COUPON" | "EVENT_TICKET";
+
+type MembershipSegment = "ALL" | "TIER_BRONZE" | "TIER_SILVER" | "TIER_GOLD" | "TIER_PLATINUM" | "VIP" | "DORMANT" | "GEO" | "CSV";
+type CouponSegment = "ALL_ACTIVE" | "UNREDEEMED" | "EXPIRING_SOON" | "GEO" | "CSV";
+type EventTicketSegment = "ALL_TICKETED" | "NOT_CHECKED_IN" | "CHECKED_IN" | "GEO" | "CSV";
+type SegmentType = MembershipSegment | CouponSegment | EventTicketSegment;
+
+interface ProgramInfo {
+  id: string;
+  name: string;
+  protocol: ProtocolType;
+  passkit_program_id: string;
+  tenant_id: string;
+  tier_bronze_max: number;
+  tier_silver_max: number;
+  tier_gold_max: number;
+}
+
+interface TripleValidation {
+  tenantId: string;
+  programId: string;
+  protocol: ProtocolType;
+}
 
 interface PassRecord {
   id: string;
@@ -28,7 +50,9 @@ interface BirthdayUser {
 }
 
 interface BroadcastOptions {
+  tenantId: string;
   programId: string;
+  protocol: ProtocolType;
   message: string;
   segment?: SegmentType;
   segmentConfig?: {
@@ -52,6 +76,7 @@ interface BroadcastResult {
   messagePreview?: string;
   targetSegment?: string;
   segmentDescription?: string;
+  protocol?: ProtocolType;
   sampleRecipients?: Array<{
     id: string;
     email: string;
@@ -59,6 +84,7 @@ interface BroadcastResult {
     lastName: string;
     externalId?: string;
     pointsBalance?: number;
+    tierPoints?: number;
     lastUpdated?: string;
   }>;
 }
@@ -107,16 +133,28 @@ interface EligiblePass {
   birth_date: string;
 }
 
+interface SegmentDefinition {
+  type: SegmentType;
+  name: string;
+  description: string;
+  icon: string;
+  estimatedCount?: number;
+  requiresConfig?: boolean;
+  configType?: "vipThreshold" | "dormantDays" | "zipCodes" | "memberIds";
+}
+
 interface SegmentStats {
   segment: SegmentType;
   description: string;
   count: number;
+  protocol: ProtocolType;
   sampleMembers: Array<{
     id: string;
     email: string;
     firstName: string;
     lastName: string;
     pointsBalance?: number;
+    tierPoints?: number;
     lastUpdated?: string;
     zipCode?: string;
   }>;
@@ -138,10 +176,138 @@ class NotificationService {
     return this.client;
   }
 
-  private getSegmentDescription(segment: SegmentType, segmentConfig?: BroadcastOptions["segmentConfig"]): string {
+  async validateTriple(
+    tenantId: string,
+    programId: string,
+    protocol: ProtocolType
+  ): Promise<{ valid: boolean; program?: ProgramInfo; error?: string }> {
+    try {
+      const client = this.getClient();
+
+      const { data: programs, error } = await client
+        .from("programs")
+        .select(`
+          id,
+          name,
+          protocol,
+          passkit_program_id,
+          tenant_id,
+          tier_bronze_max,
+          tier_silver_max,
+          tier_gold_max
+        `)
+        .eq("tenant_id", tenantId)
+        .eq("passkit_program_id", programId)
+        .limit(1);
+
+      if (error) {
+        return { valid: false, error: `Database error: ${error.message}` };
+      }
+
+      const program = programs?.[0];
+
+      if (!program) {
+        return {
+          valid: false,
+          error: `Program not found for tenant ${tenantId} with PassKit ID ${programId}`,
+        };
+      }
+
+      if (program.protocol !== protocol) {
+        return {
+          valid: false,
+          error: `Protocol mismatch: Program is ${program.protocol}, but request specified ${protocol}`,
+        };
+      }
+
+      return {
+        valid: true,
+        program: {
+          ...program,
+          tier_bronze_max: program.tier_bronze_max ?? 999,
+          tier_silver_max: program.tier_silver_max ?? 4999,
+          tier_gold_max: program.tier_gold_max ?? 14999,
+        } as ProgramInfo,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : "Unknown validation error",
+      };
+    }
+  }
+
+  getSegmentsForProtocol(protocol: ProtocolType): SegmentDefinition[] {
+    const commonSegments: SegmentDefinition[] = [
+      {
+        type: "GEO",
+        name: "Geographic",
+        description: "Target by ZIP code",
+        icon: "MapPin",
+        requiresConfig: true,
+        configType: "zipCodes",
+      },
+      {
+        type: "CSV",
+        name: "Upload List",
+        description: "Target specific IDs from CSV",
+        icon: "FileSpreadsheet",
+        requiresConfig: true,
+        configType: "memberIds",
+      },
+    ];
+
+    switch (protocol) {
+      case "MEMBERSHIP":
+        return [
+          { type: "ALL", name: "All Members", description: "All active members", icon: "Users" },
+          { type: "TIER_BRONZE", name: "Bronze Tier", description: "Bronze tier members", icon: "Medal" },
+          { type: "TIER_SILVER", name: "Silver Tier", description: "Silver tier members", icon: "Award" },
+          { type: "TIER_GOLD", name: "Gold Tier", description: "Gold tier members", icon: "Star" },
+          { type: "TIER_PLATINUM", name: "Platinum Tier", description: "Platinum tier members", icon: "Crown" },
+          { type: "VIP", name: "VIP (Points)", description: "High-value by points", icon: "Gem", requiresConfig: true, configType: "vipThreshold" },
+          { type: "DORMANT", name: "Dormant", description: "Inactive members", icon: "Clock", requiresConfig: true, configType: "dormantDays" },
+          ...commonSegments,
+        ];
+
+      case "COUPON":
+        return [
+          { type: "ALL_ACTIVE", name: "All Active", description: "All unredeemed coupons", icon: "Ticket" },
+          { type: "UNREDEEMED", name: "Unredeemed", description: "Not yet used", icon: "TicketCheck" },
+          { type: "EXPIRING_SOON", name: "Expiring Soon", description: "Expires within 7 days", icon: "AlertTriangle" },
+          ...commonSegments,
+        ];
+
+      case "EVENT_TICKET":
+        return [
+          { type: "ALL_TICKETED", name: "All Ticket Holders", description: "All event attendees", icon: "Users" },
+          { type: "NOT_CHECKED_IN", name: "Not Checked In", description: "Awaiting arrival", icon: "UserX" },
+          { type: "CHECKED_IN", name: "Checked In", description: "Already at venue", icon: "UserCheck" },
+          ...commonSegments,
+        ];
+
+      default:
+        return commonSegments;
+    }
+  }
+
+  private getSegmentDescription(
+    segment: SegmentType,
+    protocol: ProtocolType,
+    segmentConfig?: BroadcastOptions["segmentConfig"],
+    program?: ProgramInfo
+  ): string {
     switch (segment) {
       case "ALL":
         return "All active members with installed passes";
+      case "TIER_BRONZE":
+        return `Bronze tier (0-${program?.tier_bronze_max || 999} points)`;
+      case "TIER_SILVER":
+        return `Silver tier (${(program?.tier_bronze_max || 999) + 1}-${program?.tier_silver_max || 4999} points)`;
+      case "TIER_GOLD":
+        return `Gold tier (${(program?.tier_silver_max || 4999) + 1}-${program?.tier_gold_max || 14999} points)`;
+      case "TIER_PLATINUM":
+        return `Platinum tier (${(program?.tier_gold_max || 14999) + 1}+ points)`;
       case "VIP":
         return `High-value members (${segmentConfig?.vipThreshold || 500}+ points)`;
       case "DORMANT":
@@ -151,32 +317,45 @@ class NotificationService {
         return `Members in ZIP codes: ${zips}`;
       case "CSV":
         return `Targeted list (${segmentConfig?.memberIds?.length || 0} member IDs)`;
+      case "ALL_ACTIVE":
+        return "All active unredeemed coupons";
+      case "UNREDEEMED":
+        return "Coupons not yet redeemed";
+      case "EXPIRING_SOON":
+        return "Coupons expiring within 7 days";
+      case "ALL_TICKETED":
+        return "All ticket holders";
+      case "NOT_CHECKED_IN":
+        return "Ticket holders not yet checked in";
+      case "CHECKED_IN":
+        return "Ticket holders already checked in";
       default:
         return "Custom segment";
     }
   }
 
   async getSegmentPreview(
+    tenantId: string,
     programId: string,
+    protocol: ProtocolType,
     segment: SegmentType,
     segmentConfig?: BroadcastOptions["segmentConfig"]
   ): Promise<{ success: boolean; stats?: SegmentStats; error?: string }> {
     try {
-      const client = this.getClient();
-
-      const { data: programs, error: programError } = await client
-        .from("programs")
-        .select("id, passkit_program_id")
-        .eq("passkit_program_id", programId)
-        .limit(1);
-
-      const program = programs?.[0];
-
-      if (programError || !program) {
-        return { success: false, error: `Program not found: ${programId}` };
+      const validation = await this.validateTriple(tenantId, programId, protocol);
+      if (!validation.valid || !validation.program) {
+        return { success: false, error: validation.error };
       }
 
-      const passes = await this.getTargetedPasses(client, program.id, segment, segmentConfig);
+      const client = this.getClient();
+      const program = validation.program;
+
+      const passes = await this.getTargetedPasses(
+        client,
+        program,
+        segment,
+        segmentConfig
+      );
 
       const sampleMembers = passes.slice(0, 10).map((pass: any) => ({
         id: pass.id,
@@ -184,6 +363,7 @@ class NotificationService {
         firstName: pass.users?.first_name || pass.first_name || "Unknown",
         lastName: pass.users?.last_name || pass.last_name || "",
         pointsBalance: pass.protocol_membership?.points_balance,
+        tierPoints: pass.protocol_membership?.tier_points,
         lastUpdated: pass.last_updated,
         zipCode: pass.users?.zip,
       }));
@@ -192,8 +372,9 @@ class NotificationService {
         success: true,
         stats: {
           segment,
-          description: this.getSegmentDescription(segment, segmentConfig),
+          description: this.getSegmentDescription(segment, protocol, segmentConfig, program),
           count: passes.length,
+          protocol,
           sampleMembers,
         },
       };
@@ -208,7 +389,7 @@ class NotificationService {
 
   private async getTargetedPasses(
     client: SupabaseClient,
-    programInternalId: string,
+    program: ProgramInfo,
     segment: SegmentType,
     segmentConfig?: BroadcastOptions["segmentConfig"]
   ): Promise<any[]> {
@@ -220,6 +401,7 @@ class NotificationService {
       first_name,
       last_name,
       last_updated,
+      protocol,
       programs:program_id (
         passkit_program_id
       ),
@@ -233,13 +415,24 @@ class NotificationService {
         points_balance,
         tier_points,
         lifetime_points
+      ),
+      protocol_coupon (
+        offer_details,
+        expiry_date,
+        redeemed_at
+      ),
+      protocol_event_ticket (
+        event_name,
+        venue,
+        checked_in_at
       )
     `;
 
     let query = client
       .from("passes_master")
       .select(baseQuery)
-      .eq("program_id", programInternalId)
+      .eq("program_id", program.id)
+      .eq("protocol", program.protocol)
       .eq("status", "INSTALLED")
       .eq("is_active", true);
 
@@ -254,6 +447,37 @@ class NotificationService {
     }
 
     switch (segment) {
+      case "ALL":
+        return allPasses;
+
+      case "TIER_BRONZE": {
+        return allPasses.filter((pass: any) => {
+          const tierPoints = pass.protocol_membership?.tier_points || 0;
+          return tierPoints <= program.tier_bronze_max;
+        });
+      }
+
+      case "TIER_SILVER": {
+        return allPasses.filter((pass: any) => {
+          const tierPoints = pass.protocol_membership?.tier_points || 0;
+          return tierPoints > program.tier_bronze_max && tierPoints <= program.tier_silver_max;
+        });
+      }
+
+      case "TIER_GOLD": {
+        return allPasses.filter((pass: any) => {
+          const tierPoints = pass.protocol_membership?.tier_points || 0;
+          return tierPoints > program.tier_silver_max && tierPoints <= program.tier_gold_max;
+        });
+      }
+
+      case "TIER_PLATINUM": {
+        return allPasses.filter((pass: any) => {
+          const tierPoints = pass.protocol_membership?.tier_points || 0;
+          return tierPoints > program.tier_gold_max;
+        });
+      }
+
       case "VIP": {
         const threshold = segmentConfig?.vipThreshold || 500;
         return allPasses.filter((pass: any) => {
@@ -296,7 +520,41 @@ class NotificationService {
         });
       }
 
-      case "ALL":
+      case "ALL_ACTIVE":
+      case "UNREDEEMED": {
+        return allPasses.filter((pass: any) => {
+          return pass.protocol_coupon && !pass.protocol_coupon.redeemed_at;
+        });
+      }
+
+      case "EXPIRING_SOON": {
+        const now = new Date();
+        const weekFromNow = new Date();
+        weekFromNow.setDate(now.getDate() + 7);
+
+        return allPasses.filter((pass: any) => {
+          if (!pass.protocol_coupon?.expiry_date) return false;
+          const expiryDate = new Date(pass.protocol_coupon.expiry_date);
+          return expiryDate >= now && expiryDate <= weekFromNow && !pass.protocol_coupon.redeemed_at;
+        });
+      }
+
+      case "ALL_TICKETED": {
+        return allPasses.filter((pass: any) => pass.protocol_event_ticket);
+      }
+
+      case "NOT_CHECKED_IN": {
+        return allPasses.filter((pass: any) => {
+          return pass.protocol_event_ticket && !pass.protocol_event_ticket.checked_in_at;
+        });
+      }
+
+      case "CHECKED_IN": {
+        return allPasses.filter((pass: any) => {
+          return pass.protocol_event_ticket && pass.protocol_event_ticket.checked_in_at;
+        });
+      }
+
       default:
         return allPasses;
     }
@@ -304,7 +562,9 @@ class NotificationService {
 
   async sendBroadcast(options: BroadcastOptions): Promise<BroadcastResult> {
     const {
+      tenantId,
       programId,
+      protocol,
       message,
       segment = "ALL",
       segmentConfig,
@@ -313,14 +573,16 @@ class NotificationService {
     } = options;
 
     console.log(`📢 Broadcast Request${dryRun ? " [DRY RUN]" : ""}`);
+    console.log(`   Tenant: ${tenantId}`);
     console.log(`   Program: ${programId}`);
+    console.log(`   Protocol: ${protocol}`);
     console.log(`   Message: "${message}"`);
     console.log(`   Segment: ${segment}`);
     if (segmentConfig) {
       console.log(`   Config: ${JSON.stringify(segmentConfig)}`);
     }
     if (dryRun) {
-      console.log("   ⚠️ DRY RUN MODE - No messages will be sent");
+      console.log("   DRY RUN MODE - No messages will be sent");
     }
 
     try {
@@ -334,43 +596,26 @@ class NotificationService {
         };
       }
 
-      if (!programId || programId.trim().length === 0) {
+      const validation = await this.validateTriple(tenantId, programId, protocol);
+      if (!validation.valid || !validation.program) {
+        console.error(`Triple validation failed: ${validation.error}`);
         return {
           success: false,
           totalRecipients: 0,
           successCount: 0,
           failedCount: 0,
-          error: "Program ID is required",
+          error: validation.error,
         };
       }
+
+      const program = validation.program;
+      console.log(`   Validated program: ${program.name} (${program.id})`);
 
       const client = this.getClient();
-
-      const { data: programs, error: programError } = await client
-        .from("programs")
-        .select("id, passkit_program_id, name")
-        .eq("passkit_program_id", programId)
-        .limit(1);
-
-      const program = programs?.[0];
-
-      if (programError || !program) {
-        console.error("❌ Program not found:", programError?.message || "No program with this ID");
-        return {
-          success: false,
-          totalRecipients: 0,
-          successCount: 0,
-          failedCount: 0,
-          error: `Program not found: ${programId}`,
-        };
-      }
-
-      console.log(`   Found program: ${program.name} (${program.id})`);
-
-      const passes = await this.getTargetedPasses(client, program.id, segment, segmentConfig);
+      const passes = await this.getTargetedPasses(client, program, segment, segmentConfig);
 
       if (passes.length === 0) {
-        console.log("⚠️ No members found for this segment");
+        console.log("No members found for this segment");
         return {
           success: true,
           totalRecipients: 0,
@@ -379,11 +624,12 @@ class NotificationService {
           dryRun,
           messagePreview: message,
           targetSegment: segment,
-          segmentDescription: this.getSegmentDescription(segment, segmentConfig),
+          protocol,
+          segmentDescription: this.getSegmentDescription(segment, protocol, segmentConfig, program),
         };
       }
 
-      console.log(`📬 Found ${passes.length} eligible recipients for ${segment} segment`);
+      console.log(`Found ${passes.length} eligible recipients for ${segment} segment`);
 
       if (dryRun) {
         const sampleRecipients = passes.slice(0, 5).map((pass: any) => ({
@@ -393,10 +639,11 @@ class NotificationService {
           firstName: pass.users?.first_name || pass.first_name || "Unknown",
           lastName: pass.users?.last_name || pass.last_name || "",
           pointsBalance: pass.protocol_membership?.points_balance,
+          tierPoints: pass.protocol_membership?.tier_points,
           lastUpdated: pass.last_updated,
         }));
 
-        console.log(`✅ Dry run complete - ${passes.length} would receive the message`);
+        console.log(`Dry run complete - ${passes.length} would receive the message`);
 
         return {
           success: true,
@@ -406,7 +653,8 @@ class NotificationService {
           dryRun: true,
           messagePreview: message,
           targetSegment: segment,
-          segmentDescription: this.getSegmentDescription(segment, segmentConfig),
+          protocol,
+          segmentDescription: this.getSegmentDescription(segment, protocol, segmentConfig, program),
           sampleRecipients,
         };
       }
@@ -418,7 +666,7 @@ class NotificationService {
         const batch = passes.slice(i, i + BATCH_SIZE);
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         const totalBatches = Math.ceil(passes.length / BATCH_SIZE);
-        console.log(`📦 Processing batch ${batchNum} of ${totalBatches} (${batch.length} recipients)`);
+        console.log(`Processing batch ${batchNum} of ${totalBatches} (${batch.length} recipients)`);
 
         const results = await Promise.all(
           batch.map(async (pass: any) => {
@@ -432,7 +680,7 @@ class NotificationService {
               return result.success;
             } catch (error) {
               const email = pass.users?.email || pass.email || pass.external_id;
-              console.error(`   ❌ Failed to send to ${email}:`, error);
+              console.error(`   Failed to send to ${email}:`, error);
               return false;
             }
           })
@@ -461,10 +709,10 @@ class NotificationService {
         .single();
 
       if (logError) {
-        console.error("⚠️ Failed to log campaign:", logError.message);
+        console.error("Failed to log campaign:", logError.message);
       }
 
-      console.log(`✅ Broadcast complete: ${successCount} success, ${failedCount} failed`);
+      console.log(`Broadcast complete: ${successCount} success, ${failedCount} failed`);
 
       return {
         success: true,
@@ -475,10 +723,11 @@ class NotificationService {
         dryRun: false,
         messagePreview: message,
         targetSegment: segment,
-        segmentDescription: this.getSegmentDescription(segment, segmentConfig),
+        protocol,
+        segmentDescription: this.getSegmentDescription(segment, protocol, segmentConfig, program),
       };
     } catch (error) {
-      console.error("❌ Broadcast error:", error);
+      console.error("Broadcast error:", error);
       return {
         success: false,
         totalRecipients: 0,
@@ -490,14 +739,18 @@ class NotificationService {
   }
 
   async sendToMemberIds(
+    tenantId: string,
     programId: string,
+    protocol: ProtocolType,
     memberIds: string[],
     message: string,
     campaignName?: string,
     dryRun = false
   ): Promise<BroadcastResult> {
     return this.sendBroadcast({
+      tenantId,
       programId,
+      protocol,
       message,
       segment: "CSV",
       segmentConfig: { memberIds },
@@ -509,7 +762,7 @@ class NotificationService {
   async runBirthdayBot(options: { dryRun?: boolean; testDate?: string } = {}): Promise<BirthdayBotResult> {
     const { dryRun = false, testDate } = options;
 
-    console.log(`🎂 Running Birthday Bot (Configuration-Driven)${dryRun ? " [DRY RUN]" : ""}...`);
+    console.log(`Running Birthday Bot (Configuration-Driven)${dryRun ? " [DRY RUN]" : ""}...`);
 
     const today = testDate ? new Date(testDate) : new Date();
     const month = today.getMonth() + 1;
@@ -517,7 +770,7 @@ class NotificationService {
     const year = today.getFullYear();
     console.log(`   Looking for birthdays: Month ${month}, Day ${day}, Year ${year}`);
     if (dryRun) {
-      console.log("   ⚠️ DRY RUN MODE - No actual changes will be made");
+      console.log("   DRY RUN MODE - No actual changes will be made");
     }
 
     let totalProcessed = 0;
@@ -532,11 +785,12 @@ class NotificationService {
 
       const { data: programs, error: programError } = await client
         .from("programs")
-        .select("id, name, passkit_program_id, birthday_bot_enabled, birthday_reward_points, birthday_message")
-        .eq("birthday_bot_enabled", true);
+        .select("id, name, passkit_program_id, birthday_bot_enabled, birthday_reward_points, birthday_message, protocol")
+        .eq("birthday_bot_enabled", true)
+        .eq("protocol", "MEMBERSHIP");
 
       if (programError) {
-        console.error("❌ Failed to query programs:", programError.message);
+        console.error("Failed to query programs:", programError.message);
         return {
           success: false,
           processed: 0,
@@ -549,7 +803,7 @@ class NotificationService {
       }
 
       if (!programs || programs.length === 0) {
-        console.log("⚠️ No programs have birthday bot enabled");
+        console.log("No MEMBERSHIP programs have birthday bot enabled");
         return {
           success: true,
           processed: 0,
@@ -560,10 +814,10 @@ class NotificationService {
         };
       }
 
-      console.log(`📋 Found ${programs.length} programs with birthday bot enabled`);
+      console.log(`Found ${programs.length} MEMBERSHIP programs with birthday bot enabled`);
 
       for (const program of programs as ProgramConfig[]) {
-        console.log(`\n🏢 Processing program: ${program.name} (${program.passkit_program_id})`);
+        console.log(`\nProcessing program: ${program.name} (${program.passkit_program_id})`);
         console.log(`   Reward: ${program.birthday_reward_points} points`);
         console.log(`   Message: "${program.birthday_message}"`);
 
@@ -585,15 +839,16 @@ class NotificationService {
           .eq("program_id", program.id)
           .eq("status", "INSTALLED")
           .eq("is_active", true)
+          .eq("protocol", "MEMBERSHIP")
           .not("users.birth_date", "is", null);
 
         if (passError) {
-          console.error(`   ❌ Failed to query passes for ${program.name}:`, passError.message);
+          console.error(`   Failed to query passes for ${program.name}:`, passError.message);
           continue;
         }
 
         if (!passes || passes.length === 0) {
-          console.log(`   ⚠️ No passes with birth dates found for ${program.name}`);
+          console.log(`   No passes with birth dates found for ${program.name}`);
           continue;
         }
 
@@ -611,11 +866,11 @@ class NotificationService {
           }));
 
         if (eligiblePasses.length === 0) {
-          console.log(`   🎈 No birthdays today for ${program.name}`);
+          console.log(`   No birthdays today for ${program.name}`);
           continue;
         }
 
-        console.log(`   🎉 Found ${eligiblePasses.length} birthdays today!`);
+        console.log(`   Found ${eligiblePasses.length} birthdays today!`);
         programsProcessed++;
 
         for (const pass of eligiblePasses as EligiblePass[]) {
@@ -633,7 +888,7 @@ class NotificationService {
           try {
             if (dryRun) {
               console.log(
-                `   🔍 [DRY RUN] Would gift ${pass.first_name} ${pass.last_name} (${pass.email}) - ${program.birthday_reward_points} points`
+                `   [DRY RUN] Would gift ${pass.first_name} ${pass.last_name} (${pass.email}) - ${program.birthday_reward_points} points`
               );
               detail.status = "success";
               detail.reason = "Dry run - would be processed";
@@ -657,7 +912,7 @@ class NotificationService {
               .single();
 
             if (logError && logError.code !== "23505") {
-              console.error(`   ❌ Failed to log birthday for ${pass.email}:`, logError.message);
+              console.error(`   Failed to log birthday for ${pass.email}:`, logError.message);
               detail.reason = `Log error: ${logError.message}`;
               details.push(detail);
               totalFailed++;
@@ -665,7 +920,7 @@ class NotificationService {
             }
 
             if (!logResult) {
-              console.log(`   ⏭️ Skipping ${pass.first_name} ${pass.last_name} - already gifted this year`);
+              console.log(`   Skipping ${pass.first_name} ${pass.last_name} - already gifted this year`);
               detail.status = "skipped";
               detail.reason = "Already gifted this year";
               details.push(detail);
@@ -682,7 +937,7 @@ class NotificationService {
             });
 
             if (rpcError) {
-              console.error(`   ❌ Failed to award points to ${pass.email}:`, rpcError.message);
+              console.error(`   Failed to award points to ${pass.email}:`, rpcError.message);
               await client.from("birthday_logs").delete().eq("id", logResult.id);
               detail.reason = `RPC error: ${rpcError.message}`;
               details.push(detail);
@@ -698,13 +953,13 @@ class NotificationService {
               );
             }
 
-            console.log(`   🎁 Awarded ${program.birthday_reward_points} points to ${pass.first_name} ${pass.last_name}`);
+            console.log(`   Awarded ${program.birthday_reward_points} points to ${pass.first_name} ${pass.last_name}`);
             detail.status = "success";
             detail.reason = "Points awarded and notification sent";
             details.push(detail);
             totalSuccess++;
           } catch (error) {
-            console.error(`   ❌ Error processing ${pass.email}:`, error);
+            console.error(`   Error processing ${pass.email}:`, error);
             detail.reason = `Error: ${error instanceof Error ? error.message : "Unknown"}`;
             details.push(detail);
             totalFailed++;
@@ -729,12 +984,12 @@ class NotificationService {
           .single();
 
         if (logError) {
-          console.error("⚠️ Failed to log birthday campaign:", logError.message);
+          console.error("Failed to log birthday campaign:", logError.message);
         }
         campaignLogId = logData?.id;
       }
 
-      console.log(`\n✅ Birthday Bot complete${dryRun ? " [DRY RUN]" : ""}:`);
+      console.log(`\nBirthday Bot complete${dryRun ? " [DRY RUN]" : ""}:`);
       console.log(`   Programs: ${programsProcessed}`);
       console.log(`   Processed: ${totalProcessed}`);
       console.log(`   Success: ${totalSuccess}`);
@@ -753,7 +1008,7 @@ class NotificationService {
         details: dryRun ? details : undefined,
       };
     } catch (error) {
-      console.error("❌ Birthday Bot error:", error);
+      console.error("Birthday Bot error:", error);
       return {
         success: false,
         processed: totalProcessed,
@@ -781,14 +1036,23 @@ class NotificationService {
           *,
           programs:program_id (
             name,
-            passkit_program_id
+            passkit_program_id,
+            protocol
           )
         `)
         .order("created_at", { ascending: false })
         .limit(limit);
 
       if (programId) {
-        query = query.eq("program_id", programId);
+        const { data: programs } = await client
+          .from("programs")
+          .select("id")
+          .eq("passkit_program_id", programId)
+          .limit(1);
+
+        if (programs?.[0]) {
+          query = query.eq("program_id", programs[0].id);
+        }
       }
 
       const { data, error } = await query;
@@ -806,69 +1070,50 @@ class NotificationService {
     }
   }
 
-  async getAvailableSegments(programId: string): Promise<{
+  async getAvailableSegments(
+    tenantId: string,
+    programId: string,
+    protocol: ProtocolType
+  ): Promise<{
     success: boolean;
-    segments?: Array<{
-      type: SegmentType;
-      name: string;
-      description: string;
-      estimatedCount?: number;
-    }>;
+    segments?: SegmentDefinition[];
+    tierThresholds?: {
+      bronze: number;
+      silver: number;
+      gold: number;
+    };
     error?: string;
   }> {
     try {
-      const client = this.getClient();
-
-      const { data: programs, error: programError } = await client
-        .from("programs")
-        .select("id")
-        .eq("passkit_program_id", programId)
-        .limit(1);
-
-      const program = programs?.[0];
-
-      if (programError || !program) {
-        return { success: false, error: `Program not found: ${programId}` };
+      const validation = await this.validateTriple(tenantId, programId, protocol);
+      if (!validation.valid || !validation.program) {
+        return { success: false, error: validation.error };
       }
 
-      const allPasses = await this.getTargetedPasses(client, program.id, "ALL");
-      const vipPasses = await this.getTargetedPasses(client, program.id, "VIP", { vipThreshold: 500 });
-      const dormantPasses = await this.getTargetedPasses(client, program.id, "DORMANT", { dormantDays: 30 });
+      const segments = this.getSegmentsForProtocol(protocol);
+
+      const client = this.getClient();
+      const program = validation.program;
+
+      for (const segment of segments) {
+        if (!segment.requiresConfig && segment.type !== "GEO" && segment.type !== "CSV") {
+          try {
+            const passes = await this.getTargetedPasses(client, program, segment.type, {});
+            segment.estimatedCount = passes.length;
+          } catch {
+            segment.estimatedCount = undefined;
+          }
+        }
+      }
 
       return {
         success: true,
-        segments: [
-          {
-            type: "ALL",
-            name: "All Members",
-            description: "All active members with installed passes",
-            estimatedCount: allPasses.length,
-          },
-          {
-            type: "VIP",
-            name: "VIP Members",
-            description: "High-value members with 500+ points",
-            estimatedCount: vipPasses.length,
-          },
-          {
-            type: "DORMANT",
-            name: "Dormant Members",
-            description: "Members with no activity for 30+ days",
-            estimatedCount: dormantPasses.length,
-          },
-          {
-            type: "GEO",
-            name: "Geographic",
-            description: "Target members by ZIP code",
-            estimatedCount: undefined,
-          },
-          {
-            type: "CSV",
-            name: "Upload List",
-            description: "Target specific member IDs from CSV",
-            estimatedCount: undefined,
-          },
-        ],
+        segments,
+        tierThresholds: protocol === "MEMBERSHIP" ? {
+          bronze: program.tier_bronze_max,
+          silver: program.tier_silver_max,
+          gold: program.tier_gold_max,
+        } : undefined,
       };
     } catch (error) {
       return {
