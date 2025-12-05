@@ -1,0 +1,179 @@
+﻿This addresses Gap E (Double-Claim Vulnerability) and Gap F (Redemption Race Condition). We are moving the validation logic inside the database to ensure atomic consistency.
+The Strategy
+1. Database Migration: We will add a claimed_at timestamp to the claim_codes table and update the transaction RPC to use "Atomic Updates" (SQL logic that checks balance during the deduction).
+2. Service Layer: We will update the backend logic to handle the new "Already Claimed" and "Insufficient Funds" errors gracefully.
+________________
+
+
+Step 1: The Hardening Migration
+Create a new file migrations/017_hardening_claims_and_transactions.sql.
+This SQL does two things:
+1. Gap E: Adds a "Burn" mechanism to claim codes.
+2. Gap F: Replaces the transaction logic with a race-condition-proof version.
+SQL
+-- 1. HARDEN CLAIM CODES (Gap E)
+ALTER TABLE claim_codes 
+ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+
+
+-- RPC to atomically validate and burn a claim code
+CREATE OR REPLACE FUNCTION process_claim_attempt(
+  p_code TEXT,
+  p_program_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_claim claim_codes%ROWTYPE;
+BEGIN
+  -- Lock the row to prevent concurrent scans of the same postcard
+  SELECT * INTO v_claim
+  FROM claim_codes
+  WHERE code = p_code AND program_id = p_program_id
+  FOR UPDATE;
+
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'INVALID_CODE');
+  END IF;
+
+
+  -- The Gap E Fix: Strict Check
+  IF v_claim.claimed_at IS NOT NULL THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'ALREADY_CLAIMED', 
+      'claimed_at', v_claim.claimed_at
+    );
+  END IF;
+
+
+  -- Burn the code immediately
+  UPDATE claim_codes
+  SET claimed_at = NOW()
+  WHERE id = v_claim.id;
+
+
+  RETURN jsonb_build_object(
+    'success', true, 
+    'data', row_to_json(v_claim)
+  );
+END;
+$$;
+
+
+
+
+-- 2. HARDEN TRANSACTIONS (Gap F)
+CREATE OR REPLACE FUNCTION process_membership_transaction(
+  p_program_id UUID,
+  p_member_external_id TEXT,
+  p_points INTEGER, -- Positive for Earn, Negative for Redeem (sent as positive from API, logic handles sign)
+  p_type TEXT,      -- 'EARN' or 'REDEEM'
+  p_description TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_member_id UUID;
+  v_current_points INTEGER;
+  v_new_balance INTEGER;
+BEGIN
+  -- Get Member ID from External ID (PUB/CLM/MBR)
+  SELECT id INTO v_member_id 
+  FROM passes_master 
+  WHERE external_id = p_member_external_id AND program_id = p_program_id;
+
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'MEMBER_NOT_FOUND');
+  END IF;
+
+
+  -- LOGIC BRANCH
+  IF p_type = 'EARN' THEN
+    -- Earn is always safe
+    UPDATE passes_master
+    SET points = points + p_points, updated_at = NOW()
+    WHERE id = v_member_id
+    RETURNING points INTO v_new_balance;
+
+
+  ELSIF p_type = 'REDEEM' THEN
+    -- GAP F FIX: Atomic Update
+    -- Only update IF points are sufficient. 
+    -- This single statement prevents race conditions.
+    UPDATE passes_master
+    SET points = points - p_points, updated_at = NOW()
+    WHERE id = v_member_id AND points >= p_points
+    RETURNING points INTO v_new_balance;
+
+
+    -- If no row was updated, it means balance was too low
+    IF NOT FOUND THEN
+       RETURN jsonb_build_object('success', false, 'error', 'INSUFFICIENT_FUNDS');
+    END IF;
+  END IF;
+
+
+  -- Log Transaction
+  INSERT INTO transactions (program_id, member_id, points, type, description, created_at)
+  VALUES (p_program_id, v_member_id, p_points, p_type, p_description, NOW());
+
+
+  RETURN jsonb_build_object('success', true, 'new_balance', v_new_balance);
+END;
+$$;
+
+
+________________
+
+
+Step 2: Update Logic Service
+We need to update server/services/logic.service.ts to use these new secure RPCs.
+Instruction for Replit Agent:
+"Apply migration 017 to harden the database. Then, update server/services/logic.service.ts to use the new process_claim_attempt RPC when handling CLM- codes. If the RPC returns ALREADY_CLAIMED, throw a specific error 'This postcard has already been claimed'. Also, ensure the POS transaction flow uses the updated process_membership_transaction signature."
+Code Snippet for logic.service.ts (Claim Handler)
+TypeScript
+// Inside handleScan or resolveCode function
+if (prefix === 'CLM') {
+  // Call the Secure RPC
+  const { data: claimResult, error: claimError } = await supabase
+    .rpc('process_claim_attempt', {
+      p_code: code,
+      p_program_id: programId
+    });
+
+
+  if (claimError) throw new Error(claimError.message);
+  
+  // Handle Logic Gaps
+  if (!claimResult.success) {
+    if (claimResult.error === 'ALREADY_CLAIMED') {
+      throw new Error(`This code was already claimed on ${new Date(claimResult.claimed_at).toLocaleDateString()}`);
+    }
+    throw new Error('Invalid Claim Code');
+  }
+
+
+  // If success, proceed to provision the pass using the data returned
+  const memberData = claimResult.data; 
+  // ... continue with PassKit provisioning ...
+}
+
+
+Validation Tests for Gap E
+Once implemented, run these tests to confirm the gap is closed:
+1. The Double-Tap Test:
+   * Action: Scan a CLM- code.
+   * Result: Success (Pass created).
+   * Action: Scan the same CLM- code immediately after.
+   * Result: Error: "This postcard has already been claimed."
+2. The Race Test (Gap F):
+   * Action: Set a member balance to 100.
+   * Action: Fire two concurrent API calls to Redeem 100 points.
+   * Result: Only one should succeed. The other must return INSUFFICIENT_FUNDS.
