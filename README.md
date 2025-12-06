@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Pass%20To%20VIP-2563eb?style=for-the-badge" alt="Platform"/>
-  <img src="https://img.shields.io/badge/Version-2.5.0-blue?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-2.6.0-blue?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Status-Production%20Ready-22c55e?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/Node.js-20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
@@ -48,6 +48,240 @@ This platform transforms physical mail recipients into digital wallet users thro
 
 ---
 
+## What's New in v2.6.0
+
+### Dynamic Tier Discount System
+
+Configure **per-tier discount percentages** directly from the Client Command Center. This enables businesses to offer progressive discounts as customers advance through loyalty tiers.
+
+| Tier | Default Discount | Use Case |
+|------|-----------------|----------|
+| **Tier 1 (Bronze)** | 0% | Entry level - no discount |
+| **Tier 2 (Silver)** | 5% | First loyalty reward |
+| **Tier 3 (Gold)** | 10% | Regular customer benefit |
+| **Tier 4 (Platinum)** | 15% | VIP maximum discount |
+
+**Key Features:**
+- Configurable 0-100% discount per tier level
+- Progressive discount validation (higher tiers must have equal or higher discounts)
+- Real-time discount display in External POS responses
+- Client Command Center UI with intuitive input fields
+
+**Database Schema (Migration 021):**
+```sql
+ALTER TABLE programs ADD COLUMN tier_1_discount_percent INTEGER DEFAULT 0;
+ALTER TABLE programs ADD COLUMN tier_2_discount_percent INTEGER DEFAULT 5;
+ALTER TABLE programs ADD COLUMN tier_3_discount_percent INTEGER DEFAULT 10;
+ALTER TABLE programs ADD COLUMN tier_4_discount_percent INTEGER DEFAULT 15;
+```
+
+**Discount Calculation Logic:**
+```typescript
+// POS Webhook Service calculates discount based on tier
+getDiscountForTier(tierLevel: TierLevel, config: SpendTierConfig): number {
+  switch (tierLevel) {
+    case 'TIER_4': return config.tier4DiscountPercent;  // e.g., 15%
+    case 'TIER_3': return config.tier3DiscountPercent;  // e.g., 10%
+    case 'TIER_2': return config.tier2DiscountPercent;  // e.g., 5%
+    case 'TIER_1': 
+    default: return config.tier1DiscountPercent;        // e.g., 0%
+  }
+}
+```
+
+---
+
+### External POS Webhook System
+
+Production-ready API for external point-of-sale systems to trigger **spend-based tier upgrades**. This enables retail chains like Levi's to integrate their existing POS with Pass To VIP for automatic tier calculation.
+
+**Transaction Flow:**
+```
+External POS                    Pass To VIP                      PassKit
+    |                               |                               |
+    |  POST /api/external/pos/tx    |                               |
+    |  { externalMemberId, amount } |                               |
+    |------------------------------>|                               |
+    |                               | 1. Upsert member              |
+    |                               | 2. Record spend in ledger     |
+    |                               | 3. Update cumulative total    |
+    |                               | 4. Calculate new tier         |
+    |                               | 5. Get tier discount %        |
+    |                               | 6. Sync PassKit pass          |
+    |                               |------------------------------>|
+    |                               |                               |
+    |  { tierLevel, discountPercent,|                               |
+    |    tierUpgraded, passUrl }    |                               |
+    |<------------------------------|                               |
+```
+
+**Spend-Based Tier Thresholds (Configurable):**
+```
+Tier 1 (Bronze):   $0 - $299.99     (0 - 29,999 cents)
+Tier 2 (Silver):   $300 - $999.99   (30,000 - 99,999 cents)
+Tier 3 (Gold):     $1,000 - $2,499.99 (100,000 - 249,999 cents)
+Tier 4 (Platinum): $2,500+          (250,000+ cents)
+```
+
+**Tier Calculation Logic:**
+```typescript
+// server/services/pos-webhook.service.ts
+calculateSpendTier(spendTotalCents: number, config: SpendTierConfig): TierLevel {
+  if (spendTotalCents >= config.tier4ThresholdCents) return 'TIER_4';  // $2,500+
+  if (spendTotalCents >= config.tier3ThresholdCents) return 'TIER_3';  // $1,000+
+  if (spendTotalCents >= config.tier2ThresholdCents) return 'TIER_2';  // $300+
+  return 'TIER_1';  // Default
+}
+```
+
+**External POS API Endpoints:**
+```
+POST   /api/external/pos/:programId/transaction    # Process spend transaction
+GET    /api/external/pos/:programId/member/:extId  # Lookup member by external ID
+POST   /api/external/pos/:programId/api-key        # Generate API key (admin)
+DELETE /api/external/pos/:programId/api-key/:keyId # Revoke API key (admin)
+```
+
+**Transaction Request Schema:**
+```typescript
+interface POSWebhookTransaction {
+  externalMemberId: string;      // Required: External system's customer ID
+  amountCents: number;           // Required: Transaction amount in cents
+  transactionId?: string;        // Optional: External transaction ID
+  storeId?: string;              // Optional: Store location identifier
+  currency?: string;             // Optional: Currency code (default: USD)
+  customerEmail?: string;        // Optional: For new member creation
+  customerFirstName?: string;    // Optional: Customer first name
+  customerLastName?: string;     // Optional: Customer last name
+  customerPhone?: string;        // Optional: Customer phone
+  metadata?: Record<string, any>;// Optional: Additional data
+}
+```
+
+**Transaction Response Schema:**
+```typescript
+interface POSWebhookResponse {
+  success: boolean;
+  memberId?: string;             // Internal Pass To VIP member ID
+  externalMemberId?: string;     // Echo of external ID
+  tierLevel?: TierLevel;         // TIER_1, TIER_2, TIER_3, TIER_4
+  tierName?: string;             // Human-readable: "Gold", "Platinum", etc.
+  discountPercent?: number;      // Applicable discount (0-100)
+  spendTotalCents?: number;      // Cumulative lifetime spend
+  passUrl?: string;              // Digital wallet pass URL
+  isNewMember?: boolean;         // True if member was just created
+  tierUpgraded?: boolean;        // True if tier changed this transaction
+  previousTier?: string;         // Previous tier name (if upgraded)
+  transactionId?: string;        // Transaction record ID
+  error?: { code: string; message: string };
+}
+```
+
+**Idempotency Support:**
+```bash
+# Prevents duplicate processing with X-Idempotency-Key header
+curl -X POST /api/external/pos/prog-123/transaction \
+  -H "X-API-Key: pk_live_abc123" \
+  -H "X-Idempotency-Key: tx-20241206-001" \
+  -d '{"externalMemberId": "cust-456", "amountCents": 5000}'
+```
+
+---
+
+### Enhanced Notification System
+
+Push notification system with **triple validation**, dynamic tier segments, and automated rewards:
+
+**Segment Types:**
+| Segment | Description | Use Case |
+|---------|-------------|----------|
+| `ALL` | All active members | Announcements, promotions |
+| `TIER_1` - `TIER_4` | Members at specific tier | Tier-specific offers |
+| `GEO` | Geographic region (future) | Location-based marketing |
+| `CSV` | Custom member list upload | Targeted campaigns |
+| `BIRTHDAY` | Members with birthday today | Automated birthday rewards |
+
+**Triple Validation:**
+1. **Tier Validation**: Ensures segment matches actual member tier levels
+2. **PassKit Validation**: Confirms members have active wallet passes
+3. **Protocol Validation**: Filters by program protocol (MEMBERSHIP only for push)
+
+**Segment Preview:**
+```typescript
+// Preview segment before sending
+GET /api/notifications/:programId/preview?segment=TIER_3
+
+Response:
+{
+  "segmentType": "TIER_3",
+  "memberCount": 156,
+  "sampleMembers": [
+    { "id": "...", "name": "John D.", "tierLevel": "TIER_3" },
+    ...
+  ]
+}
+```
+
+**Birthday Bot Integration:**
+- Automated daily scan for member birthdays
+- Configurable birthday reward messages
+- PassKit push notification with personalized content
+
+---
+
+### Client Command Center Enhancements
+
+The admin interface for managing tenant configurations has been significantly enhanced:
+
+**Tier Configuration Panel:**
+```
++-----------------------------------------------------------+
+| Tier Thresholds                              [Expand/Collapse] |
++-----------------------------------------------------------+
+| Tier System: [LOYALTY ▼]                                    |
+|                                                             |
+| Tier Names:                                                 |
+| Bronze [________] Silver [________] Gold [________] Platinum [________] |
+|                                                             |
+| Point Thresholds:                                           |
+| Bronze Max [_1000_] Silver Max [_5000_] Gold Max [_10000_] |
+|                                                             |
+| PassKit Tier IDs:                                           |
+| Bronze ID [________] Silver ID [________] Gold ID [________] Platinum ID [________] |
+|                                                             |
+| Tier Discounts (%):                           [NEW in 2.6] |
+| Tier 1 [_0_%] Tier 2 [_5_%] Tier 3 [_10_%] Tier 4 [_15_%] |
++-----------------------------------------------------------+
+```
+
+**Validation Rules:**
+- Discount percentages must be 0-100
+- Higher tiers should have equal or higher discounts (warning, not blocking)
+- Empty fields default to 0% discount
+
+---
+
+### Mock Mode for Development
+
+Enable `VITE_MOCK_MODE=true` for rapid testing without Supabase authentication:
+
+**Features:**
+- Bypass JWT authentication
+- "Demo Login" button for quick access
+- Pre-populated sample data for UI testing
+- "Test Mode" badge indicator in UI
+
+**Environment Configuration:**
+```bash
+# Development testing (bypass auth)
+VITE_MOCK_MODE=true
+
+# Production (require real auth)
+VITE_MOCK_MODE=false
+```
+
+---
+
 ## What's New in v2.5.0
 
 ### Multi-Program Architecture
@@ -80,7 +314,9 @@ PATCH  /api/client/admin/tenants/:userId/programs/:id/primary  # Set primary
 - [Quick Start](#-quick-start)
 - [Features](#-features)
 - [Client Dashboard](#-client-dashboard)
+- [Client Command Center](#client-command-center)
 - [POS Simulator](#-pos-simulator)
+- [External POS Integration](#external-pos-integration)
 - [Architecture](#-architecture)
 - [Tech Stack](#-tech-stack)
 - [API Reference](#-api-reference)
@@ -91,6 +327,7 @@ PATCH  /api/client/admin/tenants/:userId/programs/:id/primary  # Set primary
 - [Deployment](#-deployment)
 - [Troubleshooting](#-troubleshooting)
 - [Support](#-support)
+- [Changelog](#changelog)
 - [License](#-license)
 
 ---
@@ -153,7 +390,9 @@ migrations/015_earn_rate_multiplier.sql    # Integer-based point system
 migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixes
 migrations/018_billing_and_quotas.sql      # Gap G: Revenue leakage prevention
 migrations/019_campaign_tracking.sql       # Campaign runs & contacts tracking
-migrations/020_multi_program_support.sql   # NEW: Multi-program architecture
+migrations/020_multi_program_support.sql   # Multi-program architecture
+migrations/021_tier_discount_columns.sql   # NEW: Tier discount percentages
+migrations/025_external_pos_spend_tracking.sql  # External POS & spend ledger
 ```
 
 **Important:** 
@@ -161,6 +400,8 @@ migrations/020_multi_program_support.sql   # NEW: Multi-program architecture
 - Migrations 017-018 add security hardening for atomic transactions and billing quotas.
 - Migration 019 is idempotent and can be safely re-run.
 - **Migration 020** enables one tenant to manage multiple programs (verticals) simultaneously.
+- **Migration 021** adds tier discount percentage columns (tier_1_discount_percent through tier_4_discount_percent).
+- **Migration 025** adds external_id, spend tracking columns, and spend_ledger table for External POS integration.
 
 ### 4. Start Development Server
 
@@ -343,6 +584,59 @@ The React-based client dashboard provides program managers with a complete view 
 | **POS Simulator** | `/pos` | Point-of-sale transaction testing |
 | **Campaign Launcher** | `/admin/campaigns` | Admin-only direct mail campaign management |
 | **Admin Clients** | `/admin/clients` | Platform admin client management with multi-program support |
+| **Client Command Center** | `/admin/clients/:userId` | Individual client configuration and tier management |
+
+---
+
+## Client Command Center
+
+The Client Command Center (`/admin/clients/:userId`) provides comprehensive tenant management for SUPER_ADMIN and PLATFORM_ADMIN users.
+
+### Sections
+
+| Section | Description |
+|---------|-------------|
+| **Client Identity** | Business name, email, creation date |
+| **Program Cards** | Multi-program overview with protocol badges |
+| **Tier Configuration** | Thresholds, names, PassKit IDs, and discount percentages |
+| **Billing & Usage** | Active members, usage percentage, limits |
+| **API Keys** | POS webhook keys with create/revoke controls |
+| **PassKit Sync** | Retry button for manual_required status |
+
+### Tier Discount Configuration
+
+The tier discount feature allows admins to set percentage discounts for each tier level:
+
+```typescript
+// Validation Rules
+1. Each discount must be 0-100%
+2. Higher tiers should have equal or higher discounts (warning only)
+3. Empty fields default to 0%
+
+// Database Columns
+tier_1_discount_percent: INTEGER DEFAULT 0   // Bronze discount
+tier_2_discount_percent: INTEGER DEFAULT 5   // Silver discount  
+tier_3_discount_percent: INTEGER DEFAULT 10  // Gold discount
+tier_4_discount_percent: INTEGER DEFAULT 15  // Platinum discount
+```
+
+### Program Configuration Fields
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| **Tier System Type** | LOYALTY, OFFICE, GYM, CUSTOM, NONE | LOYALTY |
+| **Tier Names** | Custom names for each tier | Bronze, Silver, Gold, Platinum |
+| **Point Thresholds** | Points required for tier upgrades | 1000, 5000, 10000 |
+| **Spend Thresholds** | Spend in cents for tier upgrades | 30000, 100000, 250000 |
+| **PassKit Tier IDs** | Unique PassKit template IDs per tier | pk_tier_bronze_001 |
+| **Discount Percentages** | Discount % for each tier (0-100) | 0%, 5%, 10%, 15% |
+
+### API Endpoint
+
+```
+GET  /api/client/admin/tenants/:userId/profile  # Get full tenant profile
+POST /api/client/admin/tenants/:userId/update   # Update tenant configuration
+```
 
 ### Design System
 
@@ -399,6 +693,175 @@ Direct: MBR-12345 → MBR-12345
 | **Lookup** | Find member by ID | No |
 | **Earn** | Award points | Yes |
 | **Redeem** | Deduct points | Yes |
+
+---
+
+## External POS Integration
+
+The External POS Webhook System enables third-party point-of-sale systems to integrate with Pass To VIP for **spend-based tier management**.
+
+### Overview
+
+```
++------------------+     HTTP/REST      +------------------+     PassKit      +------------------+
+|  External POS    |  --------------->  |  Pass To VIP     |  ------------>  |   Digital        |
+|  (Levi's, etc.)  |                    |  Webhook API     |                  |   Wallet Pass    |
++------------------+                    +------------------+                  +------------------+
+     |                                         |
+     | POST /api/external/pos/:programId/transaction
+     |                                         |
+     +--- externalMemberId ----+               |
+     +--- amountCents ---------+               |
+     +--- X-API-Key -----------+               |
+     +--- X-Idempotency-Key ---+               |
+                                               |
+     <---- tierLevel, discountPercent, tierUpgraded, passUrl ----+
+```
+
+### Authentication
+
+External POS systems authenticate using API keys generated from the Client Command Center:
+
+```bash
+# Request header
+X-API-Key: pk_live_abc123def456
+
+# Generate new key (admin only)
+POST /api/external/pos/:programId/api-key
+Authorization: Bearer <admin-jwt>
+
+# Revoke key
+DELETE /api/external/pos/:programId/api-key/:keyId
+Authorization: Bearer <admin-jwt>
+```
+
+### Spend-Based Tier Calculation
+
+The system tracks cumulative spend and automatically upgrades tiers:
+
+| Tier | Spend Threshold | Default Discount |
+|------|-----------------|------------------|
+| **Bronze (TIER_1)** | $0+ | 0% |
+| **Silver (TIER_2)** | $300+ | 5% |
+| **Gold (TIER_3)** | $1,000+ | 10% |
+| **Platinum (TIER_4)** | $2,500+ | 15% |
+
+### Transaction Processing
+
+```bash
+# Process a transaction
+curl -X POST "https://your-domain/api/external/pos/prog-001/transaction" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: pk_live_abc123" \
+  -H "X-Idempotency-Key: tx-20241206-001" \
+  -d '{
+    "externalMemberId": "CUST-12345",
+    "amountCents": 15000,
+    "transactionId": "POS-TX-789",
+    "storeId": "STORE-NYC-01",
+    "customerEmail": "customer@example.com",
+    "customerFirstName": "John",
+    "customerLastName": "Doe"
+  }'
+
+# Response
+{
+  "success": true,
+  "memberId": "uuid-internal-member-id",
+  "externalMemberId": "CUST-12345",
+  "tierLevel": "TIER_2",
+  "tierName": "Silver",
+  "discountPercent": 5,
+  "spendTotalCents": 45000,
+  "passUrl": "https://pub2.pskt.io/pass-abc123",
+  "isNewMember": false,
+  "tierUpgraded": true,
+  "previousTier": "Bronze",
+  "transactionId": "tx-record-uuid"
+}
+```
+
+### Member Lookup
+
+```bash
+# Lookup member by external ID
+curl "https://your-domain/api/external/pos/prog-001/member/CUST-12345" \
+  -H "X-API-Key: pk_live_abc123"
+
+# Response
+{
+  "found": true,
+  "member": {
+    "id": "uuid-internal-id",
+    "externalId": "CUST-12345",
+    "spendTotalCents": 45000,
+    "tierLevel": "TIER_2",
+    "tierName": "Silver",
+    "discountPercent": 5,
+    "passUrl": "https://pub2.pskt.io/pass-abc123"
+  }
+}
+```
+
+### Database Schema (Migration 025)
+
+```sql
+-- Add external ID and spend tracking to passes_master
+ALTER TABLE passes_master ADD COLUMN external_id VARCHAR(255);
+ALTER TABLE passes_master ADD COLUMN spend_total_cents INTEGER DEFAULT 0;
+ALTER TABLE passes_master ADD COLUMN spend_tier_level VARCHAR(20) DEFAULT 'TIER_1';
+
+-- Add spend tier thresholds to programs
+ALTER TABLE programs ADD COLUMN spend_tier_2_threshold_cents INTEGER DEFAULT 30000;
+ALTER TABLE programs ADD COLUMN spend_tier_3_threshold_cents INTEGER DEFAULT 100000;
+ALTER TABLE programs ADD COLUMN spend_tier_4_threshold_cents INTEGER DEFAULT 250000;
+
+-- Create spend ledger for transaction history
+CREATE TABLE spend_ledger (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID REFERENCES programs(id),
+  member_id UUID REFERENCES passes_master(id),
+  external_transaction_id VARCHAR(255),
+  amount_cents INTEGER NOT NULL,
+  currency VARCHAR(3) DEFAULT 'USD',
+  store_id VARCHAR(255),
+  idempotency_key VARCHAR(255) UNIQUE,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add POS API keys table
+CREATE TABLE pos_api_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID REFERENCES programs(id),
+  key_hash VARCHAR(64) NOT NULL,
+  key_prefix VARCHAR(12) NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ
+);
+```
+
+### Idempotency
+
+The `X-Idempotency-Key` header prevents duplicate transaction processing:
+
+```typescript
+// First request: Transaction processed, points added
+POST /transaction + X-Idempotency-Key: tx-001 → { success: true, isDuplicate: false }
+
+// Retry request: Same key, returns previous result
+POST /transaction + X-Idempotency-Key: tx-001 → { success: true, isDuplicate: true }
+```
+
+### Error Codes
+
+| Code | Description | Action |
+|------|-------------|--------|
+| `PROGRAM_NOT_FOUND` | Invalid program ID | Verify program exists |
+| `INVALID_API_KEY` | API key invalid or revoked | Generate new key |
+| `PROCESSING_ERROR` | Database or service error | Retry with same idempotency key |
+| `DUPLICATE_TRANSACTION` | Already processed | Safe to ignore |
 
 ---
 
@@ -860,6 +1323,28 @@ Public enrollment page lookup by dashboard slug.
 | `enrollment_url` | VARCHAR | PassKit enrollment URL |
 | `earn_rate_multiplier` | INTEGER | Points per $1 spent (default: 10) |
 | `member_limit` | INTEGER | Maximum active members allowed |
+| `tier_1_discount_percent` | INTEGER | Tier 1 discount (default: 0%) |
+| `tier_2_discount_percent` | INTEGER | Tier 2 discount (default: 5%) |
+| `tier_3_discount_percent` | INTEGER | Tier 3 discount (default: 10%) |
+| `tier_4_discount_percent` | INTEGER | Tier 4 discount (default: 15%) |
+| `spend_tier_2_threshold_cents` | INTEGER | Spend for tier 2 (default: 30000) |
+| `spend_tier_3_threshold_cents` | INTEGER | Spend for tier 3 (default: 100000) |
+| `spend_tier_4_threshold_cents` | INTEGER | Spend for tier 4 (default: 250000) |
+
+### Key Columns (passes_master) - v2.6.0
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `external_id` | VARCHAR | External POS system member ID |
+| `spend_total_cents` | INTEGER | Cumulative lifetime spend |
+| `spend_tier_level` | VARCHAR | Current tier (TIER_1-TIER_4) |
+
+### New Tables (v2.6.0)
+
+| Table | Description |
+|-------|-------------|
+| `spend_ledger` | External POS transaction history |
+| `pos_api_keys` | API keys for external POS integration |
 
 ### Required RPC Functions
 
@@ -1031,9 +1516,11 @@ curl http://localhost:5000/api/health | jq
 │   │   │   ├── members.tsx
 │   │   │   ├── assets.tsx    # Program QR codes & downloads
 │   │   │   ├── campaigns.tsx # Campaign Launcher (admin)
+│   │   │   ├── admin-clients.tsx        # Client list (admin)
+│   │   │   ├── admin-client-details.tsx # Client Command Center (admin) [v2.6]
 │   │   │   └── pos.tsx
 │   │   ├── lib/              # Utilities
-│   │   │   ├── auth.tsx      # Auth context
+│   │   │   ├── auth.tsx      # Auth context (with mock mode support)
 │   │   │   ├── api.ts        # API client
 │   │   │   └── queryClient.ts
 │   │   └── index.css         # Tailwind + theme
@@ -1042,31 +1529,43 @@ curl http://localhost:5000/api/health | jq
 │   ├── controllers/          # Request handlers
 │   │   ├── admin.controller.ts
 │   │   ├── pos.controller.ts
+│   │   ├── client.controller.ts  # Client profile & tier discount updates [v2.6]
 │   │   ├── campaign.controller.ts
 │   │   └── passkit-webhook.controller.ts
 │   ├── services/             # Business logic
 │   │   ├── logic.service.ts
 │   │   ├── supabase.service.ts
 │   │   ├── passkit-provision.service.ts
-│   │   └── postgrid.service.ts
+│   │   ├── postgrid.service.ts
+│   │   ├── admin.service.ts   # Tier discount persistence [v2.6]
+│   │   └── pos-webhook.service.ts  # External POS spend tracking [v2.6]
 │   ├── routes/               # Express routes
 │   │   ├── client.routes.ts  # Dashboard API
 │   │   ├── pos.routes.ts     # POS API
 │   │   ├── campaign.routes.ts # Campaign API (admin)
 │   │   ├── callbacks.routes.ts # PassKit webhooks
-│   │   └── webhook.routes.ts # External webhooks
+│   │   ├── webhook.routes.ts # External POS webhooks [v2.6]
+│   │   └── external-pos.routes.ts  # External POS API [v2.6]
+│   ├── utils/
+│   │   └── tier-calculator.ts  # Tier level calculations [v2.6]
 │   ├── middleware/           # Auth, validation
 │   ├── scripts/
 │   │   └── billing-cron.ts   # Nightly billing audit
 │   └── index.ts              # Server entry
-├── migrations/               # SQL migrations (001-019)
+├── migrations/               # SQL migrations (001-025)
+│   ├── 001-020              # Core migrations
+│   ├── 021_tier_discount_columns.sql  # Tier discount percentages [v2.6]
+│   └── 025_external_pos_spend_tracking.sql  # External POS & spend ledger [v2.6]
 ├── scripts/
 │   ├── prod-validation.ts   # Production validation tests
 │   └── test-provisioning.ts # Provisioning tests
 ├── docs/
 │   ├── POS_INTEGRATION.md   # POS webhook guide
+│   ├── EXTERNAL_POS_INTEGRATION.md  # External POS API guide [v2.6]
 │   ├── SECURITY_VALIDATION.md  # Protocol D security tests
 │   └── CAMPAIGN_LAUNCHER_ADMIN_ARCHITECTURE.md
+├── shared/
+│   └── schema.ts            # POSWebhookTransaction & POSWebhookResponse types [v2.6]
 ├── design_guidelines.md     # UI/UX guidelines
 └── README.md
 ```
@@ -1124,6 +1623,64 @@ The following areas have been identified for future improvement. AI agents may a
 ---
 
 ## Changelog
+
+### v2.6.0 - Dynamic Tier Discounts & External POS Integration (December 2024)
+
+**Dynamic Tier Discount System:**
+- ✅ Configurable discount percentages per tier level (0-100%)
+- ✅ Database columns: `tier_1_discount_percent` through `tier_4_discount_percent`
+- ✅ Client Command Center UI with tier discount input fields
+- ✅ Progressive discount validation (higher tiers ≥ lower tiers)
+- ✅ Real-time discount display in External POS responses
+
+**External POS Webhook System:**
+- ✅ Production-ready API for external POS integration
+- ✅ Spend-based tier calculation with configurable thresholds
+- ✅ Cumulative spend tracking in `spend_ledger` table
+- ✅ Member upsert by external ID with customer data enrichment
+- ✅ Idempotency support via `X-Idempotency-Key` header
+- ✅ API key management with create/revoke controls
+- ✅ Tier upgrade detection with `tierUpgraded` response field
+
+**Enhanced Notification System:**
+- ✅ Triple validation (tier, PassKit, protocol)
+- ✅ Dynamic tier segments (TIER_1 through TIER_4)
+- ✅ Segment preview before sending
+- ✅ Automated birthday rewards integration
+
+**Client Command Center Enhancements:**
+- ✅ Tier configuration panel with expand/collapse
+- ✅ PassKit tier ID mapping per tier level
+- ✅ Spend threshold configuration for external POS
+- ✅ Discount percentage inputs with validation
+
+**Development Experience:**
+- ✅ Mock mode (`VITE_MOCK_MODE=true`) for testing without Supabase auth
+- ✅ "Demo Login" button for quick access
+- ✅ Pre-populated sample data for UI testing
+- ✅ "Test Mode" badge indicator
+
+**Database Migrations:**
+- ✅ Migration 021: Tier discount percentage columns
+- ✅ Migration 025: External POS spend tracking, spend_ledger table, pos_api_keys table
+
+**New API Endpoints:**
+- `POST /api/external/pos/:programId/transaction` - Process spend transaction
+- `GET /api/external/pos/:programId/member/:externalId` - Member lookup
+- `POST /api/external/pos/:programId/api-key` - Generate API key
+- `DELETE /api/external/pos/:programId/api-key/:keyId` - Revoke API key
+
+---
+
+### v2.5.0 - Multi-Program Architecture (December 2024)
+- ✅ One tenant can manage multiple programs (verticals) simultaneously
+- ✅ Protocol support: MEMBERSHIP, EVENT_TICKET, COUPON
+- ✅ Independent PassKit credentials per program
+- ✅ Primary program designation for default routing
+- ✅ Protocol-specific visual badges in admin UI
+- ✅ Migration 020: Multi-program support
+
+---
 
 ### v1.2.0 - Campaign Launcher & Security Hardening (December 2024)
 - ✅ Campaign Launcher with dual client selection (dropdown + manual ID)
