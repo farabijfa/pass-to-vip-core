@@ -360,9 +360,21 @@ class PassKitService {
       switch (protocol) {
         case 'MEMBERSHIP':
           // PassKit API uses /members/member with externalId + programId in the body
+          // CRITICAL: passkit_program_id is REQUIRED - no hardcoded fallbacks allowed
+          if (!rpcResult.passkit_program_id) {
+            console.error('❌ MEMBERSHIP sync failed: No passkit_program_id provided');
+            console.error('   The program must have a valid, LIVE PassKit program ID configured.');
+            console.error('   Draft programs are not suitable for production use.');
+            return { 
+              success: false, 
+              synced: false, 
+              mode: 'MISSING_PROGRAM_ID',
+              error: 'No PassKit program ID configured. Please link this program to a live PassKit program.'
+            };
+          }
           url = `${PASSKIT_BASE_URL}/members/member`;
           payload.externalId = passkit_internal_id;
-          payload.programId = rpcResult.passkit_program_id || '4RhsVhHek0dliVogVznjSQ';
+          payload.programId = rpcResult.passkit_program_id;
           payload.points = new_balance;
           await axios.put(url, payload, authConfig);
           break;
@@ -740,6 +752,337 @@ class PassKitService {
         error: errorMessage,
       };
     }
+  }
+
+  // ============================================================================
+  // PassKit Program Management Methods (v2.6.1)
+  // Used for syncing and verifying live PassKit programs
+  // ============================================================================
+
+  async listPrograms(options: {
+    limit?: number;
+    offset?: number;
+    statusFilter?: 'PROJECT_PUBLISHED' | 'PROJECT_ACTIVE_FOR_OBJECT_CREATION' | 'PROJECT_DRAFT' | 'all';
+  } = {}): Promise<{
+    success: boolean;
+    programs?: Array<{
+      id: string;
+      name: string;
+      status: string[];
+      created?: string;
+      updated?: string;
+    }>;
+    total?: number;
+    error?: string;
+  }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Cannot list programs.');
+      return { 
+        success: false, 
+        error: 'PassKit not configured' 
+      };
+    }
+
+    console.log('📋 Fetching PassKit programs...');
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/programs/list`;
+      
+      const payload: Record<string, unknown> = {
+        limit: options.limit || 100,
+        offset: options.offset || 0,
+        orderBy: 'created',
+        orderAsc: false,
+      };
+
+      if (options.statusFilter && options.statusFilter !== 'all') {
+        payload.filterGroups = [{
+          condition: 'AND',
+          fieldFilters: [{
+            filterField: 'status',
+            filterValue: options.statusFilter,
+            filterOperator: 'eq'
+          }]
+        }];
+      }
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.post(url, payload, authConfig);
+
+      let programs: Record<string, unknown>[] = [];
+      let total = 0;
+
+      let responseData = response.data;
+      
+      if (typeof responseData === 'string') {
+        console.log('PassKit API returned string, attempting to parse...');
+        
+        const lines = responseData.split('\n').filter((line: string) => line.trim());
+        console.log(`Found ${lines.length} lines in response`);
+        
+        if (lines.length > 1) {
+          console.log('NDJSON format detected, parsing each line...');
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line);
+              if (parsed?.result && typeof parsed.result === 'object') {
+                programs.push(parsed.result);
+              } else if (parsed && typeof parsed === 'object' && parsed.id) {
+                programs.push(parsed);
+              }
+            } catch (lineError) {
+              console.warn('Failed to parse line:', line.substring(0, 100));
+            }
+          }
+          total = programs.length;
+          console.log(`Parsed ${programs.length} programs from NDJSON`);
+        } else {
+          try {
+            responseData = JSON.parse(responseData);
+            console.log('Single JSON parse successful');
+          } catch (parseError) {
+            console.error('JSON parse failed:', parseError);
+            console.log('Response preview:', responseData.substring(0, 500));
+            responseData = null;
+          }
+        }
+      }
+
+      if (programs.length === 0 && responseData && typeof responseData === 'object') {
+        console.log('PassKit API response keys:', Object.keys(responseData));
+
+        if (Array.isArray(responseData)) {
+          programs = responseData;
+          total = programs.length;
+        } else if (responseData?.result) {
+          if (Array.isArray(responseData.result)) {
+            programs = responseData.result;
+            total = programs.length;
+          } else if (typeof responseData.result === 'object') {
+            programs = [responseData.result];
+            total = 1;
+          }
+        } else if (responseData?.Programs && Array.isArray(responseData.Programs)) {
+          programs = responseData.Programs;
+          total = responseData.Total || responseData.totalNumber || programs.length;
+        } else if (responseData?.programs && Array.isArray(responseData.programs)) {
+          programs = responseData.programs;
+          total = responseData.total || programs.length;
+        } else if (responseData?.passes && Array.isArray(responseData.passes)) {
+          programs = responseData.passes;
+          total = responseData.total || programs.length;
+        } else {
+          console.warn('PassKit API response format unexpected:', typeof responseData);
+          console.log('Response sample:', JSON.stringify(responseData).substring(0, 500));
+        }
+      }
+      
+      console.log(`✅ Found ${programs.length} PassKit programs`);
+
+      return {
+        success: true,
+        programs: programs.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: p.name as string,
+          status: (p.status as string[]) || [],
+          created: p.created as string,
+          updated: p.updated as string,
+        })),
+        total,
+      };
+
+    } catch (error) {
+      let errorMessage = 'Failed to list PassKit programs';
+      
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit List Programs Error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async getProgram(programId: string): Promise<{
+    success: boolean;
+    program?: {
+      id: string;
+      name: string;
+      status: string[];
+      pointsType?: Record<string, unknown>;
+      expiry?: Record<string, unknown>;
+      created?: string;
+      updated?: string;
+    };
+    error?: string;
+  }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      return { 
+        success: false, 
+        error: 'PassKit not configured' 
+      };
+    }
+
+    console.log(`📋 Fetching PassKit program: ${programId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/program/${programId}`;
+      
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.get(url, authConfig);
+
+      console.log(`✅ Program details retrieved: ${response.data?.name}`);
+
+      return {
+        success: true,
+        program: {
+          id: response.data?.id,
+          name: response.data?.name,
+          status: response.data?.status || [],
+          pointsType: response.data?.pointsType,
+          expiry: response.data?.expiry,
+          created: response.data?.created,
+          updated: response.data?.updated,
+        },
+      };
+
+    } catch (error) {
+      let errorMessage = 'Failed to get PassKit program details';
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          return { success: false, error: 'Program not found in PassKit' };
+        }
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async listTiers(programId: string): Promise<{
+    success: boolean;
+    tiers?: Array<{
+      id: string;
+      name: string;
+      programId: string;
+      passTypeIdentifier?: string;
+    }>;
+    error?: string;
+  }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      return { 
+        success: false, 
+        error: 'PassKit not configured' 
+      };
+    }
+
+    console.log(`📋 Fetching tiers for program: ${programId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/tiers/list`;
+      
+      const payload = {
+        limit: 100,
+        filterGroups: [{
+          condition: 'AND',
+          fieldFilters: [{
+            filterField: 'programId',
+            filterValue: programId,
+            filterOperator: 'eq'
+          }]
+        }]
+      };
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.post(url, payload, authConfig);
+
+      const tiers = response.data?.tiers || response.data || [];
+      
+      console.log(`✅ Found ${tiers.length} tiers for program ${programId}`);
+
+      return {
+        success: true,
+        tiers: tiers.map((t: Record<string, unknown>) => ({
+          id: t.id,
+          name: t.name,
+          programId: t.programId,
+          passTypeIdentifier: t.passTypeIdentifier,
+        })),
+      };
+
+    } catch (error) {
+      let errorMessage = 'Failed to list PassKit tiers';
+      
+      if (axios.isAxiosError(error)) {
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async verifyProgramIsLive(programId: string): Promise<{
+    success: boolean;
+    isLive: boolean;
+    status?: string[];
+    error?: string;
+  }> {
+    const result = await this.getProgram(programId);
+    
+    if (!result.success || !result.program) {
+      return { 
+        success: false, 
+        isLive: false, 
+        error: result.error || 'Program not found' 
+      };
+    }
+
+    const status = result.program.status || [];
+    const isLive = status.includes('PROJECT_PUBLISHED') || 
+                   status.includes('PROJECT_ACTIVE_FOR_OBJECT_CREATION');
+
+    console.log(`🔍 Program ${programId} live status: ${isLive ? 'LIVE' : 'DRAFT'}`);
+    console.log(`   Status flags: ${status.join(', ')}`);
+
+    return {
+      success: true,
+      isLive,
+      status,
+    };
   }
 }
 

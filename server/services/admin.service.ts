@@ -147,7 +147,7 @@ class AdminService {
       passkitTierId: providedTierId,
       protocol,
       timezone = "America/New_York",
-      autoProvision = true,
+      autoProvision = false,
       earnRateMultiplier = 10,
     } = params;
 

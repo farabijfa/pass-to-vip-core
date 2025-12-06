@@ -58,6 +58,30 @@ router.get(
   adminController.getPassKitHealth.bind(adminController)
 );
 
+router.get(
+  "/passkit/programs",
+  checkApiKey,
+  adminController.listPassKitPrograms.bind(adminController)
+);
+
+router.get(
+  "/passkit/programs/:passkitProgramId",
+  checkApiKey,
+  adminController.getPassKitProgram.bind(adminController)
+);
+
+router.get(
+  "/passkit/programs/:passkitProgramId/tiers",
+  checkApiKey,
+  adminController.listPassKitTiers.bind(adminController)
+);
+
+router.get(
+  "/passkit/programs/:passkitProgramId/verify",
+  checkApiKey,
+  adminController.verifyPassKitProgram.bind(adminController)
+);
+
 // Multi-Program Management Routes
 router.get(
   "/tenants/:userId/programs",

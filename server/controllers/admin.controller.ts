@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { adminService } from "../services/admin.service";
+import { passKitService } from "../services/passkit.service";
 import { z } from "zod";
 
 const provisionTenantSchema = z.object({
@@ -10,7 +11,7 @@ const provisionTenantSchema = z.object({
   passkitTierId: z.string().optional(),
   protocol: z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]).default("MEMBERSHIP"),
   timezone: z.string().default("America/New_York"),
-  autoProvision: z.boolean().default(true),
+  autoProvision: z.boolean().default(false),
   earnRateMultiplier: z.number().int().min(1).max(1000).default(10),
 });
 
@@ -1006,6 +1007,201 @@ class AdminController {
 
     } catch (error) {
       console.error("Get spend tier config error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async listPassKitPrograms(req: Request, res: Response): Promise<void> {
+    try {
+      const statusFilter = req.query.status as 'PROJECT_PUBLISHED' | 'PROJECT_ACTIVE_FOR_OBJECT_CREATION' | 'PROJECT_DRAFT' | 'all' | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+
+      const result = await passKitService.listPrograms({
+        statusFilter: statusFilter || 'all',
+        limit,
+        offset,
+      });
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "PASSKIT_API_ERROR",
+            message: result.error || "Failed to list PassKit programs",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          programs: result.programs,
+          total: result.total,
+        },
+        metadata: {
+          filter: statusFilter || 'all',
+          limit,
+          offset,
+        },
+      });
+
+    } catch (error) {
+      console.error("List PassKit programs error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getPassKitProgram(req: Request, res: Response): Promise<void> {
+    try {
+      const { passkitProgramId } = req.params;
+
+      if (!passkitProgramId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "PassKit Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await passKitService.getProgram(passkitProgramId);
+
+      if (!result.success) {
+        const statusCode = result.error?.includes("not found") ? 404 : 500;
+        res.status(statusCode).json({
+          success: false,
+          error: {
+            code: statusCode === 404 ? "NOT_FOUND" : "PASSKIT_API_ERROR",
+            message: result.error || "Failed to get PassKit program",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.program,
+      });
+
+    } catch (error) {
+      console.error("Get PassKit program error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async listPassKitTiers(req: Request, res: Response): Promise<void> {
+    try {
+      const { passkitProgramId } = req.params;
+
+      if (!passkitProgramId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "PassKit Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await passKitService.listTiers(passkitProgramId);
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "PASSKIT_API_ERROR",
+            message: result.error || "Failed to list PassKit tiers",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          tiers: result.tiers,
+          programId: passkitProgramId,
+        },
+      });
+
+    } catch (error) {
+      console.error("List PassKit tiers error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async verifyPassKitProgram(req: Request, res: Response): Promise<void> {
+    try {
+      const { passkitProgramId } = req.params;
+
+      if (!passkitProgramId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "MISSING_PARAMS",
+            message: "PassKit Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const result = await passKitService.verifyProgramIsLive(passkitProgramId);
+
+      if (!result.success) {
+        const statusCode = result.error?.includes("not found") ? 404 : 500;
+        res.status(statusCode).json({
+          success: false,
+          error: {
+            code: statusCode === 404 ? "NOT_FOUND" : "PASSKIT_API_ERROR",
+            message: result.error || "Failed to verify PassKit program",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          programId: passkitProgramId,
+          isLive: result.isLive,
+          status: result.status,
+          recommendation: result.isLive 
+            ? "This program is live and ready for production use." 
+            : "WARNING: This program is in DRAFT mode. Passes will expire after 48 hours. Go live in PassKit dashboard before using in production.",
+        },
+      });
+
+    } catch (error) {
+      console.error("Verify PassKit program error:", error);
       res.status(500).json({
         success: false,
         error: {
