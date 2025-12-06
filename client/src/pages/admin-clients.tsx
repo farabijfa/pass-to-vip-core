@@ -12,7 +12,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { queryClient } from "@/lib/queryClient";
-import { ChevronRight, AlertTriangle, Check } from "lucide-react";
+import { ChevronRight, AlertTriangle, Check, RefreshCw, Loader2 } from "lucide-react";
+
+interface PassKitProgram {
+  id: string;
+  name: string;
+  status: string[];
+  created?: string;
+  updated?: string | null;
+}
 
 const MOCK_TENANTS: Tenant[] = [
   {
@@ -171,17 +179,48 @@ async function deleteTenant(userId: string): Promise<void> {
   }
 }
 
+async function fetchPassKitPrograms(): Promise<PassKitProgram[]> {
+  const apiKey = localStorage.getItem("admin_api_key");
+  if (!apiKey) {
+    throw new Error("Admin API key not configured. Set it in Settings.");
+  }
+  const response = await fetch("/api/admin/passkit/programs?status=PROJECT_PUBLISHED", {
+    headers: {
+      "x-api-key": apiKey,
+    },
+  });
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.error?.message || "Failed to fetch PassKit programs");
+  }
+  return result.data?.programs || [];
+}
+
 export default function AdminClientsPage() {
   const { toast } = useToast();
   const { isAdmin, user, mockMode } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [useManualEntry, setUseManualEntry] = useState(false);
   const [formData, setFormData] = useState<ProvisionRequest>({
     businessName: "",
     email: "",
     password: "",
     passkitProgramId: "",
     protocol: "MEMBERSHIP",
+  });
+
+  const { 
+    data: passkitPrograms, 
+    isLoading: programsLoading, 
+    error: programsError,
+    refetch: refetchPrograms,
+    isFetching: programsFetching
+  } = useQuery({
+    queryKey: ["admin-passkit-programs"],
+    queryFn: fetchPassKitPrograms,
+    enabled: isAdmin && isDialogOpen && !useManualEntry,
+    staleTime: 30000,
   });
 
   const { data, isLoading, error } = useQuery({
@@ -360,14 +399,88 @@ export default function AdminClientsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="passkitProgramId" className="text-sm">PassKit Program ID</Label>
-                <Input
-                  id="passkitProgramId"
-                  placeholder="pk_xxxxxxxx"
-                  value={formData.passkitProgramId}
-                  onChange={(e) => setFormData({ ...formData, passkitProgramId: e.target.value })}
-                  data-testid="input-passkit-id"
-                />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="passkitProgramId" className="text-sm">PassKit Program</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      setUseManualEntry(!useManualEntry);
+                      if (!useManualEntry) {
+                        setFormData({ ...formData, passkitProgramId: "" });
+                      }
+                    }}
+                    data-testid="button-toggle-manual-entry"
+                  >
+                    {useManualEntry ? "Select from list" : "Enter manually"}
+                  </Button>
+                </div>
+                
+                {useManualEntry ? (
+                  <Input
+                    id="passkitProgramId"
+                    placeholder="Enter PassKit Program ID"
+                    value={formData.passkitProgramId}
+                    onChange={(e) => setFormData({ ...formData, passkitProgramId: e.target.value })}
+                    data-testid="input-passkit-id-manual"
+                  />
+                ) : (
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.passkitProgramId}
+                      onValueChange={(value) => setFormData({ ...formData, passkitProgramId: value })}
+                      disabled={programsLoading}
+                    >
+                      <SelectTrigger className="flex-1" data-testid="select-passkit-program">
+                        <SelectValue placeholder={programsLoading ? "Loading programs..." : "Select a program"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {programsError ? (
+                          <div className="p-2 text-sm text-destructive">
+                            {(programsError as Error).message}
+                          </div>
+                        ) : passkitPrograms && passkitPrograms.length > 0 ? (
+                          passkitPrograms.map((program) => (
+                            <SelectItem key={program.id} value={program.id} data-testid={`option-program-${program.id}`}>
+                              <div className="flex items-center gap-2">
+                                <span>{program.name}</span>
+                                {program.status?.includes("PROJECT_PUBLISHED") && (
+                                  <Badge variant="default" className="bg-green-600 text-xs h-4">Live</Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            No published programs found. Create one in PassKit first.
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => refetchPrograms()}
+                      disabled={programsFetching}
+                      data-testid="button-refresh-programs"
+                    >
+                      {programsFetching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                )}
+                
+                {formData.passkitProgramId && !useManualEntry && (
+                  <p className="text-xs text-muted-foreground">
+                    ID: {formData.passkitProgramId}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="protocol" className="text-sm">Protocol Type</Label>
