@@ -1007,16 +1007,10 @@ class PassKitService {
     try {
       const url = `${PASSKIT_BASE_URL}/members/tiers/list`;
       
+      // PassKit requires programId at the top level of the request body
       const payload = {
+        programId: programId,
         limit: 100,
-        filterGroups: [{
-          condition: 'AND',
-          fieldFilters: [{
-            filterField: 'programId',
-            filterValue: programId,
-            filterOperator: 'eq'
-          }]
-        }]
       };
 
       const authConfig = {
@@ -1025,17 +1019,54 @@ class PassKitService {
 
       const response = await axios.post(url, payload, authConfig);
 
-      const tiers = response.data?.tiers || response.data || [];
+      // PassKit returns NDJSON or array of tiers
+      let tiers: Array<Record<string, unknown>> = [];
+      
+      console.log(`[PassKit Tiers] Response type: ${typeof response.data}`);
+      
+      if (typeof response.data === 'string') {
+        // Handle NDJSON format
+        const lines = response.data.split('\n').filter((line: string) => line.trim());
+        console.log(`[PassKit Tiers] NDJSON lines: ${lines.length}`);
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            console.log(`[PassKit Tiers] Parsed tier: ${JSON.stringify(parsed).substring(0, 200)}`);
+            if (parsed && typeof parsed === 'object') {
+              // Check if the parsed object has a 'result' wrapper (common in PassKit NDJSON)
+              if (parsed.result && typeof parsed.result === 'object') {
+                tiers.push(parsed.result);
+              } else {
+                tiers.push(parsed);
+              }
+            }
+          } catch (e) {
+            console.warn(`[PassKit Tiers] Failed to parse line: ${line.substring(0, 100)}`);
+          }
+        }
+      } else if (Array.isArray(response.data)) {
+        console.log(`[PassKit Tiers] Array response: ${response.data.length} items`);
+        tiers = response.data;
+      } else if (response.data?.tiers) {
+        console.log(`[PassKit Tiers] Object with tiers property`);
+        tiers = response.data.tiers;
+      } else if (response.data && typeof response.data === 'object') {
+        // Single tier object
+        console.log(`[PassKit Tiers] Single object response: ${JSON.stringify(response.data).substring(0, 200)}`);
+      }
       
       console.log(`✅ Found ${tiers.length} tiers for program ${programId}`);
+      if (tiers.length > 0) {
+        console.log(`[PassKit Tiers] First tier keys: ${Object.keys(tiers[0]).join(', ')}`);
+      }
 
       return {
         success: true,
         tiers: tiers.map((t: Record<string, unknown>) => ({
-          id: t.id,
-          name: t.name,
-          programId: t.programId,
-          passTypeIdentifier: t.passTypeIdentifier,
+          id: t.id as string,
+          name: t.name as string,
+          programId: t.programId as string,
+          passTypeIdentifier: t.passTypeIdentifier as string | undefined,
         })),
       };
 
@@ -1053,6 +1084,84 @@ class PassKitService {
         error: errorMessage,
       };
     }
+  }
+
+  async createTier(programId: string, tierName: string): Promise<{
+    success: boolean;
+    tierId?: string;
+    error?: string;
+  }> {
+    const token = generatePassKitToken();
+    
+    if (!token) {
+      return { 
+        success: false, 
+        error: 'PassKit not configured' 
+      };
+    }
+
+    console.log(`🆕 Creating tier "${tierName}" for program: ${programId}`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/tier`;
+      
+      const payload = {
+        programId: programId,
+        name: tierName,
+        id: '', // PassKit will generate an ID
+      };
+
+      const authConfig = {
+        headers: { Authorization: `Bearer ${token}` },
+      };
+
+      const response = await axios.post(url, payload, authConfig);
+
+      const tierId = response.data?.id || response.data;
+      console.log(`✅ Created tier with ID: ${tierId}`);
+
+      return {
+        success: true,
+        tierId: typeof tierId === 'string' ? tierId : String(tierId),
+      };
+
+    } catch (error) {
+      let errorMessage = 'Failed to create PassKit tier';
+      
+      if (axios.isAxiosError(error)) {
+        errorMessage = `PassKit API Error: ${error.response?.status} - ${JSON.stringify(error.response?.data)}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async getOrCreateDefaultTier(programId: string): Promise<{
+    success: boolean;
+    tierId?: string;
+    error?: string;
+  }> {
+    // First, try to list existing tiers
+    const listResult = await this.listTiers(programId);
+    
+    if (listResult.success && listResult.tiers && listResult.tiers.length > 0) {
+      // Use the first available tier as default
+      const defaultTier = listResult.tiers[0];
+      console.log(`📋 Using existing tier: ${defaultTier.name} (${defaultTier.id})`);
+      return {
+        success: true,
+        tierId: defaultTier.id,
+      };
+    }
+    
+    // No tiers exist, create a default one
+    console.log(`📋 No tiers found for program ${programId}, creating default tier...`);
+    return this.createTier(programId, 'Default');
   }
 
   async verifyProgramIsLive(programId: string): Promise<{

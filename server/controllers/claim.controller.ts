@@ -90,7 +90,7 @@ export class ClaimController {
       
       // Calculate the appropriate tier based on points (new members start at 0 = Bronze)
       const startingPoints = 0;
-      let tierId = "base";
+      let tierId: string | undefined = undefined;
       let tierLevel: TierLevel = "BRONZE";
       
       if (programResult.success && programResult.program) {
@@ -104,16 +104,47 @@ export class ClaimController {
         });
         
         // Get the appropriate PassKit tier ID for this level
-        tierId = getTierPasskitId(tierLevel, {
+        const resolvedTierId = getTierPasskitId(tierLevel, {
           passkitTierBronzeId: program.passkitTierBronzeId,
           passkitTierSilverId: program.passkitTierSilverId,
           passkitTierGoldId: program.passkitTierGoldId,
           passkitTierPlatinumId: program.passkitTierPlatinumId,
           passkitTierId: program.passkitTierId,
         });
+        
+        // Only use tierId if it's a real PassKit ID, not the fallback "base"
+        if (resolvedTierId && resolvedTierId !== "base") {
+          tierId = resolvedTierId;
+        }
       }
 
-      console.log(`📋 Using tier: ${getTierName(tierLevel)} (ID: ${tierId}) for program: ${claim.passkitProgramId}`);
+      // PassKit REQUIRES a tierId for member enrollment
+      // If no tier is configured in our database, get or create a default tier from PassKit
+      if (!tierId) {
+        console.log(`📋 No tier configured in database, fetching default tier from PassKit...`);
+        const defaultTierResult = await passKitService.getOrCreateDefaultTier(claim.passkitProgramId);
+        
+        if (defaultTierResult.success && defaultTierResult.tierId) {
+          tierId = defaultTierResult.tierId;
+          console.log(`📋 Using default tier from PassKit: ${tierId}`);
+        } else {
+          console.error(`❌ Failed to get/create default tier: ${defaultTierResult.error}`);
+          return res.status(500).json(
+            createResponse(
+              false,
+              undefined,
+              {
+                code: "TIER_NOT_FOUND",
+                message: "No tier is configured for this program. Please set up tiers in PassKit.",
+                details: defaultTierResult.error,
+              },
+              requestId
+            )
+          );
+        }
+      } else {
+        console.log(`📋 Using tier: ${getTierName(tierLevel)} (ID: ${tierId}) for program: ${claim.passkitProgramId}`);
+      }
 
       const enrollResult = await passKitService.enrollMember(
         claim.passkitProgramId,
