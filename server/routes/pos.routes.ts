@@ -48,7 +48,7 @@ function createResponse<T>(
   };
 }
 
-async function lookupMemberByExternalId(externalId: string): Promise<{
+async function lookupMemberByExternalId(lookupId: string): Promise<{
   success: boolean;
   member?: {
     id: string;
@@ -65,6 +65,7 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
     program_name: string;
     earn_rate_multiplier: number;
     created_at: string;
+    passkit_internal_id?: string;
   };
   error?: string;
 }> {
@@ -75,33 +76,54 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
   try {
     const supabase = getSupabaseClient();
 
-    const { data, error } = await supabase
-      .from("passes_master")
-      .select(`
+    const selectQuery = `
+      id,
+      external_id,
+      status,
+      is_active,
+      enrollment_source,
+      protocol,
+      passkit_internal_id,
+      points_balance,
+      spend_tier_level,
+      member_email,
+      member_first_name,
+      member_last_name,
+      program:programs!inner (
         id,
-        external_id,
-        status,
-        is_active,
-        enrollment_source,
-        protocol,
-        passkit_internal_id,
-        points_balance,
-        spend_tier_level,
-        member_email,
-        member_first_name,
-        member_last_name,
-        program:programs!inner (
-          id,
-          name,
-          is_suspended,
-          earn_rate_multiplier
-        )
-      `)
-      .eq("external_id", externalId)
+        name,
+        is_suspended,
+        earn_rate_multiplier
+      )
+    `;
+
+    // First try to find by external_id
+    let { data, error } = await supabase
+      .from("passes_master")
+      .select(selectQuery)
+      .eq("external_id", lookupId)
       .single();
 
-    if (error) {
-      console.error("[POS Lookup] Error:", error.message);
+    // If not found by external_id, try passkit_internal_id
+    if (error || !data) {
+      console.log("[POS Lookup] Not found by external_id, trying passkit_internal_id:", lookupId);
+      const result = await supabase
+        .from("passes_master")
+        .select(selectQuery)
+        .eq("passkit_internal_id", lookupId)
+        .limit(1)
+        .maybeSingle();
+      
+      data = result.data;
+      error = result.error;
+      
+      if (result.data) {
+        console.log("[POS Lookup] Found by passkit_internal_id:", lookupId, "external_id:", result.data.external_id);
+      }
+    }
+
+    if (error || !data) {
+      console.error("[POS Lookup] Error:", error?.message || "Not found by either external_id or passkit_internal_id");
       return { success: false, error: "Member not found" };
     }
 
@@ -124,6 +146,7 @@ async function lookupMemberByExternalId(externalId: string): Promise<{
         program_name: program.name,
         earn_rate_multiplier: program.earn_rate_multiplier || 10,
         created_at: new Date().toISOString(),
+        passkit_internal_id: data.passkit_internal_id || undefined,
       },
     };
   } catch (error) {
