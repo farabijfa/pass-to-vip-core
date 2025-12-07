@@ -1051,8 +1051,16 @@ class PassKitService {
         console.log(`[PassKit Tiers] Object with tiers property`);
         tiers = response.data.tiers;
       } else if (response.data && typeof response.data === 'object') {
-        // Single tier object
+        // Single tier object - check for result wrapper (common in PassKit single-item responses)
         console.log(`[PassKit Tiers] Single object response: ${JSON.stringify(response.data).substring(0, 200)}`);
+        if (response.data.result && typeof response.data.result === 'object') {
+          console.log(`[PassKit Tiers] Found wrapped result, extracting tier`);
+          tiers.push(response.data.result);
+        } else if (response.data.id) {
+          // Direct tier object without wrapper
+          console.log(`[PassKit Tiers] Found direct tier object`);
+          tiers.push(response.data);
+        }
       }
       
       console.log(`✅ Found ${tiers.length} tiers for program ${programId}`);
