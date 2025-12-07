@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import { adminService } from "../services/admin.service";
 import { passKitService } from "../services/passkit.service";
+import { postGridService } from "../services/postgrid.service";
+import { supabaseService } from "../services/supabase.service";
+import { getAppUrl } from "../config";
 import { z } from "zod";
 
 const provisionTenantSchema = z.object({
@@ -1202,6 +1205,153 @@ class AdminController {
 
     } catch (error) {
       console.error("Verify PassKit program error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async testSendLetter(req: Request, res: Response): Promise<void> {
+    try {
+      const testLetterSchema = z.object({
+        passkitProgramId: z.string().min(1, "PassKit Program ID is required"),
+        templateId: z.string().default("template_3J62GbmowSk7SeD4dFcaUs"),
+        recipient: z.object({
+          firstName: z.string().min(1, "First name is required"),
+          lastName: z.string().optional(),
+          email: z.string().email().optional(),
+          addressLine1: z.string().min(1, "Address is required"),
+          city: z.string().min(1, "City is required"),
+          state: z.string().min(2).max(2, "State must be 2-letter code"),
+          postalCode: z.string().min(5, "Postal code is required"),
+        }),
+        description: z.string().optional(),
+      });
+
+      const validation = testLetterSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { passkitProgramId, templateId, recipient, description } = validation.data;
+      const baseClaimUrl = `${getAppUrl()}/claim`;
+
+      console.log(`📧 Starting test letter flow for PassKit program: ${passkitProgramId}`);
+
+      const claimResult = await supabaseService.generateClaimCode({
+        passkitProgramId,
+        contact: {
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          email: recipient.email,
+          addressLine1: recipient.addressLine1,
+          city: recipient.city,
+          state: recipient.state,
+          postalCode: recipient.postalCode,
+          country: "US",
+        },
+      });
+
+      if (!claimResult.success || !claimResult.claimCode) {
+        console.error("Failed to generate claim code:", claimResult.error);
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "CLAIM_GENERATION_FAILED",
+            message: claimResult.error || "Failed to generate claim code",
+          },
+        });
+        return;
+      }
+
+      const claimCode = claimResult.claimCode;
+      const claimUrl = `${baseClaimUrl}/${claimCode}`;
+      const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=${encodeURIComponent(claimUrl)}`;
+
+      console.log(`🎟️ Generated claim code: ${claimCode}`);
+      console.log(`🔗 Claim URL: ${claimUrl}`);
+
+      const letterResult = await postGridService.sendLetter({
+        templateId,
+        recipientAddress: {
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          addressLine1: recipient.addressLine1,
+          city: recipient.city,
+          state: recipient.state,
+          postalCode: recipient.postalCode,
+          country: "US",
+        },
+        claimCode,
+        claimUrl,
+        mergeVariables: {
+          firstName: recipient.firstName,
+          lastName: recipient.lastName || "",
+          fullName: `${recipient.firstName} ${recipient.lastName || ""}`.trim(),
+          qrCodeUrl: qrCodeImageUrl,
+          claimCode,
+        },
+        addressPlacement: "top_first_page",
+        doubleSided: true,
+        color: true,
+        description: description || `Test letter for ${passkitProgramId}`,
+      });
+
+      if (!letterResult.success) {
+        console.error("Failed to send letter:", letterResult.error);
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "POSTGRID_ERROR",
+            message: letterResult.error || "Failed to send letter via PostGrid",
+          },
+        });
+        return;
+      }
+
+      console.log(`✅ Letter sent successfully! ID: ${letterResult.letterId}`);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          letter: {
+            id: letterResult.letterId,
+            status: letterResult.status,
+            estimatedDeliveryDate: letterResult.estimatedDeliveryDate,
+            previewUrl: `https://dashboard.postgrid.com/dashboard/letters/${letterResult.letterId}`,
+          },
+          claim: {
+            claimCode,
+            claimUrl,
+            qrCodeUrl: qrCodeImageUrl,
+          },
+          passkit: {
+            programId: passkitProgramId,
+          },
+          testInstructions: [
+            "1. Open the Claim URL on your phone to test the pass installation",
+            "2. Or scan the QR code at the qrCodeUrl with your phone camera",
+            "3. You will be redirected to add the pass to Google Pay or Apple Wallet",
+            "4. In PostGrid test mode, no physical letter is mailed",
+          ],
+        },
+      });
+
+    } catch (error) {
+      console.error("Test send letter error:", error);
       res.status(500).json({
         success: false,
         error: {

@@ -137,4 +137,10 @@ router.patch(
   adminController.updateSpendTierConfig.bind(adminController)
 );
 
+router.post(
+  "/test-send-letter",
+  checkApiKey,
+  adminController.testSendLetter.bind(adminController)
+);
+
 export default router;
