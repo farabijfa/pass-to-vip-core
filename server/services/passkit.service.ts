@@ -26,6 +26,10 @@ interface SyncPassResult {
   new_balance?: number;
   member_name?: string;
   tier_level?: string;
+  member_email?: string;
+  member_first_name?: string;
+  member_last_name?: string;
+  external_id?: string;
 }
 
 interface EnrollMemberData {
@@ -359,7 +363,7 @@ class PassKitService {
 
       switch (protocol) {
         case 'MEMBERSHIP':
-          // PassKit API uses /members/member with externalId + programId in the body
+          // PassKit API uses /members/member with id + programId in the body
           // CRITICAL: passkit_program_id is REQUIRED - no hardcoded fallbacks allowed
           if (!rpcResult.passkit_program_id) {
             console.error('❌ MEMBERSHIP sync failed: No passkit_program_id provided');
@@ -373,9 +377,17 @@ class PassKitService {
             };
           }
           url = `${PASSKIT_BASE_URL}/members/member`;
-          payload.externalId = passkit_internal_id;
+          payload.id = passkit_internal_id;
           payload.programId = rpcResult.passkit_program_id;
           payload.points = new_balance;
+          if (rpcResult.member_email || rpcResult.member_first_name || rpcResult.member_last_name) {
+            payload.person = {
+              emailAddress: rpcResult.member_email || rpcResult.external_id || `${passkit_internal_id}@member.local`,
+              forename: rpcResult.member_first_name || 'Member',
+              surname: rpcResult.member_last_name || '',
+            };
+          }
+          console.log(`📤 PassKit PUT ${url}`, JSON.stringify(payload, null, 2));
           await axios.put(url, payload, authConfig);
           break;
 
@@ -426,6 +438,79 @@ class PassKitService {
 
   isInitialized(): boolean {
     return this.initialized && isPassKitConfigured();
+  }
+
+  async updateMemberPoints(
+    passkitProgramId: string,
+    memberId: string,
+    points: number,
+    changeMessage?: string,
+    personData?: {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    const token = generatePassKitToken();
+
+    if (!token) {
+      console.log('⚠️ No PassKit Keys found. Using MOCK mode.');
+      console.log(`[Mock] Would update member ${memberId} to ${points} points`);
+      return { success: true };
+    }
+
+    console.log(`📤 Updating PassKit member balance: ${memberId} = ${points} points`);
+
+    try {
+      const url = `${PASSKIT_BASE_URL}/members/member`;
+
+      const payload: Record<string, unknown> = {
+        id: memberId,
+        programId: passkitProgramId,
+        points: points,
+      };
+
+      if (changeMessage) {
+        payload.changeMessage = changeMessage;
+      }
+
+      // PassKit requires person data when data collection is enabled
+      // Always include person object with fallbacks
+      const person: Record<string, string> = {
+        emailAddress: personData?.email || `${memberId}@member.local`,
+        forename: personData?.firstName || 'Member',
+        surname: personData?.lastName || '',
+      };
+      payload.person = person;
+
+      const authConfig = {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      console.log(`📤 PassKit PUT ${url}`, JSON.stringify(payload, null, 2));
+      await axios.put(url, payload, authConfig);
+
+      console.log(`✅ PassKit member ${memberId} updated to ${points} points`);
+      return { success: true };
+    } catch (error) {
+      let errorMessage = 'PassKit Update Failed';
+
+      if (axios.isAxiosError(error)) {
+        console.error('❌ PassKit API Error:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+        });
+        errorMessage = error.response?.data?.message || error.response?.data?.error || error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return { success: false, error: errorMessage };
+    }
   }
 
   async enrollMember(

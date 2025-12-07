@@ -167,4 +167,22 @@ router.post(
   adminController.manuallyInsertPass.bind(adminController)
 );
 
+router.post(
+  "/passkit/push-balance",
+  checkApiKey,
+  adminController.pushBalanceToPassKit.bind(adminController)
+);
+
+router.get(
+  "/passkit/test-program/:passkitProgramId",
+  checkApiKey,
+  adminController.testPassKitProgram.bind(adminController)
+);
+
+router.get(
+  "/passkit/test-member/:passkitProgramId/:memberId",
+  checkApiKey,
+  adminController.testPassKitMember.bind(adminController)
+);
+
 export default router;

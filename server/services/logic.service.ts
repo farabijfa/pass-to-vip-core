@@ -210,6 +210,10 @@ class LogicService {
           new_balance: rpcResult?.new_balance,
           member_name: rpcResult?.member_name,
           tier_level: rpcResult?.tier_level,
+          member_email: rpcResult?.member_email || rpcResult?.email,
+          member_first_name: rpcResult?.member_first_name || rpcResult?.first_name,
+          member_last_name: rpcResult?.member_last_name || rpcResult?.last_name,
+          external_id: rpcResult?.external_id,
         });
         passKitSync = { synced: syncResult.synced, error: syncResult.error, skipped: false };
       } catch (syncError) {

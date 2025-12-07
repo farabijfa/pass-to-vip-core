@@ -1695,6 +1695,132 @@ class AdminController {
       });
     }
   }
+
+  async pushBalanceToPassKit(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      const pushBalanceSchema = z.object({
+        passkitProgramId: z.string().min(1, "PassKit Program ID is required"),
+        memberId: z.string().min(1, "PassKit Member ID (from pass) is required"),
+        points: z.number().int().min(0, "Points must be a non-negative integer"),
+        message: z.string().optional(),
+        email: z.string().email().optional(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+      });
+
+      const validation = pushBalanceSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { passkitProgramId, memberId, points, message, email, firstName, lastName } = validation.data;
+
+      console.log(`📤 Pushing balance to PassKit: ${memberId} = ${points} points`);
+
+      const result = await passKitService.updateMemberPoints(
+        passkitProgramId,
+        memberId,
+        points,
+        message || `Balance updated to ${points} points`,
+        { email, firstName, lastName }
+      );
+
+      const processingTime = Date.now() - startTime;
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "PASSKIT_UPDATE_FAILED",
+            message: result.error || "Failed to update PassKit",
+          },
+          metadata: { processingTime },
+        });
+        return;
+      }
+
+      console.log(`✅ PassKit balance updated: ${memberId} = ${points} points`);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          memberId,
+          points,
+          passkitProgramId,
+          message: message || `Balance updated to ${points} points`,
+        },
+        metadata: { processingTime },
+      });
+    } catch (error) {
+      console.error("Push balance to PassKit error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async testPassKitProgram(req: Request, res: Response): Promise<void> {
+    try {
+      const { passkitProgramId } = req.params;
+      
+      console.log(`🔍 Testing PassKit program: ${passkitProgramId}`);
+      
+      const result = await passKitService.getProgram(passkitProgramId);
+      
+      res.status(result.success ? 200 : 404).json({
+        success: result.success,
+        data: result.program,
+        error: result.error,
+      });
+    } catch (error) {
+      console.error("Test PassKit program error:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async testPassKitMember(req: Request, res: Response): Promise<void> {
+    try {
+      const { passkitProgramId, memberId } = req.params;
+      
+      console.log(`🔍 Testing PassKit member lookup: ${memberId} in program ${passkitProgramId}`);
+      
+      const result = await passKitSyncService.syncSinglePass(
+        passkitProgramId,
+        passkitProgramId,
+        memberId
+      );
+      
+      res.status(result.success ? 200 : 404).json({
+        success: result.success,
+        action: result.action,
+        error: result.error,
+      });
+    } catch (error) {
+      console.error("Test PassKit member error:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
 }
 
 export const adminController = new AdminController();

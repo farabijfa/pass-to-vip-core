@@ -82,17 +82,19 @@ class PassKitSyncService {
     console.log(`📋 Fetching PassKit members for program: ${options.programId}`);
 
     try {
-      const url = `${PASSKIT_BASE_URL}/members/members/list`;
+      const url = `${PASSKIT_BASE_URL}/members/member/list/${options.programId}`;
       
       const payload: Record<string, unknown> = {
-        programId: options.programId,
-        limit: options.limit || 100,
+        filters: {
+          limit: options.limit || 100,
+          offset: options.offset || 0,
+          orderBy: "created",
+          orderAsc: true,
+        },
       };
 
       if (options.cursor) {
-        payload.cursor = options.cursor;
-      } else if (options.offset) {
-        payload.offset = options.offset;
+        (payload.filters as Record<string, unknown>).cursor = options.cursor;
       }
 
       const config = {
@@ -103,6 +105,7 @@ class PassKitSyncService {
         timeout: 60000,
       };
 
+      console.log(`📤 PassKit POST ${url}`, JSON.stringify(payload, null, 2));
       const response = await axios.post(url, payload, config);
 
       let members: PassKitMember[] = [];
