@@ -45,3 +45,24 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 -   **Supabase:** PostgreSQL database, authentication, and custom RPC functions.
 -   **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay) and real-time updates.
 -   **PostGrid:** Direct mail campaigns (postcards, letters) and dynamic template management.
+
+## Pending Database Migrations
+
+### Migration 026: Fix Atomic Transaction RPC (REQUIRED)
+**File:** `migrations/026_fix_atomic_transaction_rpc.sql`
+
+**Issue:** The `process_membership_transaction_atomic` RPC function references an `updated_at` column that doesn't exist in the `passes_master` table, causing POS earn/redeem operations to fail.
+
+**How to Apply:**
+1. Open Supabase Dashboard → SQL Editor
+2. Copy the contents of `migrations/026_fix_atomic_transaction_rpc.sql`
+3. Execute the SQL to update the RPC function
+4. POS earn/redeem operations will work after this fix
+
+## Recent Changes (December 2025)
+- Fixed campaign controller to fetch PassKit program ID from database before creating claim codes
+- Fixed POS lookup endpoint - corrected `tier_level` to `spend_tier_level` column reference
+- Fixed POS lookup endpoint - removed non-existent `member_phone` and `created_at` column references
+- Created migration 026 to fix `process_membership_transaction_atomic` RPC function
+- POS lookup works correctly (verified with BETA-001 member)
+- POS earn/redeem requires migration 026 to be applied in Supabase
