@@ -1411,7 +1411,8 @@ class AdminController {
       }
 
       const tierId = tierResult.tierId;
-      const passkitEnrollmentUrl = `https://pub2.pskt.io/c/${tierId}`;
+      // Use shortCode-based URL if available, otherwise fallback to tier ID
+      const passkitEnrollmentUrl = tierResult.enrollmentUrl || `https://pub2.pskt.io/c/${tierId}`;
       const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=${encodeURIComponent(passkitEnrollmentUrl)}`;
 
       console.log(`🎫 PassKit enrollment URL: ${passkitEnrollmentUrl}`);

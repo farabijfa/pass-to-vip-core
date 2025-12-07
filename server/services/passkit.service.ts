@@ -1075,6 +1075,8 @@ class PassKitService {
       name: string;
       programId: string;
       passTypeIdentifier?: string;
+      shortCode?: string;
+      allowTierEnrolment?: boolean;
     }>;
     error?: string;
   }> {
@@ -1160,6 +1162,8 @@ class PassKitService {
           name: t.name as string,
           programId: t.programId as string,
           passTypeIdentifier: t.passTypeIdentifier as string | undefined,
+          shortCode: t.shortCode as string | undefined,
+          allowTierEnrolment: t.allowTierEnrolment as boolean | undefined,
         })),
       };
 
@@ -1237,6 +1241,8 @@ class PassKitService {
   async getOrCreateDefaultTier(programId: string): Promise<{
     success: boolean;
     tierId?: string;
+    shortCode?: string;
+    enrollmentUrl?: string;
     error?: string;
   }> {
     // First, try to list existing tiers
@@ -1246,9 +1252,19 @@ class PassKitService {
       // Use the first available tier as default
       const defaultTier = listResult.tiers[0];
       console.log(`📋 Using existing tier: ${defaultTier.name} (${defaultTier.id})`);
+      console.log(`📋 Tier shortCode: ${defaultTier.shortCode || 'none'}, allowTierEnrolment: ${defaultTier.allowTierEnrolment}`);
+      
+      // Build enrollment URL using shortCode if available
+      let enrollmentUrl: string | undefined;
+      if (defaultTier.shortCode) {
+        enrollmentUrl = `https://pub2.pskt.io/t/${defaultTier.shortCode}`;
+      }
+      
       return {
         success: true,
         tierId: defaultTier.id,
+        shortCode: defaultTier.shortCode,
+        enrollmentUrl,
       };
     }
     
