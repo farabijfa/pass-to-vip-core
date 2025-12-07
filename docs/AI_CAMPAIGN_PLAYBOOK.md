@@ -10,7 +10,7 @@ This playbook documents all backend commands for launching loyalty campaigns via
 ### Live Programs
 | Program Name | PassKit ID | Tier ID | Enrollment Form URL | Protocol |
 |-------------|------------|---------|---------------------|----------|
-| Gift Card Rewards | `20bCfEUuHxQgvo7toZbTTy` | `gift_card` | `https://pub2.pskt.io/t/ffxqqe` | MEMBERSHIP |
+| Gift Card Rewards | `20bCfEUuHxQgvo7toZbTTy` | `gift_card` | `https://pub2.pskt.io/t/8wc7xq` | MEMBERSHIP |
 | Beta Tester Pizza | `4RhsVhHek0dliVogVznjSQ` | `base`, `base_2` | *(Get from PassKit Dashboard)* | MEMBERSHIP |
 
 ### PostGrid Templates
@@ -28,7 +28,7 @@ Pass To VIP supports **two distinct enrollment flows**. Choose the right one bas
 **Use Case:** Display a single QR code at your front desk for walk-in customers.
 
 - Customer scans QR → PassKit hosted form → enters name/email → gets pass
-- URL Format: `https://pub2.pskt.io/t/{formId}` (e.g., `ffxqqe`)
+- URL Format: `https://pub2.pskt.io/t/{formId}` (e.g., `8wc7xq`)
 - Different form IDs exist per tier (configured in PassKit Dashboard > Distribution)
 - Visible in client dashboard Assets page
 
@@ -58,7 +58,7 @@ curl -X PATCH "https://YOUR_REPLIT_URL/api/programs/{programId}/enrollment-url" 
   -H "x-api-key: $ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "enrollment_url": "https://pub2.pskt.io/t/ffxqqe"
+    "enrollment_url": "https://pub2.pskt.io/t/8wc7xq"
   }'
 ```
 
