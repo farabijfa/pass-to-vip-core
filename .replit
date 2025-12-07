@@ -99,6 +99,7 @@ waitForPort = 5000
 
 [userenv.shared]
 APP_URL = "https://e87d0c9c-a17e-4072-b82d-6c2df516162d-00-2atv7ax70bk4b.riker.replit.dev"
+ADMIN_API_KEY = "pk_phygital_admin_2024"
 
 [userenv.development]
 VITE_MOCK_MODE = "false"

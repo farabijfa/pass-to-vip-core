@@ -1567,6 +1567,94 @@ class AdminController {
       });
     }
   }
+
+  async manuallyInsertPass(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+    try {
+      const manualPassSchema = z.object({
+        programId: z.string().uuid("Program ID must be a valid UUID"),
+        passkitInternalId: z.string().min(1, "PassKit internal ID is required"),
+        externalId: z.string().optional(),
+        email: z.string().email().optional(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        phone: z.string().optional(),
+        pointsBalance: z.number().int().min(0).default(0),
+      });
+
+      const validation = manualPassSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { 
+        programId, 
+        passkitInternalId, 
+        externalId,
+        email,
+        firstName,
+        lastName,
+        phone,
+      } = validation.data;
+
+      const client = supabaseService.getClient();
+
+      const { data: program, error: programError } = await client
+        .from("programs")
+        .select("id, tenant_id, passkit_program_id, name")
+        .eq("id", programId)
+        .single();
+
+      if (programError || !program) {
+        res.status(404).json({
+          success: false,
+          error: {
+            code: "PROGRAM_NOT_FOUND",
+            message: `Program ${programId} not found`,
+          },
+        });
+        return;
+      }
+
+      const finalExternalId = externalId || passkitInternalId;
+
+      res.status(503).json({
+        success: false,
+        error: {
+          code: "MIGRATION_REQUIRED",
+          message: "Manual pass insertion requires migration 027 to be applied to Supabase. Please apply 'migrations/027_passkit_sync_system.sql' first.",
+          details: {
+            programId,
+            passkitInternalId,
+            externalId: finalExternalId,
+            hint: "The RPC function 'upsert_membership_pass_from_passkit' must exist for safe pass insertion",
+          },
+        },
+        metadata: {
+          processingTime: Date.now() - startTime,
+        },
+      });
+
+    } catch (error) {
+      console.error("Manual pass insert error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
 }
 
 export const adminController = new AdminController();

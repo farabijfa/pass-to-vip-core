@@ -161,4 +161,10 @@ router.get(
   adminController.getPassKitSyncHistory.bind(adminController)
 );
 
+router.post(
+  "/passes/manual-insert",
+  checkApiKey,
+  adminController.manuallyInsertPass.bind(adminController)
+);
+
 export default router;
