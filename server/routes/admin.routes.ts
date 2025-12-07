@@ -191,4 +191,10 @@ router.get(
   adminController.testPassKitMember.bind(adminController)
 );
 
+router.post(
+  "/programs/upsert-supabase",
+  checkApiKey,
+  adminController.upsertProgram.bind(adminController)
+);
+
 export default router;

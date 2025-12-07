@@ -1952,6 +1952,93 @@ class AdminController {
       });
     }
   }
+
+  async upsertProgram(req: Request, res: Response): Promise<void> {
+    const upsertProgramSchema = z.object({
+      id: z.string().uuid("Program ID must be a valid UUID"),
+      name: z.string().min(1, "Name is required"),
+      protocol: z.enum(["MEMBERSHIP", "COUPON", "EVENT_TICKET"]).default("MEMBERSHIP"),
+      tenant_id: z.string().uuid("Tenant ID must be a valid UUID"),
+      passkit_program_id: z.string().optional(),
+      enrollment_url: z.string().url("Enrollment URL must be valid").optional(),
+      enrollment_slug: z.string().min(1).optional(),
+      is_primary: z.boolean().default(true),
+      is_suspended: z.boolean().default(false),
+    });
+
+    try {
+      const validation = upsertProgramSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const programData = validation.data;
+      
+      if (programData.enrollment_slug) {
+        programData.enrollment_slug = programData.enrollment_slug.toLowerCase().trim();
+      }
+
+      console.log(`📝 Upserting program: ${programData.name} (${programData.id})`);
+
+      const client = supabaseService.getClient();
+      
+      const { data: program, error } = await client
+        .from("programs")
+        .upsert({
+          id: programData.id,
+          name: programData.name,
+          protocol: programData.protocol,
+          tenant_id: programData.tenant_id,
+          passkit_program_id: programData.passkit_program_id,
+          enrollment_url: programData.enrollment_url,
+          enrollment_slug: programData.enrollment_slug,
+          is_primary: programData.is_primary,
+          is_suspended: programData.is_suspended,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Upsert program error:", error);
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "UPSERT_FAILED",
+            message: error.message,
+          },
+        });
+        return;
+      }
+
+      console.log(`✅ Program upserted successfully: ${program.id}`);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          program,
+          message: "Program upserted successfully",
+        },
+      });
+    } catch (error) {
+      console.error("Upsert program error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+      });
+    }
+  }
 }
 
 export const adminController = new AdminController();

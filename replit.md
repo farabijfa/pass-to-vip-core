@@ -118,3 +118,10 @@ The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 t
 - Applied migration 026 to fix `process_membership_transaction_atomic` RPC function (removed updated_at reference)
 - **POS System Fully Working**: Lookup, Earn, and Redeem all verified
 - **PassKit Balance Push Verified**: Test card 1POa48IlfW2AGvsXgisct0 successfully updated to 300 points
+- **Added Admin Program Upsert Endpoint**: `POST /api/admin/programs/upsert-supabase` for syncing programs between local PostgreSQL and Supabase
+- **Fixed Enrollment Controller**: Now uses `dashboard_slug` column (matching Supabase schema) instead of non-existent `enrollment_slug`
+- **Manali Bakes Setup Complete**:
+  - Program synced to Supabase (ID: 983af33b-5864-4115-abf3-2627781f5da1)
+  - Branded enrollment URL working: `https://passtovip.pro/enroll/s669pxkpcZ4nfRY8i4zkKw`
+  - Direct PassKit enrollment: `https://pub2.pskt.io/t/71aejp`
+  - Login: `manali@passtovip.com` / `Manali2024!`
