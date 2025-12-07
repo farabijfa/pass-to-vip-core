@@ -93,13 +93,17 @@ The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 t
 3. This creates: passkit_sync_state table, passkit_event_journal table, upsert_membership_pass_from_passkit RPC function
 
 ## Recent Changes (December 2025)
-- **PassKit Sync System v2.6.1**: Code complete, migration required
+- **PassKit Sync System v2.6.1**: Code complete, migration 027 APPLIED
+- **PassKit Balance Push Fix v2.6.2**: Fixed PassKit PUT requests to use member `id` (not `externalId`) and include required `person` data
 - Added migration 027 with passkit_sync_state and passkit_event_journal tables
 - Created passkit-sync.service.ts with full sync capabilities
 - Added admin API endpoints for manual sync triggering and status monitoring
-- Manual pass insert endpoint returns clear migration-required error
+- Added migration 028: Enhanced RPC to return member_email, member_first_name, member_last_name, external_id for PassKit sync
+- Fixed `syncPass` method: Uses `payload.id` (PassKit internal ID) instead of `payload.externalId`
+- Fixed `updateMemberPoints` method: Always includes person object with emailAddress, forename, surname
 - Fixed campaign controller to fetch PassKit program ID from database before creating claim codes
 - Fixed POS lookup endpoint - corrected `tier_level` to `spend_tier_level` column reference
 - Fixed POS lookup endpoint - removed non-existent `member_phone` and `created_at` column references
 - Applied migration 026 to fix `process_membership_transaction_atomic` RPC function (removed updated_at reference)
-- **POS System Fully Working**: Lookup, Earn, and Redeem all verified with BETA-001 member (current balance: 120 points)
+- **POS System Fully Working**: Lookup, Earn, and Redeem all verified
+- **PassKit Balance Push Verified**: Test card 1POa48IlfW2AGvsXgisct0 successfully updated to 300 points
