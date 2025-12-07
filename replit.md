@@ -46,15 +46,35 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 -   **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay) and real-time updates.
 -   **PostGrid:** Direct mail campaigns (postcards, letters) and dynamic template management.
 
-## PassKit Sync System (v2.6.1)
+## PassKit Sync System (v2.6.3)
 
 ### Problem Solved
 When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are created directly in PassKit but may not exist in our Supabase database. This caused POS lookups to fail with "member not found" errors, resulting in missing points.
 
 ### Architecture
 - **Source of Truth**: PassKit = pass existence; Supabase = points/balances
-- **Sync Strategy**: Dual-path approach with API sync + (future) real-time webhooks
+- **Sync Strategy**: Dual-path approach with real-time webhooks + scheduled API sync
 - **Idempotent Upserts**: `upsert_membership_pass_from_passkit` RPC function ensures no duplicates or data loss
+
+### Real-Time PassKit Webhook (NEW in v2.6.3)
+**Webhook URL**: `https://passtovip.pro/api/callbacks/passkit`
+
+Configure this URL in PassKit Admin Console → Program Settings → Webhooks
+
+**Supported Events**:
+- `pass.created` / `member.enrolled`: Auto-syncs new passes to Supabase immediately
+- `pass.installed`: Updates pass status to INSTALLED
+- `pass.uninstalled`: Updates pass status to UNINSTALLED
+- `pass.updated`: Updates last_updated timestamp
+
+**How it Works**:
+1. Customer enrolls via PassKit-hosted form (e.g., `https://pub2.pskt.io/t/71aejp`)
+2. PassKit sends webhook to our endpoint with pass data
+3. System looks up program by `passkit_program_id`
+4. Pass is upserted to Supabase via `upsert_membership_pass_from_passkit` RPC
+5. Member immediately appears in Client Dashboard
+
+**Signature Verification**: Optional HMAC verification using `x-passkit-signature` header
 
 ### Database Tables (Migration 027)
 - **passkit_sync_state**: Tracks sync cursors, timestamps, and status per program
@@ -104,6 +124,10 @@ The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 t
 3. This creates: passkit_sync_state table, passkit_event_journal table, upsert_membership_pass_from_passkit RPC function
 
 ## Recent Changes (December 2025)
+- **PassKit Real-Time Webhook v2.6.3**: Added webhook handler at `/api/callbacks/passkit` for real-time pass sync
+  - Handles `pass.created`, `member.enrolled`, `pass.installed`, `pass.uninstalled`, `pass.updated` events
+  - Auto-syncs new passes to Supabase immediately when customers enroll via PassKit forms
+  - Includes HMAC signature verification support
 - **PassKit Sync System v2.6.1**: Code complete, migration 027 APPLIED
 - **PassKit Balance Push Fix v2.6.2**: Fixed PassKit PUT requests to use member `id` (not `externalId`) and include required `person` data
 - Added migration 027 with passkit_sync_state and passkit_event_journal tables
