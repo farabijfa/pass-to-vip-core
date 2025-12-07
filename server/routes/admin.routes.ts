@@ -144,6 +144,12 @@ router.post(
 );
 
 router.post(
+  "/send-passkit-enrollment-letter",
+  checkApiKey,
+  adminController.sendPassKitEnrollmentLetter.bind(adminController)
+);
+
+router.post(
   "/programs/:programId/sync",
   checkApiKey,
   adminController.triggerPassKitSync.bind(adminController)

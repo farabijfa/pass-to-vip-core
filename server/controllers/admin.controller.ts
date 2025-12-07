@@ -1363,6 +1363,136 @@ class AdminController {
     }
   }
 
+  async sendPassKitEnrollmentLetter(req: Request, res: Response): Promise<void> {
+    try {
+      const enrollmentLetterSchema = z.object({
+        passkitProgramId: z.string().min(1, "PassKit Program ID is required"),
+        templateId: z.string().default("template_3J62GbmowSk7SeD4dFcaUs"),
+        recipient: z.object({
+          firstName: z.string().min(1, "First name is required"),
+          lastName: z.string().optional(),
+          email: z.string().email().optional(),
+          addressLine1: z.string().min(1, "Address is required"),
+          city: z.string().min(1, "City is required"),
+          state: z.string().min(2).max(2, "State must be 2-letter code"),
+          postalCode: z.string().min(5, "Postal code is required"),
+        }),
+        description: z.string().optional(),
+      });
+
+      const validation = enrollmentLetterSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: validation.error.errors,
+          },
+        });
+        return;
+      }
+
+      const { passkitProgramId, templateId, recipient, description } = validation.data;
+
+      console.log(`📧 Starting PassKit enrollment letter for program: ${passkitProgramId}`);
+
+      const tierResult = await passKitService.getOrCreateDefaultTier(passkitProgramId);
+      if (!tierResult.success || !tierResult.tierId) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "TIER_NOT_FOUND",
+            message: tierResult.error || "Could not find or create tier for PassKit program",
+          },
+        });
+        return;
+      }
+
+      const tierId = tierResult.tierId;
+      const passkitEnrollmentUrl = `https://pub2.pskt.io/c/${tierId}`;
+      const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&qzone=1&data=${encodeURIComponent(passkitEnrollmentUrl)}`;
+
+      console.log(`🎫 PassKit enrollment URL: ${passkitEnrollmentUrl}`);
+      console.log(`📱 QR Code URL: ${qrCodeImageUrl}`);
+
+      const letterResult = await postGridService.sendLetter({
+        templateId,
+        recipientAddress: {
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          addressLine1: recipient.addressLine1,
+          city: recipient.city,
+          state: recipient.state,
+          postalCode: recipient.postalCode,
+          country: "US",
+        },
+        claimCode: `PASSKIT-${tierId}`,
+        claimUrl: passkitEnrollmentUrl,
+        mergeVariables: {
+          firstName: recipient.firstName,
+          lastName: recipient.lastName || "",
+          fullName: `${recipient.firstName} ${recipient.lastName || ""}`.trim(),
+          qrCodeUrl: qrCodeImageUrl,
+          claimCode: `Scan to Join`,
+        },
+        addressPlacement: "top_first_page",
+        doubleSided: true,
+        color: true,
+        description: description || `PassKit enrollment letter for ${passkitProgramId}`,
+      });
+
+      if (!letterResult.success) {
+        console.error("Failed to send letter:", letterResult.error);
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "POSTGRID_ERROR",
+            message: letterResult.error || "Failed to send letter via PostGrid",
+          },
+        });
+        return;
+      }
+
+      console.log(`✅ PassKit enrollment letter sent! ID: ${letterResult.letterId}`);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          letter: {
+            id: letterResult.letterId,
+            status: letterResult.status,
+            estimatedDeliveryDate: letterResult.estimatedDeliveryDate,
+            previewUrl: `https://dashboard.postgrid.com/dashboard/letters/${letterResult.letterId}`,
+          },
+          passkit: {
+            programId: passkitProgramId,
+            tierId,
+            enrollmentUrl: passkitEnrollmentUrl,
+            qrCodeUrl: qrCodeImageUrl,
+          },
+          instructions: [
+            "1. Recipient scans the QR code with their phone camera",
+            "2. They are taken directly to PassKit to install their membership pass",
+            "3. After installation, PassKit syncs the pass data to Supabase",
+            "4. The member appears in your dashboard automatically",
+          ],
+        },
+      });
+
+    } catch (error) {
+      console.error("Send PassKit enrollment letter error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
   async triggerPassKitSync(req: Request, res: Response): Promise<void> {
     try {
       const { programId } = req.params;
