@@ -126,24 +126,28 @@ export default function MembersPage() {
           const isSelected = sourceFilter === source;
           const Icon = source === "ALL" ? Users : sourceIcons[source];
           return (
-            <button
+            <Card
               key={source}
-              onClick={() => setSourceFilter(source)}
-              className={`p-4 rounded-lg border transition-all text-left ${
+              className={`cursor-pointer transition-all ${
                 isSelected 
-                  ? "border-primary bg-primary/5 ring-2 ring-primary/20" 
-                  : "border-border bg-card hover-elevate"
+                  ? "border-primary ring-2 ring-primary/20" 
+                  : "hover-elevate"
               }`}
-              data-testid={`filter-source-${source.toLowerCase()}`}
+              onClick={() => setSourceFilter(source)}
+              data-testid={`button-filter-source-${source.toLowerCase()}`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <Icon className={`w-4 h-4 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
-                <span className={`text-sm font-medium ${isSelected ? "text-primary" : "text-foreground"}`}>
-                  {sourceLabels[source]}
-                </span>
-              </div>
-              <p className="text-2xl font-semibold text-foreground">{sourceCounts[source]}</p>
-            </button>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon className={`w-4 h-4 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className={`text-sm font-medium ${isSelected ? "text-primary" : "text-foreground"}`}>
+                    {sourceLabels[source]}
+                  </span>
+                </div>
+                <p className="text-2xl font-semibold text-foreground" data-testid={`text-count-${source.toLowerCase()}`}>
+                  {sourceCounts[source]}
+                </p>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
@@ -202,8 +206,16 @@ export default function MembersPage() {
   );
 }
 
+function normalizeLegacyTierName(tierName: string): 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' {
+  const normalizedName = tierName?.toUpperCase() || 'BRONZE';
+  if (normalizedName.includes('PLATINUM') || normalizedName.includes('TIER_4')) return 'PLATINUM';
+  if (normalizedName.includes('GOLD') || normalizedName.includes('TIER_3')) return 'GOLD';
+  if (normalizedName.includes('SILVER') || normalizedName.includes('TIER_2')) return 'SILVER';
+  return 'BRONZE';
+}
+
 function MemberRow({ member }: { member: Member }) {
-  const tierLevel = normalizeTierName(member.tier_name);
+  const tierLevel = fromLegacyTierLevel(normalizeLegacyTierName(member.tier_name));
   
   return (
     <TableRow 
@@ -249,14 +261,6 @@ function MemberRow({ member }: { member: Member }) {
       </TableCell>
     </TableRow>
   );
-}
-
-function normalizeTierName(tierName: string): TierLevel {
-  const normalizedName = tierName?.toUpperCase() || 'BRONZE';
-  if (normalizedName.includes('PLATINUM') || normalizedName.includes('TIER_4')) return 'TIER_4';
-  if (normalizedName.includes('GOLD') || normalizedName.includes('TIER_3')) return 'TIER_3';
-  if (normalizedName.includes('SILVER') || normalizedName.includes('TIER_2')) return 'TIER_2';
-  return 'TIER_1';
 }
 
 function SourceBadge({ source }: { source: string }) {

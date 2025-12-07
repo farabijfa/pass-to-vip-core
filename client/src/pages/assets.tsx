@@ -153,12 +153,12 @@ export default function AssetsPage() {
       </div>
 
       <Tabs defaultValue="in-store" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="in-store" className="flex items-center gap-2" data-testid="tab-in-store">
+        <TabsList className="grid w-full max-w-md grid-cols-2 gap-1">
+          <TabsTrigger value="in-store" className="flex items-center gap-2" data-testid="button-tab-in-store">
             <Store className="w-4 h-4" />
             In-Store Display
           </TabsTrigger>
-          <TabsTrigger value="campaigns" className="flex items-center gap-2" data-testid="tab-campaigns">
+          <TabsTrigger value="campaigns" className="flex items-center gap-2" data-testid="button-tab-campaigns">
             <Mail className="w-4 h-4" />
             Mail Campaigns
           </TabsTrigger>
@@ -166,7 +166,7 @@ export default function AssetsPage() {
 
         <TabsContent value="in-store" className="mt-6">
           <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border">
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border" data-testid="info-walk-in-flow">
               <Users className="w-5 h-5 text-primary mt-0.5 shrink-0" />
               <div>
                 <h3 className="text-sm font-medium text-foreground">For Walk-In Customers</h3>
@@ -347,7 +347,7 @@ export default function AssetsPage() {
 
         <TabsContent value="campaigns" className="mt-6">
           <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border">
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border" data-testid="info-campaign-flow">
               <Smartphone className="w-5 h-5 text-primary mt-0.5 shrink-0" />
               <div>
                 <h3 className="text-sm font-medium text-foreground">For Direct Mail Campaigns</h3>
