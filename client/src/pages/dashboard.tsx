@@ -131,17 +131,12 @@ export default function DashboardPage() {
             ) : analytics ? (
               <div className="space-y-4">
                 <SourceCard
-                  title="SmartPass / QR"
+                  title="In-Store QR"
                   data={analytics.sources.smartpass}
                   testId="source-smartpass"
                 />
                 <SourceCard
-                  title="Direct Mail"
-                  data={analytics.sources.csv}
-                  testId="source-csv"
-                />
-                <SourceCard
-                  title="Claim Codes"
+                  title="Mailed Campaign"
                   data={analytics.sources.claimCode}
                   testId="source-claim-code"
                 />

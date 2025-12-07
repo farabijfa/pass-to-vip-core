@@ -26,15 +26,13 @@ export default function AnalyticsPage() {
   const analytics = analyticsResult?.data;
 
   const barChartData = analytics ? [
-    { name: "QR/SmartPass", active: analytics.sources.smartpass.active, churned: analytics.sources.smartpass.churned },
-    { name: "Direct Mail", active: analytics.sources.csv.active, churned: analytics.sources.csv.churned },
-    { name: "Claim Codes", active: analytics.sources.claimCode.active, churned: analytics.sources.claimCode.churned },
+    { name: "In-Store QR", active: analytics.sources.smartpass.active, churned: analytics.sources.smartpass.churned },
+    { name: "Mailed Campaign", active: analytics.sources.claimCode.active, churned: analytics.sources.claimCode.churned },
   ] : [];
 
   const pieChartData = analytics ? [
-    { name: "QR/SmartPass", value: analytics.sources.smartpass.total },
-    { name: "Direct Mail", value: analytics.sources.csv.total },
-    { name: "Claim Codes", value: analytics.sources.claimCode.total },
+    { name: "In-Store QR", value: analytics.sources.smartpass.total },
+    { name: "Mailed Campaign", value: analytics.sources.claimCode.total },
   ].filter(d => d.value > 0) : [];
 
   const retentionData = analytics ? [

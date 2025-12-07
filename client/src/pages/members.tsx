@@ -11,28 +11,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TierBadge } from "@/components/tier-badge";
 import { fromLegacyTierLevel, type TierLevel } from "@/lib/tier-calculator";
-import { QrCode, Mail, FileSpreadsheet, Users } from "lucide-react";
+import { QrCode, Mail, Users } from "lucide-react";
 
-type EnrollmentSource = "ALL" | "SMARTPASS" | "CLAIM_CODE" | "CSV";
+type EnrollmentSource = "ALL" | "SMARTPASS" | "CLAIM_CODE";
 
 const sourceLabels: Record<EnrollmentSource, string> = {
   ALL: "All Sources",
   SMARTPASS: "In-Store QR",
   CLAIM_CODE: "Mailed Campaign",
-  CSV: "Bulk Import",
 };
 
 const sourceDescriptions: Record<EnrollmentSource, string> = {
   ALL: "All enrollment channels",
   SMARTPASS: "Scanned your in-store QR code",
   CLAIM_CODE: "Received & scanned a mailed postcard",
-  CSV: "Imported via admin upload",
 };
 
 const sourceIcons: Record<Exclude<EnrollmentSource, "ALL">, typeof QrCode> = {
   SMARTPASS: QrCode,
   CLAIM_CODE: Mail,
-  CSV: FileSpreadsheet,
 };
 
 export default function MembersPage() {
@@ -56,7 +53,6 @@ export default function MembersPage() {
     ALL: allMembers.length,
     SMARTPASS: allMembers.filter(m => m.enrollment_source === "SMARTPASS").length,
     CLAIM_CODE: allMembers.filter(m => m.enrollment_source === "CLAIM_CODE").length,
-    CSV: allMembers.filter(m => m.enrollment_source === "CSV").length,
   };
 
   const handleSearch = () => {
@@ -128,8 +124,8 @@ export default function MembersPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {(["ALL", "SMARTPASS", "CLAIM_CODE", "CSV"] as EnrollmentSource[]).map((source) => {
+      <div className="grid grid-cols-3 gap-4">
+        {(["ALL", "SMARTPASS", "CLAIM_CODE"] as EnrollmentSource[]).map((source) => {
           const isSelected = sourceFilter === source;
           const Icon = source === "ALL" ? Users : sourceIcons[source];
           return (
@@ -280,8 +276,6 @@ function SourceBadge({ source }: { source: string }) {
         return { label: "In-Store QR", icon: QrCode, color: "bg-blue-500/10 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-800" };
       case "CLAIM_CODE":
         return { label: "Mailed", icon: Mail, color: "bg-green-500/10 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-800" };
-      case "CSV":
-        return { label: "Imported", icon: FileSpreadsheet, color: "bg-orange-500/10 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-300 dark:border-orange-800" };
       default:
         return { label: source || "Unknown", icon: Users, color: "bg-gray-500/10 text-gray-700 border-gray-200 dark:bg-gray-500/20 dark:text-gray-300 dark:border-gray-800" };
     }
