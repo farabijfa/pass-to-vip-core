@@ -120,13 +120,13 @@ BEGIN
       v_transaction_id,
       v_pass.program_id,
       p_external_id,
-      p_action,
+      REPLACE(p_action, 'MEMBER_', ''),
       v_points_to_process,
       v_previous_balance,
       v_new_balance,
       NOW()
     );
-  EXCEPTION WHEN undefined_table OR undefined_column THEN
+  EXCEPTION WHEN undefined_table OR undefined_column OR check_violation THEN
     NULL;
   END;
 
