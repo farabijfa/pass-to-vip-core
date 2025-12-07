@@ -227,7 +227,7 @@ curl -X POST "https://YOUR_REPLIT_URL/api/admin/test-send-letter" \
       "postalCode": "33101"
     }
   }'
-
+no
 # Step 2: Check claim status (should be ISSUED)
 curl "https://YOUR_REPLIT_URL/api/claim/{CLAIM_CODE}/status"
 
