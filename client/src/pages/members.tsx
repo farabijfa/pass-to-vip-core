@@ -8,20 +8,49 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TierBadge } from "@/components/tier-badge";
-import { type TierLevel } from "@/lib/tier-calculator";
+import { fromLegacyTierLevel, type TierLevel } from "@/lib/tier-calculator";
+import { QrCode, Mail, FileSpreadsheet, Users } from "lucide-react";
+
+type EnrollmentSource = "ALL" | "SMARTPASS" | "CLAIM_CODE" | "CSV";
+
+const sourceLabels: Record<EnrollmentSource, string> = {
+  ALL: "All Sources",
+  SMARTPASS: "QR Code / Walk-In",
+  CLAIM_CODE: "Direct Mail",
+  CSV: "CSV Import",
+};
+
+const sourceIcons: Record<Exclude<EnrollmentSource, "ALL">, typeof QrCode> = {
+  SMARTPASS: QrCode,
+  CLAIM_CODE: Mail,
+  CSV: FileSpreadsheet,
+};
 
 export default function MembersPage() {
   const { mockMode } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<EnrollmentSource>("ALL");
 
   const { data: membersResult, isLoading, refetch } = useQuery({
     queryKey: ["members", activeSearch],
     queryFn: () => activeSearch ? memberApi.search(activeSearch) : memberApi.getAll(),
   });
 
-  const members = membersResult?.data?.members || [];
+  const allMembers = membersResult?.data?.members || [];
+  
+  const members = sourceFilter === "ALL" 
+    ? allMembers 
+    : allMembers.filter(m => m.enrollment_source === sourceFilter);
+
+  const sourceCounts = {
+    ALL: allMembers.length,
+    SMARTPASS: allMembers.filter(m => m.enrollment_source === "SMARTPASS").length,
+    CLAIM_CODE: allMembers.filter(m => m.enrollment_source === "CLAIM_CODE").length,
+    CSV: allMembers.filter(m => m.enrollment_source === "CSV").length,
+  };
 
   const handleSearch = () => {
     setActiveSearch(searchQuery);
@@ -92,14 +121,41 @@ export default function MembersPage() {
         </CardContent>
       </Card>
 
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {(["ALL", "SMARTPASS", "CLAIM_CODE", "CSV"] as EnrollmentSource[]).map((source) => {
+          const isSelected = sourceFilter === source;
+          const Icon = source === "ALL" ? Users : sourceIcons[source];
+          return (
+            <button
+              key={source}
+              onClick={() => setSourceFilter(source)}
+              className={`p-4 rounded-lg border transition-all text-left ${
+                isSelected 
+                  ? "border-primary bg-primary/5 ring-2 ring-primary/20" 
+                  : "border-border bg-card hover-elevate"
+              }`}
+              data-testid={`filter-source-${source.toLowerCase()}`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Icon className={`w-4 h-4 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`text-sm font-medium ${isSelected ? "text-primary" : "text-foreground"}`}>
+                  {sourceLabels[source]}
+                </span>
+              </div>
+              <p className="text-2xl font-semibold text-foreground">{sourceCounts[source]}</p>
+            </button>
+          );
+        })}
+      </div>
+
       <Card className="border-border">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-foreground text-lg">
-              {activeSearch ? "Search Results" : "All Members"}
+              {activeSearch ? "Search Results" : sourceFilter === "ALL" ? "All Members" : `${sourceLabels[sourceFilter]} Members`}
             </CardTitle>
             <span className="text-sm text-muted-foreground" data-testid="badge-member-count">
-              {membersResult?.data?.count || 0} members
+              {members.length} members
             </span>
           </div>
         </CardHeader>
@@ -113,7 +169,9 @@ export default function MembersPage() {
           ) : members.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground text-sm">
-                {activeSearch ? "No members found matching your search" : "No members in this program yet"}
+                {activeSearch ? "No members found matching your search" : 
+                 sourceFilter !== "ALL" ? `No members enrolled via ${sourceLabels[sourceFilter]}` :
+                 "No members in this program yet"}
               </p>
             </div>
           ) : (
@@ -145,14 +203,8 @@ export default function MembersPage() {
 }
 
 function MemberRow({ member }: { member: Member }) {
-  const getTierLevel = (tierName: string): TierLevel => {
-    const normalizedName = tierName?.toUpperCase() || 'BRONZE';
-    if (normalizedName.includes('PLATINUM')) return 'PLATINUM';
-    if (normalizedName.includes('GOLD')) return 'GOLD';
-    if (normalizedName.includes('SILVER')) return 'SILVER';
-    return 'BRONZE';
-  };
-
+  const tierLevel = normalizeTierName(member.tier_name);
+  
   return (
     <TableRow 
       className="border-border/50"
@@ -185,7 +237,7 @@ function MemberRow({ member }: { member: Member }) {
         <span className="font-medium text-foreground">{member.points_balance.toLocaleString()}</span>
       </TableCell>
       <TableCell>
-        <TierBadge level={getTierLevel(member.tier_name)} size="sm" />
+        <TierBadge level={tierLevel} size="sm" />
       </TableCell>
       <TableCell>
         <span className={`text-xs ${member.status === 'INSTALLED' ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -193,8 +245,40 @@ function MemberRow({ member }: { member: Member }) {
         </span>
       </TableCell>
       <TableCell>
-        <span className="text-xs text-muted-foreground">{member.enrollment_source}</span>
+        <SourceBadge source={member.enrollment_source} />
       </TableCell>
     </TableRow>
+  );
+}
+
+function normalizeTierName(tierName: string): TierLevel {
+  const normalizedName = tierName?.toUpperCase() || 'BRONZE';
+  if (normalizedName.includes('PLATINUM') || normalizedName.includes('TIER_4')) return 'TIER_4';
+  if (normalizedName.includes('GOLD') || normalizedName.includes('TIER_3')) return 'TIER_3';
+  if (normalizedName.includes('SILVER') || normalizedName.includes('TIER_2')) return 'TIER_2';
+  return 'TIER_1';
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const getSourceDisplay = () => {
+    switch (source) {
+      case "SMARTPASS":
+        return { label: "QR/Walk-in", icon: QrCode, color: "bg-blue-500/10 text-blue-700 border-blue-200" };
+      case "CLAIM_CODE":
+        return { label: "Direct Mail", icon: Mail, color: "bg-green-500/10 text-green-700 border-green-200" };
+      case "CSV":
+        return { label: "CSV Import", icon: FileSpreadsheet, color: "bg-orange-500/10 text-orange-700 border-orange-200" };
+      default:
+        return { label: source || "Unknown", icon: Users, color: "bg-gray-500/10 text-gray-700 border-gray-200" };
+    }
+  };
+
+  const { label, icon: Icon, color } = getSourceDisplay();
+
+  return (
+    <Badge variant="outline" className={`text-xs ${color}`}>
+      <Icon className="w-3 h-3 mr-1" />
+      {label}
+    </Badge>
   );
 }
