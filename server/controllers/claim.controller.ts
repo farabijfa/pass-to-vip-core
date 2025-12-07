@@ -91,7 +91,7 @@ export class ClaimController {
       // Calculate the appropriate tier based on points (new members start at 0 = Bronze)
       const startingPoints = 0;
       let tierId: string | undefined = undefined;
-      let tierLevel: TierLevel = "BRONZE";
+      let tierLevel: TierLevel = "TIER_1";
       
       if (programResult.success && programResult.program) {
         const program = programResult.program;
@@ -118,29 +118,20 @@ export class ClaimController {
         }
       }
 
-      // PassKit REQUIRES a tierId for member enrollment
-      // If no tier is configured in our database, get or create a default tier from PassKit
+      // Try to get a tier from PassKit if none is configured in the database
+      // Some programs (like GIFT CARDS / money-balance) may not require tiers
       if (!tierId) {
-        console.log(`📋 No tier configured in database, fetching default tier from PassKit...`);
+        console.log(`📋 No tier configured in database, attempting to fetch default tier from PassKit...`);
         const defaultTierResult = await passKitService.getOrCreateDefaultTier(claim.passkitProgramId);
         
         if (defaultTierResult.success && defaultTierResult.tierId) {
           tierId = defaultTierResult.tierId;
           console.log(`📋 Using default tier from PassKit: ${tierId}`);
         } else {
-          console.error(`❌ Failed to get/create default tier: ${defaultTierResult.error}`);
-          return res.status(500).json(
-            createResponse(
-              false,
-              undefined,
-              {
-                code: "TIER_NOT_FOUND",
-                message: "No tier is configured for this program. Please set up tiers in PassKit.",
-                details: defaultTierResult.error,
-              },
-              requestId
-            )
-          );
+          // No tier available - proceed without tierId (some programs like GIFT CARDS don't require tiers)
+          console.log(`⚠️ No tier available for program ${claim.passkitProgramId}. Attempting enrollment without tierId...`);
+          console.log(`   Reason: ${defaultTierResult.error}`);
+          // tierId remains undefined - PassKit API will handle it based on program type
         }
       } else {
         console.log(`📋 Using tier: ${getTierName(tierLevel)} (ID: ${tierId}) for program: ${claim.passkitProgramId}`);
