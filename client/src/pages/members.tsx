@@ -17,9 +17,16 @@ type EnrollmentSource = "ALL" | "SMARTPASS" | "CLAIM_CODE" | "CSV";
 
 const sourceLabels: Record<EnrollmentSource, string> = {
   ALL: "All Sources",
-  SMARTPASS: "QR Code / Walk-In",
-  CLAIM_CODE: "Direct Mail",
-  CSV: "CSV Import",
+  SMARTPASS: "In-Store QR",
+  CLAIM_CODE: "Mailed Campaign",
+  CSV: "Bulk Import",
+};
+
+const sourceDescriptions: Record<EnrollmentSource, string> = {
+  ALL: "All enrollment channels",
+  SMARTPASS: "Scanned your in-store QR code",
+  CLAIM_CODE: "Received & scanned a mailed postcard",
+  CSV: "Imported via admin upload",
 };
 
 const sourceIcons: Record<Exclude<EnrollmentSource, "ALL">, typeof QrCode> = {
@@ -146,6 +153,9 @@ export default function MembersPage() {
                 <p className="text-2xl font-semibold text-foreground" data-testid={`text-count-${source.toLowerCase()}`}>
                   {sourceCounts[source]}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {sourceDescriptions[source]}
+                </p>
               </CardContent>
             </Card>
           );
@@ -267,13 +277,13 @@ function SourceBadge({ source }: { source: string }) {
   const getSourceDisplay = () => {
     switch (source) {
       case "SMARTPASS":
-        return { label: "QR/Walk-in", icon: QrCode, color: "bg-blue-500/10 text-blue-700 border-blue-200" };
+        return { label: "In-Store QR", icon: QrCode, color: "bg-blue-500/10 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-800" };
       case "CLAIM_CODE":
-        return { label: "Direct Mail", icon: Mail, color: "bg-green-500/10 text-green-700 border-green-200" };
+        return { label: "Mailed", icon: Mail, color: "bg-green-500/10 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-800" };
       case "CSV":
-        return { label: "CSV Import", icon: FileSpreadsheet, color: "bg-orange-500/10 text-orange-700 border-orange-200" };
+        return { label: "Imported", icon: FileSpreadsheet, color: "bg-orange-500/10 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-300 dark:border-orange-800" };
       default:
-        return { label: source || "Unknown", icon: Users, color: "bg-gray-500/10 text-gray-700 border-gray-200" };
+        return { label: source || "Unknown", icon: Users, color: "bg-gray-500/10 text-gray-700 border-gray-200 dark:bg-gray-500/20 dark:text-gray-300 dark:border-gray-800" };
     }
   };
 
