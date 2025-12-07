@@ -72,14 +72,25 @@ When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are 
 
 ## Production Status (December 7, 2025)
 
+### Working Client Credentials
+**CLIENT_ADMIN Login** (use at /login):
+- Email: `vip@passtovip.com`
+- Password: `VipDemo2024!`
+- Business Name: VIP Rewards Demo
+- User ID: 178d18c5-5e58-481a-950c-444497b1c64e
+- Program ID: e0ca8249-d5a6-4fd0-b930-f93c335d38b3
+
+**ADMIN_API_KEY**: `pk_phygital_admin_2024`
+
 ### What's Working
+- **Authentication: PRODUCTION READY** - Supabase Auth with JWT tokens
+- **Client Dashboard: PRODUCTION READY** - Full dashboard with all features
 - **POS System: PRODUCTION READY** - All operations verified with BETA-001 member
   - Lookup: Returns member details, points balance, tier
   - Earn: Add points based on spend (earn_rate_multiplier: 10)
   - Redeem: Deduct points with validation
   - Transaction history: Full audit trail in database
 - **Existing Members**: All previously enrolled members work correctly
-- **Dashboard & UI**: Full client dashboard functional
 
 ### What Requires Migration
 The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 to be applied to Supabase**:
