@@ -5,6 +5,7 @@ import { postGridService } from "../services/postgrid.service";
 import { supabaseService } from "../services/supabase.service";
 import { getAppUrl } from "../config";
 import { z } from "zod";
+import { passKitSyncService } from "../services/passkit-sync.service";
 
 const provisionTenantSchema = z.object({
   businessName: z.string().min(1, "Business name is required"),
@@ -1352,6 +1353,211 @@ class AdminController {
 
     } catch (error) {
       console.error("Test send letter error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async triggerPassKitSync(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+      const { fullSync = true } = req.body;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const client = supabaseService.getClient();
+      const { data: program, error: programError } = await client
+        .from("programs")
+        .select("id, passkit_program_id, name")
+        .eq("id", programId)
+        .single();
+
+      if (programError || !program) {
+        res.status(404).json({
+          success: false,
+          error: {
+            code: "PROGRAM_NOT_FOUND",
+            message: "Program not found",
+          },
+        });
+        return;
+      }
+
+      if (!program.passkit_program_id) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "NO_PASSKIT_PROGRAM",
+            message: "Program does not have a PassKit program ID configured",
+          },
+        });
+        return;
+      }
+
+      if (!passKitSyncService.isConfigured()) {
+        res.status(503).json({
+          success: false,
+          error: {
+            code: "PASSKIT_NOT_CONFIGURED",
+            message: "PassKit API keys are not configured",
+          },
+        });
+        return;
+      }
+
+      console.log(`🔄 Triggering PassKit sync for program: ${program.name} (${programId})`);
+
+      const result = await passKitSyncService.syncProgramMembers(
+        programId,
+        program.passkit_program_id,
+        { fullSync }
+      );
+
+      res.status(result.success ? 200 : 500).json({
+        success: result.success,
+        data: {
+          programId,
+          programName: program.name,
+          passkitProgramId: program.passkit_program_id,
+          syncType: fullSync ? "FULL" : "DELTA",
+          results: {
+            synced: result.synced,
+            created: result.created,
+            updated: result.updated,
+            failed: result.failed,
+            durationMs: result.duration_ms,
+          },
+          errors: result.errors.length > 0 ? result.errors.slice(0, 10) : undefined,
+        },
+      });
+
+    } catch (error) {
+      console.error("Trigger PassKit sync error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getPassKitSyncStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const syncState = await passKitSyncService.getSyncState(programId);
+
+      if (!syncState) {
+        res.status(200).json({
+          success: true,
+          data: {
+            programId,
+            status: "NEVER_SYNCED",
+            message: "This program has never been synced with PassKit",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          programId,
+          status: syncState.last_sync_status,
+          syncEnabled: syncState.sync_enabled,
+          lastFullSync: syncState.last_full_sync_at,
+          lastDeltaSync: syncState.last_delta_sync_at,
+          totalPassesSynced: syncState.total_passes_synced,
+          lastError: syncState.last_sync_error,
+        },
+      });
+
+    } catch (error) {
+      console.error("Get PassKit sync status error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async getPassKitSyncHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const { programId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      if (!programId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Program ID is required",
+          },
+        });
+        return;
+      }
+
+      const client = supabaseService.getClient();
+      const { data: events, error } = await client
+        .from("passkit_event_journal")
+        .select("*")
+        .eq("program_id", programId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error("Get sync history error:", error);
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "DATABASE_ERROR",
+            message: "Failed to fetch sync history",
+          },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          programId,
+          events: events || [],
+          count: events?.length || 0,
+        },
+      });
+
+    } catch (error) {
+      console.error("Get PassKit sync history error:", error);
       res.status(500).json({
         success: false,
         error: {

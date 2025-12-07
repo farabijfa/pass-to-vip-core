@@ -143,4 +143,22 @@ router.post(
   adminController.testSendLetter.bind(adminController)
 );
 
+router.post(
+  "/programs/:programId/sync",
+  checkApiKey,
+  adminController.triggerPassKitSync.bind(adminController)
+);
+
+router.get(
+  "/programs/:programId/sync-status",
+  checkApiKey,
+  adminController.getPassKitSyncStatus.bind(adminController)
+);
+
+router.get(
+  "/programs/:programId/sync-history",
+  checkApiKey,
+  adminController.getPassKitSyncHistory.bind(adminController)
+);
+
 export default router;

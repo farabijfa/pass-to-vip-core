@@ -46,7 +46,35 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 -   **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay) and real-time updates.
 -   **PostGrid:** Direct mail campaigns (postcards, letters) and dynamic template management.
 
+## PassKit Sync System (v2.6.1)
+
+### Problem Solved
+When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are created directly in PassKit but may not exist in our Supabase database. This caused POS lookups to fail with "member not found" errors, resulting in missing points.
+
+### Architecture
+- **Source of Truth**: PassKit = pass existence; Supabase = points/balances
+- **Sync Strategy**: Dual-path approach with API sync + (future) real-time webhooks
+- **Idempotent Upserts**: `upsert_membership_pass_from_passkit` RPC function ensures no duplicates or data loss
+
+### Database Tables (Migration 027)
+- **passkit_sync_state**: Tracks sync cursors, timestamps, and status per program
+- **passkit_event_journal**: Audit trail for all sync operations (creates, updates, failures)
+- **Unique Index**: `idx_passes_master_program_passkit_id` prevents duplicate PassKit passes per program
+
+### Admin API Endpoints
+- `POST /api/admin/programs/:programId/sync` - Trigger full or delta sync
+- `GET /api/admin/programs/:programId/sync-status` - Get current sync state
+- `GET /api/admin/programs/:programId/sync-history` - View sync event history
+
+### Services
+- **passkit-sync.service.ts**: Core sync logic with listMembers, syncProgramMembers, and idempotent upserts
+- **passkit.service.ts**: Extended with program/tier management and member listing
+
 ## Recent Changes (December 2025)
+- **PassKit Sync System v2.6.1**: Implemented robust sync to ensure all PassKit passes are tracked in database
+- Added migration 027 with passkit_sync_state and passkit_event_journal tables
+- Created passkit-sync.service.ts with full sync capabilities
+- Added admin API endpoints for manual sync triggering and status monitoring
 - Fixed campaign controller to fetch PassKit program ID from database before creating claim codes
 - Fixed POS lookup endpoint - corrected `tier_level` to `spend_tier_level` column reference
 - Fixed POS lookup endpoint - removed non-existent `member_phone` and `created_at` column references
