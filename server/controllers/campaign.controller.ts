@@ -122,6 +122,23 @@ export class CampaignController {
         );
       }
 
+      const programResult = await supabaseService.getProgramById(program_id);
+      if (!programResult.success || !programResult.program) {
+        return res.status(400).json(
+          createResponse(
+            false,
+            undefined,
+            {
+              code: "PROGRAM_NOT_FOUND",
+              message: "Program not found",
+            },
+            requestId
+          )
+        );
+      }
+
+      const passkitProgramId = programResult.program.passkit_program_id;
+
       if (resourceType === "letter") {
         const letterTemplateId = template_id || front_template_id;
         if (!letterTemplateId) {
@@ -146,6 +163,7 @@ export class CampaignController {
         const result = await campaignService.processBatchUpload({
           filePath: req.file.path,
           programId: program_id,
+          passkitProgramId: passkitProgramId,
           templateId: letterTemplateId,
           resourceType: "letter",
           baseClaimUrl: base_claim_url,
@@ -200,6 +218,7 @@ export class CampaignController {
       const result = await campaignService.processBatchUpload({
         filePath: req.file.path,
         programId: program_id,
+        passkitProgramId: passkitProgramId,
         templateId: postcardFrontTemplate,
         frontTemplateId: postcardFrontTemplate,
         backTemplateId: back_template_id,

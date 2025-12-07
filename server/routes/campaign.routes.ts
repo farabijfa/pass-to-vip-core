@@ -1,33 +1,59 @@
 import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import path from "path";
+import { createClient } from "@supabase/supabase-js";
 import { campaignController } from "../controllers/campaign.controller";
 import { jwtAuth } from "../middleware/auth.middleware";
+import { config } from "../config";
 
 const router = Router();
 
-const requireAdminRole = (req: Request, res: Response, next: NextFunction) => {
-  const user = (req as any).user;
+const requireAdminRole = async (req: Request, res: Response, next: NextFunction) => {
+  const userId = (req as any).userId;
   
-  if (!user) {
+  if (!userId) {
     return res.status(401).json({
       success: false,
       error: { code: "UNAUTHORIZED", message: "Authentication required" },
     });
   }
 
-  const allowedRoles = ["SUPER_ADMIN", "PLATFORM_ADMIN"];
-  if (!allowedRoles.includes(user.role)) {
-    return res.status(403).json({
+  try {
+    const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey);
+    
+    const { data: profile, error } = await supabase
+      .from("admin_profiles")
+      .select("role, program_id")
+      .eq("id", userId)
+      .single();
+    
+    if (error || !profile) {
+      return res.status(403).json({
+        success: false,
+        error: { code: "NO_PROFILE", message: "No admin profile found for this user" },
+      });
+    }
+
+    const allowedRoles = ["SUPER_ADMIN", "PLATFORM_ADMIN"];
+    if (!allowedRoles.includes(profile.role)) {
+      return res.status(403).json({
+        success: false,
+        error: { 
+          code: "FORBIDDEN", 
+          message: "Access denied. Campaign management requires SUPER_ADMIN or PLATFORM_ADMIN role." 
+        },
+      });
+    }
+
+    (req as any).user = { role: profile.role, programId: profile.program_id };
+    next();
+  } catch (error) {
+    console.error("Admin role check error:", error);
+    return res.status(500).json({
       success: false,
-      error: { 
-        code: "FORBIDDEN", 
-        message: "Access denied. Campaign management requires SUPER_ADMIN or PLATFORM_ADMIN role." 
-      },
+      error: { code: "INTERNAL_ERROR", message: "Failed to verify admin role" },
     });
   }
-
-  next();
 };
 
 const VALID_POSTCARD_SIZES = ["4x6", "6x4", "6x9", "9x6", "6x11", "11x6"] as const;
