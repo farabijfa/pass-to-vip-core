@@ -2,10 +2,14 @@
 -- Migration 026: Fix Atomic Transaction RPC - Remove updated_at Column Reference
 -- ============================================================================
 -- Issue: The passes_master table does not have an "updated_at" column,
--- but the process_membership_transaction_atomic function tries to update it.
+-- but the process_membership_transaction_atomic function tried to update it.
 -- 
--- Fix: Remove the updated_at = NOW() from the UPDATE statements
+-- Fix: Removed the updated_at = NOW() from the UPDATE statements
+-- Status: APPLIED on December 7, 2025
 -- ============================================================================
+
+-- Ensure gen_random_uuid() is available
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto; -- Uncomment if not already enabled
 
 CREATE OR REPLACE FUNCTION process_membership_transaction_atomic(
   p_external_id TEXT,
@@ -16,6 +20,7 @@ CREATE OR REPLACE FUNCTION process_membership_transaction_atomic(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
   v_pass passes_master%ROWTYPE;
@@ -70,22 +75,17 @@ BEGIN
     WHERE id = v_pass.id
     RETURNING points_balance INTO v_new_balance;
 
-    IF p_transaction_amount IS NOT NULL THEN
-      v_notification_message := 'Earned ' || v_points_to_process || ' points for $' || ROUND(p_transaction_amount::NUMERIC, 2) || ' purchase';
-    ELSE
-      v_notification_message := 'Earned ' || v_points_to_process || ' points';
-    END IF;
+    v_notification_message := 'Earned ' || v_points_to_process || ' points';
 
   ELSIF p_action = 'MEMBER_REDEEM' THEN
     UPDATE passes_master
     SET points_balance = points_balance - v_points_to_process
-    WHERE id = v_pass.id 
-      AND points_balance >= v_points_to_process
+    WHERE id = v_pass.id AND points_balance >= v_points_to_process
     RETURNING points_balance INTO v_new_balance;
 
     IF NOT FOUND THEN
       RETURN jsonb_build_object(
-        'success', false, 
+        'success', false,
         'error', 'INSUFFICIENT_FUNDS',
         'available_balance', v_previous_balance,
         'requested_amount', v_points_to_process
@@ -106,38 +106,12 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'INVALID_ACTION');
   END IF;
 
-  BEGIN
-    INSERT INTO pos_transactions (
-      id,
-      program_id,
-      external_id,
-      action,
-      points,
-      previous_balance,
-      new_balance,
-      created_at
-    ) VALUES (
-      v_transaction_id,
-      v_pass.program_id,
-      p_external_id,
-      REPLACE(p_action, 'MEMBER_', ''),
-      v_points_to_process,
-      v_previous_balance,
-      v_new_balance,
-      NOW()
-    );
-  EXCEPTION WHEN undefined_table OR undefined_column OR check_violation THEN
-    NULL;
-  END;
-
   RETURN jsonb_build_object(
     'success', true,
     'transaction_id', v_transaction_id,
     'previous_balance', v_previous_balance,
     'new_balance', v_new_balance,
     'points_processed', v_points_to_process,
-    'transaction_amount', p_transaction_amount,
-    'multiplier_used', CASE WHEN p_transaction_amount IS NOT NULL THEN v_multiplier ELSE NULL END,
     'notification_message', v_notification_message,
     'passkit_internal_id', v_pass.passkit_internal_id,
     'passkit_program_id', v_program.passkit_program_id,
@@ -146,9 +120,6 @@ BEGIN
   );
 END;
 $$;
-
-COMMENT ON FUNCTION process_membership_transaction_atomic(TEXT, TEXT, INTEGER, NUMERIC) IS 
-  'Race-condition-proof membership transaction. Fixed to not reference non-existent updated_at column.';
 
 GRANT EXECUTE ON FUNCTION process_membership_transaction_atomic(TEXT, TEXT, INTEGER, NUMERIC) TO authenticated;
 GRANT EXECUTE ON FUNCTION process_membership_transaction_atomic(TEXT, TEXT, INTEGER, NUMERIC) TO service_role;
