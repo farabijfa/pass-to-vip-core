@@ -7,13 +7,11 @@ import { passKitSyncService } from "../services/passkit-sync.service";
 const verifyPassKitSignature = (req: Request): boolean => {
   const signature = req.headers["x-passkit-signature"];
   if (!signature || typeof signature !== "string") {
-    console.warn("PassKit Webhook: Missing x-passkit-signature header");
     return false;
   }
 
   const secret = config.passKit.apiSecret;
   if (!secret) {
-    console.warn("PassKit Webhook: PASSKIT_API_SECRET not configured");
     return false;
   }
 
@@ -65,9 +63,18 @@ interface PassKitWebhookEvent {
 export const handlePassKitWebhook = async (req: Request, res: Response) => {
   try {
     const signatureValid = verifyPassKitSignature(req);
+    const secret = config.passKit.apiSecret;
     
-    if (!signatureValid) {
-      console.warn("PassKit Webhook: Invalid signature - logging event but not processing");
+    if (secret && !signatureValid) {
+      console.warn("PassKit Webhook: Invalid signature - rejecting request");
+      return res.status(401).json({ 
+        error: "Unauthorized",
+        message: "Invalid webhook signature" 
+      });
+    }
+    
+    if (!secret) {
+      console.warn("PassKit Webhook: PASSKIT_API_SECRET not configured - accepting without verification (DEV MODE)");
     }
 
     const event: PassKitWebhookEvent = req.body;

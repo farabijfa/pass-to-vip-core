@@ -74,7 +74,9 @@ Configure this URL in PassKit Admin Console → Program Settings → Webhooks
 4. Pass is upserted to Supabase via `upsert_membership_pass_from_passkit` RPC
 5. Member immediately appears in Client Dashboard
 
-**Signature Verification**: Optional HMAC verification using `x-passkit-signature` header
+**Security**: HMAC signature verification using `x-passkit-signature` header
+- When `PASSKIT_API_SECRET` is configured: Requests with invalid/missing signatures are rejected with 401 Unauthorized
+- When `PASSKIT_API_SECRET` is not configured: Requests are accepted without verification (development mode only)
 
 ### Database Tables (Migration 027)
 - **passkit_sync_state**: Tracks sync cursors, timestamps, and status per program
