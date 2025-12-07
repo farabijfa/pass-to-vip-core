@@ -472,12 +472,17 @@ class ClientController {
           status,
           is_active,
           enrollment_source,
-          last_updated
+          last_updated,
+          member_email,
+          member_first_name,
+          member_last_name,
+          points_balance,
+          spend_tier_level
         `, { count: "exact" })
         .eq("program_id", profile.program_id);
 
       if (searchQuery) {
-        query = query.or(`external_id.ilike.%${searchQuery}%`);
+        query = query.or(`external_id.ilike.%${searchQuery}%,member_email.ilike.%${searchQuery}%,member_first_name.ilike.%${searchQuery}%,member_last_name.ilike.%${searchQuery}%`);
       }
 
       query = query.range(offset, offset + limit - 1);
@@ -496,15 +501,25 @@ class ClientController {
         return;
       }
 
+      const getTierName = (tierLevel: number | null) => {
+        switch (tierLevel) {
+          case 1: return "Bronze";
+          case 2: return "Silver";
+          case 3: return "Gold";
+          case 4: return "Platinum";
+          default: return "Bronze";
+        }
+      };
+
       const members = (passes || []).map((p: any) => ({
         id: p.id,
         external_id: p.external_id,
-        first_name: "Member",
-        last_name: "",
-        email: "",
+        first_name: p.member_first_name || "Member",
+        last_name: p.member_last_name || "",
+        email: p.member_email || "",
         phone: null,
-        points_balance: 0,
-        tier_name: "Standard",
+        points_balance: p.points_balance || 0,
+        tier_name: getTierName(p.spend_tier_level),
         status: p.status || "UNKNOWN",
         enrollment_source: p.enrollment_source || "UNKNOWN",
         created_at: p.last_updated || new Date().toISOString(),
