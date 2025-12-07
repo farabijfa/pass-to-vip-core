@@ -115,9 +115,6 @@ BEGIN
       points,
       previous_balance,
       new_balance,
-      transaction_amount,
-      multiplier_used,
-      description,
       created_at
     ) VALUES (
       v_transaction_id,
@@ -127,14 +124,9 @@ BEGIN
       v_points_to_process,
       v_previous_balance,
       v_new_balance,
-      p_transaction_amount,
-      CASE WHEN p_transaction_amount IS NOT NULL THEN v_multiplier ELSE NULL END,
-      v_notification_message,
       NOW()
     );
-  EXCEPTION WHEN undefined_table THEN
-    NULL;
-  EXCEPTION WHEN undefined_column THEN
+  EXCEPTION WHEN undefined_table OR undefined_column THEN
     NULL;
   END;
 
