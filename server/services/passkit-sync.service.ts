@@ -581,6 +581,63 @@ class PassKitSyncService {
   isConfigured(): boolean {
     return !!this.getAuthHeaders();
   }
+
+  async syncSinglePassFromWebhook(
+    programId: string,
+    passkitProgramId: string,
+    webhookData: {
+      id: string;
+      externalId?: string;
+      programId?: string;
+      tierId?: string;
+      tierName?: string;
+      points?: number;
+      person?: {
+        emailAddress?: string;
+        forename?: string;
+        surname?: string;
+        mobileNumber?: string;
+      };
+    }
+  ): Promise<{ success: boolean; action?: string; error?: string }> {
+    console.log(`🔄 Syncing pass from webhook: ${webhookData.id}`);
+
+    try {
+      const member: PassKitMember = {
+        id: webhookData.id,
+        externalId: webhookData.externalId || webhookData.id,
+        programId: passkitProgramId,
+        tierId: webhookData.tierId,
+        tierName: webhookData.tierName,
+        points: webhookData.points,
+        person: webhookData.person,
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+      };
+
+      const result = await this.upsertMemberToDatabase(programId, member);
+
+      if (result.success) {
+        await this.logSyncEvent(
+          programId,
+          result.action === "CREATED" ? "PASS_CREATED" : "PASS_UPDATED",
+          "WEBHOOK",
+          webhookData.id,
+          member.externalId,
+          { source: "webhook", email: webhookData.person?.emailAddress }
+        );
+      }
+
+      return result;
+
+    } catch (error) {
+      console.error(`[Webhook Sync] Error syncing pass ${webhookData.id}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 }
 
 export const passKitSyncService = new PassKitSyncService();

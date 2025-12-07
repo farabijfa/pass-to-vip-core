@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import { config } from "../config";
 import { supabaseService } from "../services/supabase.service";
+import { passKitSyncService } from "../services/passkit-sync.service";
 
 const verifyPassKitSignature = (req: Request): boolean => {
   const signature = req.headers["x-passkit-signature"];
@@ -46,9 +47,18 @@ interface PassKitWebhookEvent {
   externalId?: string;
   memberId?: string;
   passId?: string;
+  id?: string;
   programId?: string;
   tierId?: string;
+  tierName?: string;
   timestamp?: string;
+  points?: number;
+  person?: {
+    emailAddress?: string;
+    forename?: string;
+    surname?: string;
+    mobileNumber?: string;
+  };
   [key: string]: unknown;
 }
 
@@ -71,6 +81,74 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
       signatureValid,
     });
 
+    const client = supabaseService.getClient();
+    const passkitInternalId = event.id || event.passId;
+    const passkitProgramId = event.programId;
+
+    if (eventType === "member.enrolled" || eventType === "pass.created" || eventType === "create") {
+      console.log(`🆕 PassKit Webhook: NEW PASS CREATED`, {
+        passkitInternalId,
+        externalId: memberId,
+        passkitProgramId,
+        email: event.person?.emailAddress,
+      });
+
+      if (!passkitProgramId) {
+        console.warn("PassKit Webhook: No programId in create event");
+        return res.status(200).json({ 
+          received: true, 
+          warning: "No programId provided for pass creation" 
+        });
+      }
+
+      const { data: program, error: programError } = await client
+        .from("programs")
+        .select("id, name")
+        .eq("passkit_program_id", passkitProgramId)
+        .single();
+
+      if (programError || !program) {
+        console.warn(`PassKit Webhook: Program not found for PassKit ID: ${passkitProgramId}`);
+        return res.status(200).json({ 
+          received: true, 
+          warning: `Program not found for PassKit ID: ${passkitProgramId}` 
+        });
+      }
+
+      console.log(`📍 Matched to program: ${program.name} (${program.id})`);
+
+      const syncResult = await passKitSyncService.syncSinglePassFromWebhook(
+        program.id,
+        passkitProgramId,
+        {
+          id: passkitInternalId || memberId || "",
+          externalId: memberId,
+          programId: passkitProgramId,
+          tierId: event.tierId,
+          tierName: event.tierName,
+          points: event.points,
+          person: event.person,
+        }
+      );
+
+      if (syncResult.success) {
+        console.log(`✅ Auto-synced new pass to Supabase: ${memberId}`);
+        return res.status(200).json({ 
+          success: true, 
+          message: "Pass auto-synced to database",
+          memberId,
+          action: syncResult.action,
+        });
+      } else {
+        console.error(`❌ Failed to auto-sync pass: ${syncResult.error}`);
+        return res.status(200).json({ 
+          received: true, 
+          error: `Sync failed: ${syncResult.error}`,
+          memberId,
+        });
+      }
+    }
+
     if (!memberId) {
       console.warn("PassKit Webhook: No member ID in event payload");
       return res.status(200).json({ 
@@ -78,8 +156,6 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
         warning: "No member ID provided" 
       });
     }
-
-    const client = supabaseService.getClient();
 
     if (eventType === "pass.uninstalled" || eventType === "delete") {
       console.log(`🔴 Pass ${memberId}: Uninstalled → CHURNED`);
