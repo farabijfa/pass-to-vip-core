@@ -70,14 +70,36 @@ When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are 
 - **passkit-sync.service.ts**: Core sync logic with listMembers, syncProgramMembers, and idempotent upserts
 - **passkit.service.ts**: Extended with program/tier management and member listing
 
+## Production Status (December 7, 2025)
+
+### What's Working
+- **POS System: PRODUCTION READY** - All operations verified with BETA-001 member
+  - Lookup: Returns member details, points balance, tier
+  - Earn: Add points based on spend (earn_rate_multiplier: 10)
+  - Redeem: Deduct points with validation
+  - Transaction history: Full audit trail in database
+- **Existing Members**: All previously enrolled members work correctly
+- **Dashboard & UI**: Full client dashboard functional
+
+### What Requires Migration
+The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 to be applied to Supabase**:
+- Manual pass insertion is disabled until migration is applied (returns helpful error)
+- New passes enrolled via PassKit-hosted forms (SMARTPASS) won't sync until migration is applied
+- The sync API endpoints are ready but will fail without the RPC function
+
+**To enable PassKit sync:**
+1. Open Supabase SQL Editor
+2. Execute the contents of `migrations/027_passkit_sync_system.sql`
+3. This creates: passkit_sync_state table, passkit_event_journal table, upsert_membership_pass_from_passkit RPC function
+
 ## Recent Changes (December 2025)
-- **PassKit Sync System v2.6.1**: Implemented robust sync to ensure all PassKit passes are tracked in database
+- **PassKit Sync System v2.6.1**: Code complete, migration required
 - Added migration 027 with passkit_sync_state and passkit_event_journal tables
 - Created passkit-sync.service.ts with full sync capabilities
 - Added admin API endpoints for manual sync triggering and status monitoring
+- Manual pass insert endpoint returns clear migration-required error
 - Fixed campaign controller to fetch PassKit program ID from database before creating claim codes
 - Fixed POS lookup endpoint - corrected `tier_level` to `spend_tier_level` column reference
 - Fixed POS lookup endpoint - removed non-existent `member_phone` and `created_at` column references
 - Applied migration 026 to fix `process_membership_transaction_atomic` RPC function (removed updated_at reference)
-- **POS System Fully Working**: Lookup, Earn, and Redeem all verified with BETA-001 member
-- Verified end-to-end: Earned 100 points, Redeemed 50 points, Final balance 50 points
+- **POS System Fully Working**: Lookup, Earn, and Redeem all verified with BETA-001 member (current balance: 120 points)
