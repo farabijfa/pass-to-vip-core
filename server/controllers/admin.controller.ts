@@ -1627,20 +1627,60 @@ class AdminController {
 
       const finalExternalId = externalId || passkitInternalId;
 
-      res.status(503).json({
-        success: false,
-        error: {
-          code: "MIGRATION_REQUIRED",
-          message: "Manual pass insertion requires migration 027 to be applied to Supabase. Please apply 'migrations/027_passkit_sync_system.sql' first.",
-          details: {
-            programId,
-            passkitInternalId,
-            externalId: finalExternalId,
-            hint: "The RPC function 'upsert_membership_pass_from_passkit' must exist for safe pass insertion",
+      const { data: rpcResult, error: rpcError } = await client.rpc("upsert_membership_pass_from_passkit", {
+        p_program_id: programId,
+        p_passkit_internal_id: passkitInternalId,
+        p_external_id: finalExternalId,
+        p_status: "INSTALLED",
+        p_member_email: email || null,
+        p_member_first_name: firstName || null,
+        p_member_last_name: lastName || null,
+        p_member_phone: phone || null,
+        p_passkit_tier_name: null,
+        p_passkit_created_at: new Date().toISOString(),
+        p_passkit_updated_at: new Date().toISOString(),
+      });
+
+      if (rpcError) {
+        console.error("Manual pass insert RPC error:", rpcError);
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "DATABASE_ERROR",
+            message: rpcError.message,
           },
+        });
+        return;
+      }
+
+      const result = rpcResult as { success: boolean; action?: string; pass_id?: string; error?: string };
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: {
+            code: "RPC_FAILED",
+            message: result.error || "Failed to insert pass",
+          },
+        });
+        return;
+      }
+
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ Pass ${result.action}: ${passkitInternalId} (id: ${result.pass_id})`);
+
+      res.status(201).json({
+        success: true,
+        data: {
+          passId: result.pass_id,
+          externalId: finalExternalId,
+          passkitInternalId,
+          action: result.action,
+          programId,
+          programName: program.name,
         },
         metadata: {
-          processingTime: Date.now() - startTime,
+          processingTime,
         },
       });
 
