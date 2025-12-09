@@ -399,23 +399,22 @@ class PassKitSyncService {
       });
 
       if (error) {
-        // If RPC doesn't exist (migration 027 not applied), use direct upsert fallback
-        if (error.message.includes("function") || error.code === "PGRST202" || error.message.includes("upsert_membership_pass_from_passkit")) {
-          console.log(`[Upsert] RPC not available, using direct insert fallback for ${member.id}`);
-          return await this.directUpsertMember(programId, member);
-        }
-        console.error(`[Upsert] RPC error for member ${member.id}:`, error);
-        return { success: false, error: error.message };
+        // Log the exact error for debugging
+        console.log(`[Upsert] RPC error details - code: ${error.code}, message: ${error.message}`);
+        
+        // FALLBACK: Use direct INSERT for ANY RPC error (migration 027 may not be applied)
+        // This ensures sync works regardless of whether the RPC function exists
+        console.log(`[Upsert] Using direct insert fallback for ${member.id}`);
+        return await this.directUpsertMember(programId, member);
       }
 
       const result = data as { success: boolean; action?: string; error?: string };
       return result;
 
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
-      };
+      console.log(`[Upsert] Exception caught, using fallback: ${error instanceof Error ? error.message : "Unknown"}`);
+      // Also use fallback for any caught exceptions
+      return await this.directUpsertMember(programId, member);
     }
   }
 
