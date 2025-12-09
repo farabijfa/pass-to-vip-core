@@ -193,71 +193,82 @@ class NotificationService {
       const client = this.getClient();
 
       // programId can be either the database UUID or the passkit_program_id
-      // We first try to find by database id, then fall back to passkit_program_id
+      // We try multiple lookup strategies to handle NULL tenant_id scenarios
       let program: any = null;
 
-      // Try to find by database id first
-      const { data: programById, error: errorById } = await client
+      const programFields = `
+        id,
+        name,
+        protocol,
+        passkit_program_id,
+        tenant_id,
+        tier_bronze_max,
+        tier_silver_max,
+        tier_gold_max,
+        tier_system_type,
+        tier_1_name,
+        tier_2_name,
+        tier_3_name,
+        tier_4_name,
+        default_member_label
+      `;
+
+      // Strategy 1: Try to find by database id with tenant_id
+      const { data: programById } = await client
         .from("programs")
-        .select(`
-          id,
-          name,
-          protocol,
-          passkit_program_id,
-          tenant_id,
-          tier_bronze_max,
-          tier_silver_max,
-          tier_gold_max,
-          tier_system_type,
-          tier_1_name,
-          tier_2_name,
-          tier_3_name,
-          tier_4_name,
-          default_member_label
-        `)
+        .select(programFields)
         .eq("tenant_id", tenantId)
         .eq("id", programId)
         .limit(1);
 
-      if (!errorById && programById?.length > 0) {
+      if (programById?.length > 0) {
         program = programById[0];
-      } else {
-        // Fall back to passkit_program_id lookup
-        const { data: programByPasskitId, error: errorByPasskitId } = await client
+      }
+
+      // Strategy 2: Try by passkit_program_id with tenant_id
+      if (!program) {
+        const { data: programByPasskitId } = await client
           .from("programs")
-          .select(`
-            id,
-            name,
-            protocol,
-            passkit_program_id,
-            tenant_id,
-            tier_bronze_max,
-            tier_silver_max,
-            tier_gold_max,
-            tier_system_type,
-            tier_1_name,
-            tier_2_name,
-            tier_3_name,
-            tier_4_name,
-            default_member_label
-          `)
+          .select(programFields)
           .eq("tenant_id", tenantId)
           .eq("passkit_program_id", programId)
           .limit(1);
-
-        if (errorByPasskitId) {
-          return { valid: false, error: `Database error: ${errorByPasskitId.message}` };
-        }
 
         if (programByPasskitId?.length > 0) {
           program = programByPasskitId[0];
         }
       }
 
+      // Strategy 3: Fall back to lookup by ID only (handles NULL tenant_id)
+      if (!program) {
+        const { data: programByIdOnly } = await client
+          .from("programs")
+          .select(programFields)
+          .eq("id", programId)
+          .limit(1);
+
+        if (programByIdOnly?.length > 0) {
+          program = programByIdOnly[0];
+        }
+      }
+
+      // Strategy 4: Fall back to lookup by passkit_program_id only
+      if (!program) {
+        const { data: programByPasskitOnly } = await client
+          .from("programs")
+          .select(programFields)
+          .eq("passkit_program_id", programId)
+          .limit(1);
+
+        if (programByPasskitOnly?.length > 0) {
+          program = programByPasskitOnly[0];
+        }
+      }
+
       if (!program) {
         return {
           valid: false,
-          error: `Program not found for tenant ${tenantId} with ID ${programId}`,
+          error: `Program not found with ID ${programId}`,
         };
       }
 
@@ -457,9 +468,9 @@ class NotificationService {
 
       const sampleMembers = passes.slice(0, 10).map((pass: any) => ({
         id: pass.id,
-        email: pass.users?.email || pass.email || "unknown",
-        firstName: pass.users?.first_name || pass.first_name || "Unknown",
-        lastName: pass.users?.last_name || pass.last_name || "",
+        email: pass.member_email || "unknown",
+        firstName: pass.member_first_name || "Unknown",
+        lastName: pass.member_last_name || "",
         pointsBalance: pass.protocol_membership?.points_balance,
         tierPoints: pass.protocol_membership?.tier_points,
         lastUpdated: pass.last_updated,
@@ -495,20 +506,13 @@ class NotificationService {
       id,
       passkit_internal_id,
       external_id,
-      email,
-      first_name,
-      last_name,
+      member_email,
+      member_first_name,
+      member_last_name,
       last_updated,
       protocol,
       programs:program_id (
         passkit_program_id
-      ),
-      users:user_id (
-        email,
-        first_name,
-        last_name,
-        zip,
-        city
       ),
       protocol_membership (
         points_balance,
@@ -745,9 +749,9 @@ class NotificationService {
         const sampleRecipients = passes.slice(0, 5).map((pass: any) => ({
           id: pass.id,
           externalId: pass.external_id,
-          email: pass.users?.email || pass.email || "unknown",
-          firstName: pass.users?.first_name || pass.first_name || "Unknown",
-          lastName: pass.users?.last_name || pass.last_name || "",
+          email: pass.member_email || "unknown",
+          firstName: pass.member_first_name || "Unknown",
+          lastName: pass.member_last_name || "",
           pointsBalance: pass.protocol_membership?.points_balance,
           tierPoints: pass.protocol_membership?.tier_points,
           lastUpdated: pass.last_updated,
@@ -789,7 +793,7 @@ class NotificationService {
               );
               return result.success;
             } catch (error) {
-              const email = pass.users?.email || pass.email || pass.external_id;
+              const email = pass.member_email || pass.external_id;
               console.error(`   Failed to send to ${email}:`, error);
               return false;
             }
@@ -937,9 +941,9 @@ class NotificationService {
             id,
             passkit_internal_id,
             program_id,
-            email,
-            first_name,
-            last_name,
+            member_email,
+            member_first_name,
+            member_last_name,
             user_id,
             users!inner (
               id,
@@ -985,11 +989,14 @@ class NotificationService {
 
         for (const pass of eligiblePasses as EligiblePass[]) {
           totalProcessed++;
+          const passEmail = pass.member_email || "unknown";
+          const passFirstName = pass.member_first_name || "Unknown";
+          const passLastName = pass.member_last_name || "";
           const detail: BirthdayDetail = {
             passId: pass.id,
-            email: pass.email || "unknown",
-            firstName: pass.first_name || "Unknown",
-            lastName: pass.last_name || "",
+            email: passEmail,
+            firstName: passFirstName,
+            lastName: passLastName,
             programName: program.name,
             pointsAwarded: program.birthday_reward_points,
             status: "failed",
@@ -998,7 +1005,7 @@ class NotificationService {
           try {
             if (dryRun) {
               console.log(
-                `   [DRY RUN] Would gift ${pass.first_name} ${pass.last_name} (${pass.email}) - ${program.birthday_reward_points} points`
+                `   [DRY RUN] Would gift ${passFirstName} ${passLastName} (${passEmail}) - ${program.birthday_reward_points} points`
               );
               detail.status = "success";
               detail.reason = "Dry run - would be processed";
@@ -1022,7 +1029,7 @@ class NotificationService {
               .single();
 
             if (logError && logError.code !== "23505") {
-              console.error(`   Failed to log birthday for ${pass.email}:`, logError.message);
+              console.error(`   Failed to log birthday for ${passEmail}:`, logError.message);
               detail.reason = `Log error: ${logError.message}`;
               details.push(detail);
               totalFailed++;
@@ -1030,7 +1037,7 @@ class NotificationService {
             }
 
             if (!logResult) {
-              console.log(`   Skipping ${pass.first_name} ${pass.last_name} - already gifted this year`);
+              console.log(`   Skipping ${passFirstName} ${passLastName} - already gifted this year`);
               detail.status = "skipped";
               detail.reason = "Already gifted this year";
               details.push(detail);
@@ -1047,7 +1054,7 @@ class NotificationService {
             });
 
             if (rpcError) {
-              console.error(`   Failed to award points to ${pass.email}:`, rpcError.message);
+              console.error(`   Failed to award points to ${passEmail}:`, rpcError.message);
               await client.from("birthday_logs").delete().eq("id", logResult.id);
               detail.reason = `RPC error: ${rpcError.message}`;
               details.push(detail);
@@ -1063,13 +1070,13 @@ class NotificationService {
               );
             }
 
-            console.log(`   Awarded ${program.birthday_reward_points} points to ${pass.first_name} ${pass.last_name}`);
+            console.log(`   Awarded ${program.birthday_reward_points} points to ${passFirstName} ${passLastName}`);
             detail.status = "success";
             detail.reason = "Points awarded and notification sent";
             details.push(detail);
             totalSuccess++;
           } catch (error) {
-            console.error(`   Error processing ${pass.email}:`, error);
+            console.error(`   Error processing ${passEmail}:`, error);
             detail.reason = `Error: ${error instanceof Error ? error.message : "Unknown"}`;
             details.push(detail);
             totalFailed++;

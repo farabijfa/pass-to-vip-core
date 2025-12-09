@@ -126,6 +126,12 @@ The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 t
 3. This creates: passkit_sync_state table, passkit_event_journal table, upsert_membership_pass_from_passkit RPC function
 
 ## Recent Changes (December 2025)
+- **Notification Service Schema Fix v2.6.4**: Fixed notification service to work with Supabase schema
+  - Updated `validateTriple` to use flexible program lookup (handles NULL tenant_id in Supabase)
+  - Fixed column references: `email` → `member_email`, `first_name` → `member_first_name`, `last_name` → `member_last_name`
+  - Removed `users` join dependency from main passes query (data now comes from `member_*` columns)
+  - Birthday processing still uses `users` join for `birth_date` field
+  - Segment preview and broadcast endpoints now return proper success responses
 - **PassKit Real-Time Webhook v2.6.3**: Added webhook handler at `/api/callbacks/passkit` for real-time pass sync
   - Handles `pass.created`, `member.enrolled`, `pass.installed`, `pass.uninstalled`, `pass.updated` events
   - Auto-syncs new passes to Supabase immediately when customers enroll via PassKit forms
