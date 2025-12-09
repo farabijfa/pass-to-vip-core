@@ -34,11 +34,16 @@ CREATE TABLE IF NOT EXISTS passkit_sync_state (
   UNIQUE(program_id)
 );
 
+-- Idempotent: Drop if exists before creating to avoid conflicts
+DROP INDEX IF EXISTS idx_passkit_sync_state_program;
+DROP INDEX IF EXISTS idx_passkit_sync_state_status;
 CREATE INDEX IF NOT EXISTS idx_passkit_sync_state_program ON passkit_sync_state(program_id);
 CREATE INDEX IF NOT EXISTS idx_passkit_sync_state_status ON passkit_sync_state(last_sync_status) WHERE sync_enabled = true;
 
 ALTER TABLE passkit_sync_state ENABLE ROW LEVEL SECURITY;
 
+-- Idempotent: Drop policy if exists before creating
+DROP POLICY IF EXISTS "Service role can manage passkit_sync_state" ON passkit_sync_state;
 CREATE POLICY "Service role can manage passkit_sync_state" ON passkit_sync_state
   FOR ALL USING (true);
 
@@ -69,12 +74,18 @@ CREATE TABLE IF NOT EXISTS passkit_event_journal (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Idempotent: Drop if exists before creating to avoid conflicts
+DROP INDEX IF EXISTS idx_passkit_event_journal_program;
+DROP INDEX IF EXISTS idx_passkit_event_journal_type;
+DROP INDEX IF EXISTS idx_passkit_event_journal_passkit_id;
 CREATE INDEX IF NOT EXISTS idx_passkit_event_journal_program ON passkit_event_journal(program_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_passkit_event_journal_type ON passkit_event_journal(event_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_passkit_event_journal_passkit_id ON passkit_event_journal(passkit_internal_id) WHERE passkit_internal_id IS NOT NULL;
 
 ALTER TABLE passkit_event_journal ENABLE ROW LEVEL SECURITY;
 
+-- Idempotent: Drop policy if exists before creating
+DROP POLICY IF EXISTS "Service role can manage passkit_event_journal" ON passkit_event_journal;
 CREATE POLICY "Service role can manage passkit_event_journal" ON passkit_event_journal
   FOR ALL USING (true);
 
@@ -85,6 +96,8 @@ COMMENT ON COLUMN passkit_event_journal.processing_time_ms IS 'Time taken to pro
 -- =============================================================================
 -- Unique Index: Prevent duplicate passes per program
 -- =============================================================================
+-- Idempotent: Drop if exists before creating to avoid conflicts
+DROP INDEX IF EXISTS idx_passes_master_program_passkit_id;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_passes_master_program_passkit_id 
 ON passes_master(program_id, passkit_internal_id) 
 WHERE passkit_internal_id IS NOT NULL;
