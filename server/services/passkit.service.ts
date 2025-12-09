@@ -788,6 +788,19 @@ class PassKitService {
     };
   }
 
+  /**
+   * Push a notification message to a member's pass.
+   * 
+   * For iOS lock screen notifications to work:
+   * 1. The PassKit template must have a field with Apple Lock Screen Message containing %@
+   * 2. We update that field's value (metaData.message) which triggers the iOS notification
+   * 3. changeMessage still works for Google Wallet back-of-pass updates
+   * 
+   * Configure in PassKit Portal:
+   * - Add a custom data field (e.g., "message") to the template
+   * - Set its Apple Lock Screen Message to: "%@" or "Update: %@"
+   * - The field can be on the back of the pass or hidden
+   */
   async pushMessage(
     passkitInternalId: string, 
     programId: string,
@@ -804,20 +817,39 @@ class PassKitService {
     try {
       const url = `${PASSKIT_BASE_URL}/members/member`;
       
+      // Create a unique timestamp to ensure the value changes each time
+      // iOS only triggers lock screen notification when a field VALUE actually changes
+      const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const messageWithTimestamp = `${message}`;
+      
       // Use 'id' field for PassKit's internal member ID, not 'externalId'
-      const payload = {
+      // Update metaData.message field - configure this field in PassKit template with %@ Apple Lock Screen Message
+      const payload: Record<string, unknown> = {
         id: passkitInternalId,
         programId: programId,
+        // changeMessage for Google Wallet (updates back of pass)
         changeMessage: message,
+        // metaData.message triggers iOS lock screen if template has %@ configured on this field
+        metaData: {
+          message: messageWithTimestamp,
+          messageTimestamp: timestamp,
+        },
       };
 
       const authConfig = {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       };
 
+      console.log(`📤 PassKit Push Notification: ${passkitInternalId}`);
+      console.log(`   Message: "${message}"`);
+      console.log(`   Payload:`, JSON.stringify(payload, null, 2));
+      
       await axios.put(url, payload, authConfig);
       
-      console.log(`📨 Push message sent to ${passkitInternalId}: "${message}"`);
+      console.log(`📨 Push message sent successfully to ${passkitInternalId}`);
       return { success: true };
 
     } catch (error) {
