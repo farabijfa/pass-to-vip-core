@@ -4,39 +4,64 @@ import { config } from "../config";
 import { supabaseService } from "../services/supabase.service";
 import { passKitSyncService } from "../services/passkit-sync.service";
 
-const verifyPassKitSignature = (req: Request): boolean => {
+const verifyPassKitSignature = (req: Request): { valid: boolean; debug: string } => {
+  // Access rawBody from the request (set by Express JSON middleware verify function)
+  const rawBody = (req as any).rawBody;
   const signature = req.headers["x-passkit-signature"];
+  
   if (!signature || typeof signature !== "string") {
-    return false;
+    return { valid: false, debug: "No x-passkit-signature header" };
   }
 
   const secret = config.passKit.apiSecret;
   if (!secret) {
-    return false;
+    return { valid: false, debug: "PASSKIT_API_SECRET not configured" };
   }
 
   try {
     const hmac = crypto.createHmac("sha256", secret);
-    const rawBody = req.rawBody;
     
+    let bodyUsed = "unknown";
     if (Buffer.isBuffer(rawBody)) {
       hmac.update(rawBody);
+      bodyUsed = `Buffer(${rawBody.length} bytes)`;
     } else if (typeof rawBody === "string") {
       hmac.update(rawBody);
+      bodyUsed = `String(${rawBody.length} chars)`;
     } else {
-      hmac.update(JSON.stringify(req.body));
+      const jsonBody = JSON.stringify(req.body);
+      hmac.update(jsonBody);
+      bodyUsed = `JSON.stringify(${jsonBody.length} chars)`;
     }
     
     const digest = hmac.digest("hex");
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(digest)
-    );
     
-    return isValid;
+    // Handle different signature formats (hex or base64)
+    let isValid = false;
+    try {
+      isValid = crypto.timingSafeEqual(
+        Buffer.from(signature, "hex"),
+        Buffer.from(digest, "hex")
+      );
+    } catch {
+      // Try base64 comparison
+      try {
+        const signatureHex = Buffer.from(signature, "base64").toString("hex");
+        isValid = crypto.timingSafeEqual(
+          Buffer.from(signatureHex, "hex"),
+          Buffer.from(digest, "hex")
+        );
+      } catch {
+        isValid = signature === digest;
+      }
+    }
+    
+    return { 
+      valid: isValid, 
+      debug: `Body: ${bodyUsed}, Digest: ${digest.substring(0, 16)}..., Sig: ${signature.substring(0, 16)}...` 
+    };
   } catch (error) {
-    console.error("PassKit Webhook: Signature verification error:", error);
-    return false;
+    return { valid: false, debug: `Error: ${error}` };
   }
 };
 
@@ -61,31 +86,50 @@ interface PassKitWebhookEvent {
 }
 
 export const handlePassKitWebhook = async (req: Request, res: Response) => {
+  // Log every incoming webhook for debugging
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`📥 PASSKIT WEBHOOK RECEIVED - ${new Date().toISOString()}`);
+  console.log(`${"=".repeat(60)}`);
+  console.log(`Headers:`, JSON.stringify({
+    "x-passkit-signature": req.headers["x-passkit-signature"] ? "present" : "missing",
+    "content-type": req.headers["content-type"],
+  }));
+  console.log(`Body:`, JSON.stringify(req.body, null, 2));
+  
   try {
-    const signatureValid = verifyPassKitSignature(req);
+    const signatureResult = verifyPassKitSignature(req);
     const secret = config.passKit.apiSecret;
     
-    if (secret && !signatureValid) {
-      console.warn("PassKit Webhook: Invalid signature - rejecting request");
+    console.log(`🔐 Signature Check:`, {
+      valid: signatureResult.valid,
+      debug: signatureResult.debug,
+      secretConfigured: !!secret,
+    });
+    
+    if (secret && !signatureResult.valid) {
+      console.warn("❌ PassKit Webhook: Invalid signature - rejecting request");
+      console.warn(`   Debug: ${signatureResult.debug}`);
       return res.status(401).json({ 
         error: "Unauthorized",
-        message: "Invalid webhook signature" 
+        message: "Invalid webhook signature",
+        debug: signatureResult.debug,
       });
     }
     
     if (!secret) {
-      console.warn("PassKit Webhook: PASSKIT_API_SECRET not configured - accepting without verification (DEV MODE)");
+      console.warn("⚠️ PassKit Webhook: PASSKIT_API_SECRET not configured - accepting without verification (DEV MODE)");
     }
 
     const event: PassKitWebhookEvent = req.body;
     const eventType = event.event || "unknown";
     const memberId = event.externalId || event.memberId;
 
-    console.log(`📥 PassKit Webhook: ${eventType}`, {
+    console.log(`📥 PassKit Webhook Event: ${eventType}`, {
       memberId,
       passId: event.passId,
+      id: event.id,
       programId: event.programId,
-      signatureValid,
+      signatureValid: signatureResult.valid,
     });
 
     const client = supabaseService.getClient();
