@@ -46,7 +46,7 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 -   **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay) and real-time updates.
 -   **PostGrid:** Direct mail campaigns (postcards, letters) and dynamic template management.
 
-## PassKit Sync System (v2.6.3)
+## PassKit Sync System (v2.6.6)
 
 ### Problem Solved
 When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are created directly in PassKit but may not exist in our Supabase database. This caused POS lookups to fail with "member not found" errors, resulting in missing points.
@@ -55,6 +55,7 @@ When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are 
 - **Source of Truth**: PassKit = pass existence; Supabase = points/balances
 - **Sync Strategy**: Dual-path approach with real-time webhooks + scheduled API sync
 - **Idempotent Upserts**: `upsert_membership_pass_from_passkit` RPC function ensures no duplicates or data loss
+- **Fallback Mode (v2.6.6)**: When RPC function unavailable (migration 027 not applied), uses direct INSERT/UPDATE to passes_master table. This allows sync to work immediately without migration dependency.
 
 ### Real-Time PassKit Webhook (NEW in v2.6.3)
 **Webhook URL**: `https://passtovip.pro/api/callbacks/passkit`
