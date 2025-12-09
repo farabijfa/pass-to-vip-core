@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Pass%20To%20VIP-2563eb?style=for-the-badge" alt="Platform"/>
-  <img src="https://img.shields.io/badge/Version-2.6.0-blue?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-2.6.3-blue?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Status-Production%20Ready-22c55e?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/Node.js-20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
@@ -45,6 +45,98 @@ This platform transforms physical mail recipients into digital wallet users thro
           |              UNIFIED LOYALTY            |
           +----------------EXPERIENCE---------------+
 ```
+
+---
+
+## What's New in v2.6.3
+
+### Real-Time PassKit Webhook Sync
+
+Instant synchronization when customers enroll via PassKit-hosted forms. No more "member not found" errors at the POS.
+
+**Problem Solved:**
+When customers enroll through PassKit-hosted enrollment forms (SMARTPASS flow), passes are created directly in PassKit but previously didn't exist in Supabase until a manual sync was triggered. This caused POS lookups to fail with "member not found" errors.
+
+**Solution - Dual-Path Sync Architecture:**
+```
+                              PassKit
+                                 |
+        +------------------------+------------------------+
+        |                                                 |
+   Real-Time Webhook                              Manual API Sync
+        |                                                 |
+   POST /api/callbacks/passkit              POST /api/admin/programs/:id/sync
+        |                                                 |
+        +------------------------+------------------------+
+                                 |
+                            Supabase
+                       (Source of Truth for Points)
+```
+
+**Webhook Endpoint:** `POST /api/callbacks/passkit`
+
+**Production URL:** `https://passtovip.pro/api/callbacks/passkit`
+
+**Supported Events:**
+
+| Event | Action | Database Update |
+|-------|--------|-----------------|
+| `pass.created` / `member.enrolled` | Auto-sync new pass | Creates member in `passes_master` |
+| `pass.installed` | User added pass to wallet | `status: INSTALLED`, `is_active: true` |
+| `pass.uninstalled` | User removed pass | `status: UNINSTALLED`, `is_active: false` |
+| `pass.updated` | Pass data changed | `last_updated` timestamp |
+
+**How It Works:**
+1. Customer scans QR code → PassKit enrollment form opens
+2. Customer enters email/name → PassKit creates pass
+3. PassKit sends webhook to our endpoint with pass data
+4. System looks up program by `passkit_program_id`
+5. Pass is upserted to Supabase via `upsert_membership_pass_from_passkit` RPC
+6. Member immediately appears in Client Dashboard and is ready for POS
+
+**Security - HMAC Signature Verification:**
+```
+x-passkit-signature: <hmac_sha256_signature>
+```
+- When `PASSKIT_API_SECRET` is configured: Requests with invalid/missing signatures are **rejected with 401 Unauthorized**
+- When `PASSKIT_API_SECRET` is not configured: Requests are accepted (development mode only)
+
+**Configuring PassKit Webhooks:**
+1. Go to PassKit Admin Console → Program Settings → Webhooks
+2. Add webhook URL: `https://passtovip.pro/api/callbacks/passkit`
+3. Enable events: `pass.created`, `pass.installed`, `pass.uninstalled`, `pass.updated`
+4. Configure HMAC secret to match your `PASSKIT_API_SECRET`
+
+**Admin Sync API (for backfill):**
+```bash
+# Trigger manual sync for a program
+curl -X POST https://passtovip.pro/api/admin/programs/{programId}/sync \
+  -H "x-api-key: pk_phygital_admin_2024" \
+  -H "Content-Type: application/json" \
+  -d '{"fullSync": true}'
+
+# Response
+{
+  "success": true,
+  "data": {
+    "programId": "983af33b-...",
+    "programName": "Manali Bakes",
+    "syncType": "FULL",
+    "results": {
+      "synced": 5,
+      "created": 2,
+      "updated": 3,
+      "failed": 0,
+      "durationMs": 1322
+    }
+  }
+}
+```
+
+**Database Tables (Migration 027):**
+- `passkit_sync_state`: Tracks sync cursors, timestamps, and status per program
+- `passkit_event_journal`: Audit trail for all sync operations (creates, updates, failures)
+- Unique index on `passes_master` prevents duplicate PassKit passes per program
 
 ---
 
@@ -391,8 +483,10 @@ migrations/017_hardening_claims_and_transactions.sql  # SECURITY: Gap E & F fixe
 migrations/018_billing_and_quotas.sql      # Gap G: Revenue leakage prevention
 migrations/019_campaign_tracking.sql       # Campaign runs & contacts tracking
 migrations/020_multi_program_support.sql   # Multi-program architecture
-migrations/021_tier_discount_columns.sql   # NEW: Tier discount percentages
+migrations/021_tier_discount_columns.sql   # Tier discount percentages
 migrations/025_external_pos_spend_tracking.sql  # External POS & spend ledger
+migrations/027_passkit_sync_system.sql     # NEW: PassKit sync state & event journal
+migrations/028_enhanced_rpc_returns.sql    # NEW: Enhanced RPC for PassKit sync
 ```
 
 **Important:** 
@@ -402,6 +496,8 @@ migrations/025_external_pos_spend_tracking.sql  # External POS & spend ledger
 - **Migration 020** enables one tenant to manage multiple programs (verticals) simultaneously.
 - **Migration 021** adds tier discount percentage columns (tier_1_discount_percent through tier_4_discount_percent).
 - **Migration 025** adds external_id, spend tracking columns, and spend_ledger table for External POS integration.
+- **Migration 027** (v2.6.3): PassKit sync system with passkit_sync_state table, passkit_event_journal table, and upsert RPC function.
+- **Migration 028** (v2.6.3): Enhanced RPC to return member email, first name, last name for PassKit sync.
 
 ### 4. Start Development Server
 
@@ -1161,28 +1257,49 @@ See `docs/POS_INTEGRATION.md` for full integration guide.
 
 ### PassKit Webhook Callbacks
 
-PassKit sends wallet events to these endpoints for real-time status sync:
+PassKit sends wallet events to these endpoints for real-time status sync and auto-enrollment.
 
 #### POST /api/callbacks/passkit
 
-Receives wallet install/uninstall events from PassKit.
+Receives wallet events from PassKit including new enrollments, installs, and uninstalls.
 
-**No API key required** - Uses HMAC signature verification instead.
+**Security:** Uses HMAC signature verification via `x-passkit-signature` header.
+- When `PASSKIT_API_SECRET` is configured: Invalid signatures return `401 Unauthorized`
+- When secret is not configured: Requests accepted (development mode)
 
 **Headers:**
 ```
 x-passkit-signature: <hmac_sha256_signature>
+Content-Type: application/json
 ```
 
 **Events Handled:**
 
 | Event | Action | Database Update |
 |-------|--------|-----------------|
+| `pass.created` / `member.enrolled` | **Auto-sync new pass** | Creates member in `passes_master` via RPC |
 | `pass.installed` | User added pass to wallet | `status: INSTALLED`, `is_active: true` |
 | `pass.uninstalled` | User removed pass | `status: UNINSTALLED`, `is_active: false` |
 | `pass.updated` | Pass data changed | `last_updated` timestamp |
 
-**Request:**
+**New Enrollment Request (v2.6.3):**
+```json
+{
+  "event": "pass.created",
+  "id": "passkit-internal-id",
+  "externalId": "member-abc123",
+  "programId": "7kkujqnvBY64pVTHdckm5p",
+  "tierId": "base",
+  "tierName": "Bronze",
+  "person": {
+    "emailAddress": "customer@example.com",
+    "forename": "John",
+    "surname": "Doe"
+  }
+}
+```
+
+**Status Update Request:**
 ```json
 {
   "event": "pass.uninstalled",
@@ -1192,7 +1309,17 @@ x-passkit-signature: <hmac_sha256_signature>
 }
 ```
 
-**Response:** Always returns `200 OK` to prevent PassKit retries.
+**Response (Success):**
+```json
+{
+  "success": true,
+  "message": "Pass auto-synced to database",
+  "memberId": "member-abc123",
+  "action": "CREATED"
+}
+```
+
+**Response (Unauthorized):** `401 Unauthorized` when signature verification fails.
 
 ---
 
@@ -1346,6 +1473,13 @@ Public enrollment page lookup by dashboard slug.
 | `spend_ledger` | External POS transaction history |
 | `pos_api_keys` | API keys for external POS integration |
 
+### New Tables (v2.6.3)
+
+| Table | Description |
+|-------|-------------|
+| `passkit_sync_state` | Tracks sync cursors, timestamps, and status per program |
+| `passkit_event_journal` | Audit trail for all sync operations (creates, updates, failures) |
+
 ### Required RPC Functions
 
 | Function | Purpose |
@@ -1356,6 +1490,8 @@ Public enrollment page lookup by dashboard slug.
 | `process_one_time_use` | Coupon/ticket redemption |
 | `get_service_status` | Health check |
 | `count_members_by_program` | Billing quota monitoring |
+| `upsert_membership_pass_from_passkit` | PassKit sync - idempotent pass upsert (v2.6.3) |
+| `get_public_program_info` | Public enrollment lookup by slug |
 
 ---
 
@@ -1535,7 +1671,9 @@ curl http://localhost:5000/api/health | jq
 │   ├── services/             # Business logic
 │   │   ├── logic.service.ts
 │   │   ├── supabase.service.ts
+│   │   ├── passkit.service.ts       # PassKit API integration
 │   │   ├── passkit-provision.service.ts
+│   │   ├── passkit-sync.service.ts  # PassKit sync for SMARTPASS [v2.6.3]
 │   │   ├── postgrid.service.ts
 │   │   ├── admin.service.ts   # Tier discount persistence [v2.6]
 │   │   └── pos-webhook.service.ts  # External POS spend tracking [v2.6]
@@ -1623,6 +1761,45 @@ The following areas have been identified for future improvement. AI agents may a
 ---
 
 ## Changelog
+
+### v2.6.3 - Real-Time PassKit Webhook Sync (December 2025)
+
+**PassKit Real-Time Webhook System:**
+- ✅ Real-time webhook handler at `POST /api/callbacks/passkit`
+- ✅ Auto-sync new passes when customers enroll via PassKit-hosted forms
+- ✅ Handles `pass.created`, `member.enrolled`, `pass.installed`, `pass.uninstalled`, `pass.updated` events
+- ✅ HMAC signature verification with proper 401 rejection for invalid signatures
+- ✅ Program lookup by `passkit_program_id` for multi-program support
+- ✅ Idempotent upserts via `upsert_membership_pass_from_passkit` RPC
+
+**Admin Sync API:**
+- ✅ `POST /api/admin/programs/:programId/sync` - Trigger full or delta sync
+- ✅ `GET /api/admin/programs/:programId/sync-status` - Get current sync state
+- ✅ `GET /api/admin/programs/:programId/sync-history` - View sync event history
+
+**Database Migrations:**
+- ✅ Migration 027: PassKit sync state table, event journal, unique index on passes_master
+- ✅ Migration 028: Enhanced RPC to return member details for PassKit sync
+
+**Services:**
+- ✅ `passkit-sync.service.ts`: Core sync logic with listMembers, syncProgramMembers, and idempotent upserts
+- ✅ `passkit-webhook.controller.ts`: Webhook handler with HMAC verification
+
+---
+
+### v2.6.2 - PassKit Balance Push Fix (December 2025)
+
+- ✅ Fixed PassKit PUT requests to use member `id` (not `externalId`)
+- ✅ Always include required `person` object with emailAddress, forename, surname
+
+---
+
+### v2.6.1 - PassKit Sync System Code Complete (December 2025)
+
+- ✅ PassKit Sync System code complete with manual sync capabilities
+- ✅ Migration 027 designed for passkit_sync_state and passkit_event_journal tables
+
+---
 
 ### v2.6.0 - Dynamic Tier Discounts & External POS Integration (December 2024)
 
