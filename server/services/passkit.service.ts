@@ -804,8 +804,9 @@ class PassKitService {
     try {
       const url = `${PASSKIT_BASE_URL}/members/member`;
       
+      // Use 'id' field for PassKit's internal member ID, not 'externalId'
       const payload = {
-        externalId: passkitInternalId,
+        id: passkitInternalId,
         programId: programId,
         changeMessage: message,
       };
