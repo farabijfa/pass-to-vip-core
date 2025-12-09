@@ -301,14 +301,18 @@ class PassKitSyncService {
               result.synced++;
               if (upsertResult.action === "CREATED") {
                 result.created++;
+                console.log(`   ✅ Created: ${member.externalId || member.id}`);
                 await this.logSyncEvent(programId, "PASS_CREATED", "API", member.id, member.externalId);
               } else if (upsertResult.action === "UPDATED") {
                 result.updated++;
+                console.log(`   ✅ Updated: ${member.externalId || member.id}`);
                 await this.logSyncEvent(programId, "PASS_UPDATED", "API", member.id, member.externalId);
               }
             } else {
               result.failed++;
-              result.errors.push(`Member ${member.id}: ${upsertResult.error}`);
+              const errorMsg = `Member ${member.id}: ${upsertResult.error}`;
+              console.log(`   ❌ FAILED: ${errorMsg}`);
+              result.errors.push(errorMsg);
             }
           } catch (err) {
             result.failed++;
