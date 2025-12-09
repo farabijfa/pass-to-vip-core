@@ -39,11 +39,13 @@ function parseMemberCode(rawCode: string): string {
   
   const prefixMatch = code.match(/(PUB|CLM|MBR)-[A-Za-z0-9]+/i);
   if (prefixMatch) {
-    return prefixMatch[0].toUpperCase();
+    // Preserve original case - PassKit IDs are case-sensitive
+    return prefixMatch[0];
   }
   
+  // Preserve original case for PassKit external IDs (mixed case like "5oXN3PnFBoDlJEwZJVoUtR")
   const cleanCode = code.replace(/[^A-Za-z0-9-]/g, "");
-  return cleanCode.toUpperCase();
+  return cleanCode;
 }
 
 export default function POSPage() {
