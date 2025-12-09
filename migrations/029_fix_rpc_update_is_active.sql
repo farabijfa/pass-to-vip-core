@@ -52,7 +52,7 @@ BEGIN
       external_id = COALESCE(p_external_id, external_id),
       status = COALESCE(p_status, status),
       is_active = true,
-      protocol = COALESCE(protocol, 'MEMBERSHIP'),
+      protocol = 'MEMBERSHIP',
       member_email = COALESCE(p_member_email, member_email),
       member_first_name = COALESCE(p_member_first_name, member_first_name),
       member_last_name = COALESCE(p_member_last_name, member_last_name),
