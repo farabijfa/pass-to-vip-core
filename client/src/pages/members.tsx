@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { memberApi, type Member } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TierBadge } from "@/components/tier-badge";
 import { fromLegacyTierLevel, type TierLevel } from "@/lib/tier-calculator";
-import { QrCode, Mail, Users } from "lucide-react";
+import { QrCode, Mail, Users, RefreshCw, Loader2, CheckCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type EnrollmentSource = "ALL" | "SMARTPASS" | "CLAIM_CODE";
 
@@ -32,15 +34,61 @@ const sourceIcons: Record<Exclude<EnrollmentSource, "ALL">, typeof QrCode> = {
   CLAIM_CODE: Mail,
 };
 
+interface SyncResult {
+  synced: number;
+  created: number;
+  updated: number;
+  failed: number;
+  durationMs: number;
+}
+
+async function syncMembersFromPassKit(): Promise<SyncResult> {
+  const token = localStorage.getItem("auth_token");
+  if (!token) {
+    throw new Error("Not authenticated - please log in again");
+  }
+  const response = await fetch("/api/client/sync", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(data.error?.message || "Sync failed");
+  }
+  return data.data as SyncResult;
+}
+
 export default function MembersPage() {
   const { mockMode } = useAuth();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<EnrollmentSource>("ALL");
 
-  const { data: membersResult, isLoading, refetch } = useQuery({
+  const { data: membersResult, isLoading } = useQuery({
     queryKey: ["members", activeSearch],
     queryFn: () => activeSearch ? memberApi.search(activeSearch) : memberApi.getAll(),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: syncMembersFromPassKit,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast({
+        title: "Sync Complete",
+        description: `${data.created} new, ${data.updated} updated members synced from PassKit`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const allMembers = membersResult?.data?.members || [];
@@ -115,10 +163,21 @@ export default function MembersPage() {
             )}
             <Button 
               variant="outline" 
-              onClick={() => refetch()} 
-              data-testid="button-refresh"
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+              data-testid="button-sync"
             >
-              Refresh
+              {syncMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Sync Members
+                </>
+              )}
             </Button>
           </div>
         </CardContent>

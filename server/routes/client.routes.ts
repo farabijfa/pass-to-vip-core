@@ -33,6 +33,11 @@ router.get(
   clientController.getCampaigns.bind(clientController)
 );
 
+router.post(
+  "/sync",
+  clientController.syncMembers.bind(clientController)
+);
+
 router.get(
   "/admin/tenants",
   clientController.getTenantsAsAdmin.bind(clientController)

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config, isSupabaseConfigured } from "../config";
 import { adminService } from "../services/admin.service";
 import { notificationService } from "../services/notification.service";
+import { passKitSyncService } from "../services/passkit-sync.service";
 import { z } from "zod";
 
 const provisionTenantSchema = z.object({
@@ -540,6 +541,154 @@ class ClientController {
 
     } catch (error) {
       console.error("Get members error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error occurred",
+        },
+      });
+    }
+  }
+
+  async syncMembers(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      if (!isSupabaseConfigured()) {
+        res.status(503).json({
+          success: false,
+          error: {
+            code: "SERVICE_UNAVAILABLE",
+            message: "Database service not configured",
+          },
+        });
+        return;
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "MISSING_TOKEN",
+            message: "Authorization header with Bearer token is required",
+          },
+        });
+        return;
+      }
+
+      const token = authHeader.substring(7);
+
+      const supabase = createClient(
+        config.supabase.url,
+        config.supabase.anonKey || config.supabase.serviceRoleKey,
+        {
+          global: {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        }
+      );
+
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
+
+      if (userError || !userData.user) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "INVALID_TOKEN",
+            message: userError?.message || "Invalid or expired token",
+          },
+        });
+        return;
+      }
+
+      const userId = userData.user.id;
+
+      const serviceClient = createClient(
+        config.supabase.url,
+        config.supabase.serviceRoleKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
+      );
+
+      const { data: profile } = await serviceClient
+        .from("admin_profiles")
+        .select("program_id")
+        .eq("id", userId)
+        .single();
+
+      if (!profile?.program_id) {
+        res.status(404).json({
+          success: false,
+          error: {
+            code: "PROGRAM_NOT_FOUND",
+            message: "No program associated with this user",
+          },
+        });
+        return;
+      }
+
+      const { data: program } = await serviceClient
+        .from("programs")
+        .select("id, passkit_program_id, name")
+        .eq("id", profile.program_id)
+        .single();
+
+      if (!program?.passkit_program_id) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "NO_PASSKIT_PROGRAM",
+            message: "Program does not have PassKit configured",
+          },
+        });
+        return;
+      }
+
+      if (!passKitSyncService.isConfigured()) {
+        res.status(503).json({
+          success: false,
+          error: {
+            code: "PASSKIT_NOT_CONFIGURED",
+            message: "PassKit sync service is not configured",
+          },
+        });
+        return;
+      }
+
+      console.log(`🔄 Client-triggered sync for program: ${program.name} (${profile.program_id})`);
+
+      const result = await passKitSyncService.syncProgramMembers(
+        profile.program_id,
+        program.passkit_program_id,
+        { fullSync: true }
+      );
+
+      const processingTime = Date.now() - startTime;
+
+      res.status(result.success ? 200 : 500).json({
+        success: result.success,
+        data: {
+          programId: profile.program_id,
+          programName: program.name,
+          synced: result.synced,
+          created: result.created,
+          updated: result.updated,
+          failed: result.failed,
+          durationMs: result.duration_ms,
+        },
+        metadata: {
+          processingTime,
+        },
+      });
+
+    } catch (error) {
+      console.error("Sync members error:", error);
       res.status(500).json({
         success: false,
         error: {
