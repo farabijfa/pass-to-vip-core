@@ -126,6 +126,13 @@ The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 t
 3. This creates: passkit_sync_state table, passkit_event_journal table, upsert_membership_pass_from_passkit RPC function
 
 ## Recent Changes (December 2025)
+- **PassKit Webhook Debug Enhancement v2.6.5** (December 9, 2025): Fixed and enhanced PassKit webhook handler
+  - Added comprehensive webhook logging: headers, body, signature verification details
+  - Fixed raw body capture for HMAC signature verification
+  - Added debug bypass option via `PASSKIT_WEBHOOK_SKIP_SIGNATURE=true` environment variable
+  - Program lookup now correctly uses `passkit_program_id` column
+  - Verified webhook flow working: pass.created → program match → Supabase upsert
+  - **Important**: Configure webhook URL in PassKit Admin Console → Program Settings → Webhooks: `https://passtovip.pro/api/callbacks/passkit`
 - **Notification Service Schema Fix v2.6.4**: Fixed notification service to work with Supabase schema
   - Updated `validateTriple` to use flexible program lookup (handles NULL tenant_id in Supabase)
   - Fixed column references: `email` → `member_email`, `first_name` → `member_first_name`, `last_name` → `member_last_name`

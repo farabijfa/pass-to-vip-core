@@ -106,7 +106,10 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
       secretConfigured: !!secret,
     });
     
-    if (secret && !signatureResult.valid) {
+    // Allow bypassing signature verification via environment variable for debugging
+    const skipSignatureCheck = process.env.PASSKIT_WEBHOOK_SKIP_SIGNATURE === "true";
+    
+    if (secret && !signatureResult.valid && !skipSignatureCheck) {
       console.warn("❌ PassKit Webhook: Invalid signature - rejecting request");
       console.warn(`   Debug: ${signatureResult.debug}`);
       return res.status(401).json({ 
@@ -114,6 +117,10 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
         message: "Invalid webhook signature",
         debug: signatureResult.debug,
       });
+    }
+    
+    if (skipSignatureCheck && !signatureResult.valid) {
+      console.warn("⚠️ PassKit Webhook: Signature invalid but PASSKIT_WEBHOOK_SKIP_SIGNATURE=true - ACCEPTING REQUEST FOR DEBUG");
     }
     
     if (!secret) {
