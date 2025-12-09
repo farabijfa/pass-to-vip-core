@@ -823,14 +823,15 @@ class PassKitService {
       const messageWithTimestamp = `${message}`;
       
       // Use 'id' field for PassKit's internal member ID, not 'externalId'
-      // Update metaData.message field - configure this field in PassKit template with %@ Apple Lock Screen Message
+      // Update meta.message field - configure this field in PassKit template with %@ Apple Lock Screen Message
       const payload: Record<string, unknown> = {
         id: passkitInternalId,
         programId: programId,
         // changeMessage for Google Wallet (updates back of pass)
         changeMessage: message,
-        // metaData.message triggers iOS lock screen if template has %@ configured on this field
-        metaData: {
+        // meta.message triggers iOS lock screen if template has %@ configured on this field
+        // PassKit uses "meta" not "metaData" for custom fields
+        meta: {
           message: messageWithTimestamp,
           messageTimestamp: timestamp,
         },
