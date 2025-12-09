@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Pass%20To%20VIP-2563eb?style=for-the-badge" alt="Platform"/>
-  <img src="https://img.shields.io/badge/Version-2.6.3-blue?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-2.6.8-blue?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/Status-Production%20Ready-22c55e?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/Node.js-20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
@@ -45,6 +45,32 @@ This platform transforms physical mail recipients into digital wallet users thro
           |              UNIFIED LOYALTY            |
           +----------------EXPERIENCE---------------+
 ```
+
+---
+
+## What's New in v2.6.8
+
+### POS Camera Case Sensitivity Fix
+
+Fixed a critical bug where the POS camera QR scanner was converting PassKit IDs to uppercase, causing member lookups to fail.
+
+**Problem:** PassKit external IDs are case-sensitive (e.g., `5oXN3PnFBoDlJEwZJVoUtR`), but the `parseMemberCode()` function was calling `.toUpperCase()`, converting them to `5OXN3PNFBODLJEWZJVOUTR`.
+
+**Fix:** Removed `.toUpperCase()` calls to preserve the original case from QR codes.
+
+### PassKit Sync Enum Fix (v2.6.7)
+
+Fixed critical enum type casting issue that was blocking all PassKit sync operations.
+
+**Problem:** The `passes_master.status` column uses a custom `pass_status` enum type, but the sync code was passing plain text strings.
+
+**Fix:** Migration 028 properly casts text status to `pass_status::pass_status` before INSERT/UPDATE.
+
+**Results:**
+- 13 members synced successfully
+- 2 new real iPhone passes created
+- 0 failures
+- Push notifications verified working to all synced passes
 
 ---
 

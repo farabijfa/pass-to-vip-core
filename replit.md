@@ -46,7 +46,7 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 -   **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay) and real-time updates.
 -   **PostGrid:** Direct mail campaigns (postcards, letters) and dynamic template management.
 
-## PassKit Sync System (v2.6.7) - FULLY WORKING
+## PassKit Sync System (v2.6.8) - FULLY WORKING
 
 ### Problem Solved
 When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are created directly in PassKit but may not exist in our Supabase database. This caused POS lookups to fail with "member not found" errors, resulting in missing points.
@@ -125,6 +125,10 @@ Configure this URL in PassKit Admin Console → Program Settings → Webhooks
 - **Migration 028**: Fixes `pass_status` enum type casting issue in the RPC function - critical fix that enables sync to work correctly
 
 ## Recent Changes (December 2025)
+- **POS Camera Case Sensitivity Fix v2.6.8** (December 9, 2025): Fixed QR camera scanner converting PassKit IDs to uppercase
+  - Root cause: `parseMemberCode()` function was calling `.toUpperCase()` on scanned codes
+  - PassKit external IDs are case-sensitive (e.g., `5oXN3PnFBoDlJEwZJVoUtR`)
+  - Fix preserves original case from QR codes for accurate member lookup
 - **PassKit Sync Enum Fix v2.6.7** (December 9, 2025): Fixed critical enum casting issue that was blocking all sync operations
   - Root cause: `passes_master.status` column uses custom `pass_status` enum type, but code was passing plain text
   - Migration 028 properly casts text status to `pass_status::pass_status` before INSERT/UPDATE
