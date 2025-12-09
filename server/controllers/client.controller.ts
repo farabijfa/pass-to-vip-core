@@ -16,6 +16,9 @@ const provisionTenantSchema = z.object({
 
 const ALLOWED_ADMIN_ROLES = ["SUPER_ADMIN", "PLATFORM_ADMIN"];
 
+const syncRateLimit = new Map<string, number>();
+const SYNC_COOLDOWN_MS = 30000;
+
 class ClientController {
   async login(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
@@ -660,6 +663,21 @@ class ClientController {
         });
         return;
       }
+
+      const lastSync = syncRateLimit.get(profile.program_id);
+      const now = Date.now();
+      if (lastSync && now - lastSync < SYNC_COOLDOWN_MS) {
+        const remainingSec = Math.ceil((SYNC_COOLDOWN_MS - (now - lastSync)) / 1000);
+        res.status(429).json({
+          success: false,
+          error: {
+            code: "RATE_LIMITED",
+            message: `Please wait ${remainingSec} seconds before syncing again`,
+          },
+        });
+        return;
+      }
+      syncRateLimit.set(profile.program_id, now);
 
       console.log(`🔄 Client-triggered sync for program: ${program.name} (${profile.program_id})`);
 
