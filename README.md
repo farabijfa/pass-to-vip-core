@@ -486,7 +486,7 @@ migrations/020_multi_program_support.sql   # Multi-program architecture
 migrations/021_tier_discount_columns.sql   # Tier discount percentages
 migrations/025_external_pos_spend_tracking.sql  # External POS & spend ledger
 migrations/027_passkit_sync_system.sql     # NEW: PassKit sync state & event journal
-migrations/028_enhanced_rpc_returns.sql    # NEW: Enhanced RPC for PassKit sync
+migrations/028_add_member_data_to_rpc_return.sql  # NEW: Enhanced RPC for PassKit sync
 ```
 
 **Important:** 
