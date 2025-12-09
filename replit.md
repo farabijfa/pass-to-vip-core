@@ -46,16 +46,21 @@ The client dashboard uses a USA Patriotic Color Scheme: Primary Blue (`#2563eb`)
 -   **PassKit:** Digital wallet functionality (Apple Wallet, Google Pay) and real-time updates.
 -   **PostGrid:** Direct mail campaigns (postcards, letters) and dynamic template management.
 
-## PassKit Sync System (v2.6.6)
+## PassKit Sync System (v2.6.7) - FULLY WORKING
 
 ### Problem Solved
 When customers enroll through PassKit-hosted forms (SMARTPASS flow), passes are created directly in PassKit but may not exist in our Supabase database. This caused POS lookups to fail with "member not found" errors, resulting in missing points.
 
 ### Architecture
 - **Source of Truth**: PassKit = pass existence; Supabase = points/balances
-- **Sync Strategy**: Dual-path approach with real-time webhooks + scheduled API sync
+- **Sync Strategy**: Dual-path approach with real-time webhooks + manual "Sync Members" button
 - **Idempotent Upserts**: `upsert_membership_pass_from_passkit` RPC function ensures no duplicates or data loss
-- **Fallback Mode (v2.6.6)**: When RPC function unavailable (migration 027 not applied), uses direct INSERT/UPDATE to passes_master table. This allows sync to work immediately without migration dependency.
+- **Enum Casting Fix (v2.6.7)**: Migration 028 fixed the `pass_status` enum type casting issue that was causing sync failures
+
+### Current Status (December 9, 2025)
+- **Sync System: FULLY OPERATIONAL** - 13 members synced, 2 new passes created, 0 failures
+- **Migration 027**: Applied - creates sync tables and RPC function
+- **Migration 028**: Applied - fixes enum type casting for `pass_status` column
 
 ### Real-Time PassKit Webhook (NEW in v2.6.3)
 **Webhook URL**: `https://passtovip.pro/api/callbacks/passkit`
@@ -115,18 +120,16 @@ Configure this URL in PassKit Admin Console → Program Settings → Webhooks
   - Transaction history: Full audit trail in database
 - **Existing Members**: All previously enrolled members work correctly
 
-### What Requires Migration
-The PassKit Sync System (v2.6.1) code is complete but **requires migration 027 to be applied to Supabase**:
-- Manual pass insertion is disabled until migration is applied (returns helpful error)
-- New passes enrolled via PassKit-hosted forms (SMARTPASS) won't sync until migration is applied
-- The sync API endpoints are ready but will fail without the RPC function
-
-**To enable PassKit sync:**
-1. Open Supabase SQL Editor
-2. Execute the contents of `migrations/027_passkit_sync_system.sql`
-3. This creates: passkit_sync_state table, passkit_event_journal table, upsert_membership_pass_from_passkit RPC function
+### Migrations Applied
+- **Migration 027**: Creates passkit_sync_state table, passkit_event_journal table, and upsert_membership_pass_from_passkit RPC function
+- **Migration 028**: Fixes `pass_status` enum type casting issue in the RPC function - critical fix that enables sync to work correctly
 
 ## Recent Changes (December 2025)
+- **PassKit Sync Enum Fix v2.6.7** (December 9, 2025): Fixed critical enum casting issue that was blocking all sync operations
+  - Root cause: `passes_master.status` column uses custom `pass_status` enum type, but code was passing plain text
+  - Migration 028 properly casts text status to `pass_status::pass_status` before INSERT/UPDATE
+  - Sync now works: 13 members synced successfully, 2 new real iPhone passes created, 0 failures
+  - The two iPhone passes (`5oXN3PnFBoDlJEwZJVoUtR` and `2XlItfXq9kcdPseshzdyUw`) now appear in dashboard
 - **PassKit Webhook Debug Enhancement v2.6.5** (December 9, 2025): Fixed and enhanced PassKit webhook handler
   - Added comprehensive webhook logging: headers, body, signature verification details
   - Fixed raw body capture for HMAC signature verification
