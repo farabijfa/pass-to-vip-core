@@ -383,6 +383,7 @@ class PassKitSyncService {
         return { success: false, error: "Supabase not configured" };
       }
 
+      // Try RPC first (requires migration 027)
       const { data, error } = await client.rpc("upsert_membership_pass_from_passkit", {
         p_program_id: programId,
         p_passkit_internal_id: member.id,
@@ -398,6 +399,11 @@ class PassKitSyncService {
       });
 
       if (error) {
+        // If RPC doesn't exist (migration 027 not applied), use direct upsert fallback
+        if (error.message.includes("function") || error.code === "PGRST202" || error.message.includes("upsert_membership_pass_from_passkit")) {
+          console.log(`[Upsert] RPC not available, using direct insert fallback for ${member.id}`);
+          return await this.directUpsertMember(programId, member);
+        }
         console.error(`[Upsert] RPC error for member ${member.id}:`, error);
         return { success: false, error: error.message };
       }
@@ -405,6 +411,79 @@ class PassKitSyncService {
       const result = data as { success: boolean; action?: string; error?: string };
       return result;
 
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      };
+    }
+  }
+
+  private async directUpsertMember(
+    programId: string,
+    member: PassKitMember
+  ): Promise<{ success: boolean; action?: string; error?: string }> {
+    try {
+      const client = supabaseService.getClient();
+      if (!client) {
+        return { success: false, error: "Supabase not configured" };
+      }
+
+      // Check if pass already exists by passkit_internal_id
+      const { data: existing } = await client
+        .from("passes_master")
+        .select("id")
+        .eq("program_id", programId)
+        .eq("passkit_internal_id", member.id)
+        .single();
+
+      if (existing) {
+        // Update existing pass
+        const { error: updateError } = await client
+          .from("passes_master")
+          .update({
+            external_id: member.externalId || member.id,
+            status: "INSTALLED",
+            member_email: member.person?.emailAddress || null,
+            member_first_name: member.person?.forename || null,
+            member_last_name: member.person?.surname || null,
+            last_updated: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+
+        if (updateError) {
+          return { success: false, error: updateError.message };
+        }
+        return { success: true, action: "UPDATED" };
+      } else {
+        // Insert new pass
+        const { error: insertError } = await client
+          .from("passes_master")
+          .insert({
+            program_id: programId,
+            passkit_internal_id: member.id,
+            external_id: member.externalId || member.id,
+            status: "INSTALLED",
+            is_active: true,
+            protocol: "MEMBERSHIP",
+            points_balance: 0,
+            spend_tier_level: 1,
+            member_email: member.person?.emailAddress || null,
+            member_first_name: member.person?.forename || null,
+            member_last_name: member.person?.surname || null,
+            enrollment_source: "PASSKIT_SYNC",
+            last_updated: new Date().toISOString(),
+          });
+
+        if (insertError) {
+          // Handle duplicate key (race condition)
+          if (insertError.code === "23505") {
+            return { success: true, action: "UPDATED" };
+          }
+          return { success: false, error: insertError.message };
+        }
+        return { success: true, action: "CREATED" };
+      }
     } catch (error) {
       return { 
         success: false, 
@@ -449,11 +528,17 @@ class PassKitSyncService {
       const client = supabaseService.getClient();
       if (!client) return;
 
-      const { data: existing } = await client
+      const { data: existing, error: selectError } = await client
         .from("passkit_sync_state")
         .select("id")
         .eq("program_id", programId)
         .single();
+
+      // If table doesn't exist (migration 027 not applied), silently skip
+      if (selectError && (selectError.code === "42P01" || selectError.message.includes("relation") || selectError.message.includes("does not exist"))) {
+        console.log("[Update Sync State] Table not available, skipping state update");
+        return;
+      }
 
       const updateData: Record<string, unknown> = {
         program_id: programId,
@@ -500,7 +585,8 @@ class PassKitSyncService {
       }
 
     } catch (error) {
-      console.error("[Update Sync State] Error:", error);
+      // Silently fail - state tracking is not critical to sync success
+      console.log("[Update Sync State] Skipped:", error instanceof Error ? error.message : "Unknown error");
     }
   }
 
@@ -516,7 +602,7 @@ class PassKitSyncService {
       const client = supabaseService.getClient();
       if (!client) return;
 
-      await client.from("passkit_event_journal").insert({
+      const { error } = await client.from("passkit_event_journal").insert({
         program_id: programId,
         event_type: eventType,
         sync_source: syncSource,
@@ -526,8 +612,15 @@ class PassKitSyncService {
         created_at: new Date().toISOString(),
       });
 
+      // Silently ignore if table doesn't exist (migration 027 not applied)
+      if (error && (error.code === "42P01" || error.message.includes("relation") || error.message.includes("does not exist"))) {
+        console.log("[Log Sync Event] Table not available, skipping log");
+        return;
+      }
+
     } catch (error) {
-      console.error("[Log Sync Event] Error:", error);
+      // Silently fail - logging is not critical to sync success
+      console.log("[Log Sync Event] Skipped:", error instanceof Error ? error.message : "Unknown error");
     }
   }
 
