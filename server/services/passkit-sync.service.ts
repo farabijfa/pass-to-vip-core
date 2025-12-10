@@ -43,6 +43,7 @@ interface SyncResult {
   created: number;
   updated: number;
   failed: number;
+  deactivated: number;
   errors: string[];
   duration_ms: number;
 }
@@ -264,9 +265,13 @@ class PassKitSyncService {
       created: 0,
       updated: 0,
       failed: 0,
+      deactivated: 0,
       errors: [],
       duration_ms: 0,
     };
+
+    // Collect all PassKit member IDs during sync for reconciliation
+    const activePassKitIds = new Set<string>();
 
     await this.logSyncEvent(programId, fullSync ? "FULL_SYNC_START" : "DELTA_SYNC_START", "SCHEDULED");
     await this.updateSyncState(programId, fullSync ? "FULL" : "DELTA", "IN_PROGRESS");
@@ -294,6 +299,9 @@ class PassKitSyncService {
         console.log(`   Retrieved ${listResult.members.length} members`);
 
         for (const member of listResult.members) {
+          // Collect PassKit ID for reconciliation
+          activePassKitIds.add(member.id);
+          
           try {
             const upsertResult = await this.upsertMemberToDatabase(programId, member);
             
@@ -328,6 +336,33 @@ class PassKitSyncService {
       }
 
       result.success = result.failed === 0 || result.synced > 0;
+
+      // RECONCILIATION: Deactivate passes that no longer exist in PassKit
+      // Only run if we successfully fetched members and have at least one pass from PassKit
+      if (fullSync && activePassKitIds.size > 0 && result.synced > 0) {
+        console.log(`\n🔄 RECONCILIATION: Checking for deleted passes...`);
+        console.log(`   Active PassKit IDs collected: ${activePassKitIds.size}`);
+        
+        const deactivatedCount = await this.reconcileMissingPasses(programId, activePassKitIds);
+        result.deactivated = deactivatedCount;
+        
+        if (deactivatedCount > 0) {
+          console.log(`   🗑️ Deactivated ${deactivatedCount} passes no longer in PassKit`);
+          await this.logSyncEvent(
+            programId,
+            "PASSES_DEACTIVATED",
+            "RECONCILIATION",
+            undefined,
+            undefined,
+            { count: deactivatedCount }
+          );
+        } else {
+          console.log(`   ✅ No stale passes found - all passes are in sync`);
+        }
+      } else if (fullSync && activePassKitIds.size === 0) {
+        console.log(`\n⚠️ RECONCILIATION SKIPPED: No passes returned from PassKit (prevents accidental mass deactivation)`);
+      }
+
       result.duration_ms = Date.now() - startTime;
 
       const finalStatus = result.failed === 0 ? "SUCCESS" : (result.synced > 0 ? "PARTIAL" : "FAILED");
@@ -338,13 +373,14 @@ class PassKitSyncService {
         "SCHEDULED",
         undefined,
         undefined,
-        { synced: result.synced, created: result.created, updated: result.updated, failed: result.failed }
+        { synced: result.synced, created: result.created, updated: result.updated, failed: result.failed, deactivated: result.deactivated }
       );
 
       console.log(`\n${"=".repeat(60)}`);
       console.log(`✅ SYNC COMPLETE`);
       console.log(`   Duration: ${result.duration_ms}ms`);
       console.log(`   Total synced: ${result.synced} (${result.created} created, ${result.updated} updated)`);
+      console.log(`   Deactivated: ${result.deactivated}`);
       console.log(`   Failed: ${result.failed}`);
       console.log(`${"=".repeat(60)}\n`);
 
@@ -676,6 +712,85 @@ class PassKitSyncService {
 
   isConfigured(): boolean {
     return !!this.getAuthHeaders();
+  }
+
+  /**
+   * Reconcile passes in Supabase that no longer exist in PassKit
+   * Marks them as UNINSTALLED and is_active = false
+   * @returns Number of passes deactivated
+   */
+  private async reconcileMissingPasses(
+    programId: string,
+    activePassKitIds: Set<string>
+  ): Promise<number> {
+    try {
+      const client = supabaseService.getClient();
+      if (!client) {
+        console.warn("[Reconciliation] Supabase not configured");
+        return 0;
+      }
+
+      // Get all active passes in Supabase for this program
+      const { data: supabasePasses, error: fetchError } = await client
+        .from("passes_master")
+        .select("id, passkit_id, passkit_internal_id, external_id, member_email")
+        .eq("program_id", programId)
+        .eq("is_active", true);
+
+      if (fetchError) {
+        console.error("[Reconciliation] Error fetching Supabase passes:", fetchError.message);
+        return 0;
+      }
+
+      if (!supabasePasses || supabasePasses.length === 0) {
+        console.log("[Reconciliation] No active passes in Supabase to reconcile");
+        return 0;
+      }
+
+      console.log(`[Reconciliation] Found ${supabasePasses.length} active passes in Supabase`);
+
+      // Find passes that are in Supabase but NOT in PassKit
+      const passesToDeactivate: string[] = [];
+      
+      for (const pass of supabasePasses) {
+        // Check using passkit_internal_id (primary) or passkit_id (fallback)
+        const passkitIdToCheck = pass.passkit_internal_id || pass.passkit_id;
+        
+        if (passkitIdToCheck && !activePassKitIds.has(passkitIdToCheck)) {
+          passesToDeactivate.push(pass.id);
+          console.log(`   🗑️ Will deactivate: ${pass.member_email || pass.external_id || pass.id} (PassKit ID: ${passkitIdToCheck})`);
+        }
+      }
+
+      if (passesToDeactivate.length === 0) {
+        return 0;
+      }
+
+      // Deactivate all stale passes in a single query
+      const { error: updateError, data: updatedData } = await client
+        .from("passes_master")
+        .update({
+          status: "UNINSTALLED",
+          is_active: false,
+          last_updated: new Date().toISOString(),
+        })
+        .in("id", passesToDeactivate)
+        .select("id");
+
+      if (updateError) {
+        console.error("[Reconciliation] Error deactivating passes:", updateError.message);
+        return 0;
+      }
+
+      const deactivatedCount = updatedData?.length || passesToDeactivate.length;
+      console.log(`[Reconciliation] Successfully deactivated ${deactivatedCount} stale passes`);
+      
+      return deactivatedCount;
+
+    } catch (error) {
+      console.error("[Reconciliation] Exception:", error instanceof Error ? error.message : "Unknown error");
+      return 0;
+    }
   }
 
   async syncSinglePassFromWebhook(
