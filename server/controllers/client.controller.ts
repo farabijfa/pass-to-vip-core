@@ -483,7 +483,8 @@ class ClientController {
           points_balance,
           spend_tier_level
         `, { count: "exact" })
-        .eq("program_id", profile.program_id);
+        .eq("program_id", profile.program_id)
+        .eq("is_active", true);
 
       if (searchQuery) {
         query = query.or(`external_id.ilike.%${searchQuery}%,member_email.ilike.%${searchQuery}%,member_first_name.ilike.%${searchQuery}%,member_last_name.ilike.%${searchQuery}%`);
