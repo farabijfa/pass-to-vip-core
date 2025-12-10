@@ -125,6 +125,10 @@ Configure this URL in PassKit Admin Console → Program Settings → Webhooks
 - **Migration 028**: Fixes `pass_status` enum type casting issue in the RPC function - critical fix that enables sync to work correctly
 
 ## Recent Changes (December 2025)
+- **PassKit Sync Global Credentials Fix v2.6.9** (December 10, 2025): Fixed sync to always use global PassKit credentials
+  - Root cause: Code was trying to query non-existent `passkit_api_key` and `passkit_api_secret` columns from Supabase, causing errors that blocked the fallback to global credentials
+  - Fix: Simplified passkit-sync.service.ts to always use global PASSKIT_API_KEY and PASSKIT_API_SECRET environment variables
+  - This ensures sync works for all programs including Manali Bakes without requiring per-program credential setup
 - **POS Camera Case Sensitivity Fix v2.6.8** (December 9, 2025): Fixed QR camera scanner converting PassKit IDs to uppercase
   - Root cause: `parseMemberCode()` function was calling `.toUpperCase()` on scanned codes
   - PassKit external IDs are case-sensitive (e.g., `5oXN3PnFBoDlJEwZJVoUtR`)
