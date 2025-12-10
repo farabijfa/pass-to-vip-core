@@ -207,89 +207,147 @@ export const handlePassKitWebhook = async (req: Request, res: Response) => {
       }
     }
 
-    if (!memberId) {
-      console.warn("PassKit Webhook: No member ID in event payload");
-      return res.status(200).json({ 
-        received: true, 
-        warning: "No member ID provided" 
-      });
-    }
+    // Enhanced logging for debugging uninstall payload structure
+    console.log(`🔍 PAYLOAD IDENTIFIERS:`, {
+      externalId: event.externalId || "NOT_PRESENT",
+      memberId: event.memberId || "NOT_PRESENT",
+      id: event.id || "NOT_PRESENT",
+      passId: event.passId || "NOT_PRESENT",
+      programId: event.programId || "NOT_PRESENT",
+    });
+
+    // Helper function for fallback lookup - tries external_id first, then passkit_id
+    const updatePassWithFallback = async (
+      updateData: Record<string, unknown>,
+      logPrefix: string
+    ): Promise<{ success: boolean; matchedBy: string; error?: string }> => {
+      // Strategy 1: Try external_id (memberId from webhook)
+      if (memberId) {
+        const { data: data1, error: error1 } = await client
+          .from("passes_master")
+          .update(updateData)
+          .eq("external_id", memberId)
+          .select("id");
+
+        if (!error1 && data1 && data1.length > 0) {
+          console.log(`${logPrefix} ✅ Matched ${data1.length} row(s) by external_id: ${memberId}`);
+          return { success: true, matchedBy: "external_id" };
+        }
+        if (error1) {
+          console.warn(`${logPrefix} external_id lookup error: ${error1.message}`);
+        } else {
+          console.warn(`${logPrefix} external_id lookup: 0 rows matched for ${memberId}`);
+        }
+      }
+
+      // Strategy 2: Try passkit_id (internal PassKit ID)
+      if (passkitInternalId) {
+        const { data: data2, error: error2 } = await client
+          .from("passes_master")
+          .update(updateData)
+          .eq("passkit_id", passkitInternalId)
+          .select("id");
+
+        if (!error2 && data2 && data2.length > 0) {
+          console.log(`${logPrefix} ✅ Matched ${data2.length} row(s) by passkit_id: ${passkitInternalId}`);
+          return { success: true, matchedBy: "passkit_id" };
+        }
+        if (error2) {
+          console.warn(`${logPrefix} passkit_id lookup error: ${error2.message}`);
+        } else {
+          console.warn(`${logPrefix} passkit_id lookup: 0 rows matched for ${passkitInternalId}`);
+        }
+      }
+
+      // Strategy 3: Try id field as passkit_id
+      if (event.id && event.id !== passkitInternalId) {
+        const { data: data3, error: error3 } = await client
+          .from("passes_master")
+          .update(updateData)
+          .eq("passkit_id", event.id)
+          .select("id");
+
+        if (!error3 && data3 && data3.length > 0) {
+          console.log(`${logPrefix} ✅ Matched ${data3.length} row(s) by event.id as passkit_id: ${event.id}`);
+          return { success: true, matchedBy: "event.id" };
+        }
+      }
+
+      console.error(`${logPrefix} ❌ NO ROWS MATCHED with any identifier strategy`);
+      return { success: false, matchedBy: "none", error: "No matching pass found in database" };
+    };
 
     if (eventType === "pass.uninstalled" || eventType === "delete") {
-      console.log(`🔴 Pass ${memberId}: Uninstalled → CHURNED`);
+      console.log(`🔴 UNINSTALL EVENT - attempting to mark pass as inactive`);
       
-      // Update passes_master table (the actual table storing pass records)
-      const { error } = await client
-        .from("passes_master")
-        .update({
+      const result = await updatePassWithFallback(
+        {
           status: "UNINSTALLED",
           is_active: false,
           last_updated: new Date().toISOString(),
-        })
-        .eq("external_id", memberId);
+        },
+        "🔴 UNINSTALL:"
+      );
 
-      if (error) {
-        console.error("PassKit Webhook: Database update error:", error.message);
+      if (result.success) {
+        return res.status(200).json({ 
+          success: true, 
+          message: "Pass marked as UNINSTALLED",
+          matchedBy: result.matchedBy,
+          identifiers: { externalId: memberId, passkitId: passkitInternalId },
+        });
+      } else {
         return res.status(200).json({ 
           received: true, 
-          error: "Database update failed" 
+          warning: result.error,
+          identifiers: { externalId: memberId, passkitId: passkitInternalId },
         });
       }
-
-      return res.status(200).json({ 
-        success: true, 
-        message: "Pass marked as UNINSTALLED",
-        memberId,
-      });
     }
 
     if (eventType === "pass.installed" || eventType === "install") {
-      console.log(`🟢 Pass ${memberId}: Installed → ACTIVE`);
+      console.log(`🟢 INSTALL EVENT - attempting to mark pass as active`);
       
-      // Update passes_master table (the actual table storing pass records)
-      const { error } = await client
-        .from("passes_master")
-        .update({
+      const result = await updatePassWithFallback(
+        {
           status: "INSTALLED",
           is_active: true,
           last_updated: new Date().toISOString(),
-        })
-        .eq("external_id", memberId);
+        },
+        "🟢 INSTALL:"
+      );
 
-      if (error) {
-        console.error("PassKit Webhook: Database update error:", error.message);
+      if (result.success) {
+        return res.status(200).json({ 
+          success: true, 
+          message: "Pass marked as INSTALLED",
+          matchedBy: result.matchedBy,
+          identifiers: { externalId: memberId, passkitId: passkitInternalId },
+        });
+      } else {
         return res.status(200).json({ 
           received: true, 
-          error: "Database update failed" 
+          warning: result.error,
+          identifiers: { externalId: memberId, passkitId: passkitInternalId },
         });
       }
-
-      return res.status(200).json({ 
-        success: true, 
-        message: "Pass marked as INSTALLED",
-        memberId,
-      });
     }
 
     if (eventType === "pass.updated" || eventType === "update") {
-      console.log(`🔵 Pass ${memberId}: Updated`);
+      console.log(`🔵 UPDATE EVENT - updating last_updated timestamp`);
       
-      // Update passes_master table (the actual table storing pass records)
-      const { error } = await client
-        .from("passes_master")
-        .update({
+      const result = await updatePassWithFallback(
+        {
           last_updated: new Date().toISOString(),
-        })
-        .eq("external_id", memberId);
-
-      if (error) {
-        console.error("PassKit Webhook: Database update error:", error.message);
-      }
+        },
+        "🔵 UPDATE:"
+      );
 
       return res.status(200).json({ 
         received: true, 
         message: "Pass update acknowledged",
-        memberId,
+        matchedBy: result.matchedBy,
+        identifiers: { externalId: memberId, passkitId: passkitInternalId },
       });
     }
 
