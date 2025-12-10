@@ -699,6 +699,7 @@ class ClientController {
           created: result.created,
           updated: result.updated,
           failed: result.failed,
+          deactivated: result.deactivated,
           durationMs: result.duration_ms,
         },
         metadata: {
@@ -1911,3 +1912,4 @@ class ClientController {
 }
 
 export const clientController = new ClientController();
+// Build trigger 1765394743

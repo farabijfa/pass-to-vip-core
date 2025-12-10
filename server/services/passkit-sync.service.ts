@@ -739,7 +739,7 @@ class PassKitSyncService {
       // Get all active passes in Supabase for this program
       const { data: supabasePasses, error: fetchError } = await client
         .from("passes_master")
-        .select("id, passkit_id, passkit_internal_id, external_id, member_email")
+        .select("id, passkit_internal_id, external_id, member_email")
         .eq("program_id", programId)
         .eq("is_active", true);
 
@@ -759,8 +759,8 @@ class PassKitSyncService {
       const passesToDeactivate: string[] = [];
       
       for (const pass of supabasePasses) {
-        // Check using passkit_internal_id (primary) or passkit_id (fallback)
-        const passkitIdToCheck = pass.passkit_internal_id || pass.passkit_id;
+        // Check using passkit_internal_id (set during sync from PassKit member.id)
+        const passkitIdToCheck = pass.passkit_internal_id;
         
         if (passkitIdToCheck && !activePassKitIds.has(passkitIdToCheck)) {
           passesToDeactivate.push(pass.id);
