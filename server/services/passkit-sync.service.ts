@@ -1,8 +1,13 @@
 import axios from "axios";
-import { generatePassKitToken } from "../utils/passkitJWT";
+import { generatePassKitToken, generatePassKitTokenFromCredentials } from "../utils/passkitJWT";
 import { supabaseService } from "./supabase.service";
 
 const PASSKIT_BASE_URL = "https://api.pub2.passkit.io";
+
+interface ProgramCredentials {
+  apiKey: string;
+  apiSecret: string;
+}
 
 interface PassKitMember {
   id: string;
@@ -61,6 +66,9 @@ interface ProgramSyncState {
 }
 
 class PassKitSyncService {
+  /**
+   * Get auth headers using global credentials (fallback)
+   */
   private getAuthHeaders(): { Authorization: string } | null {
     const token = generatePassKitToken();
     if (!token) {
@@ -69,8 +77,61 @@ class PassKitSyncService {
     return { Authorization: `Bearer ${token}` };
   }
 
-  async listMembers(options: ListMembersOptions): Promise<ListMembersResult> {
-    const authHeaders = this.getAuthHeaders();
+  /**
+   * Get auth headers using per-program credentials
+   */
+  private getAuthHeadersFromCredentials(credentials: ProgramCredentials): { Authorization: string } | null {
+    const token = generatePassKitTokenFromCredentials(credentials.apiKey, credentials.apiSecret);
+    if (!token) {
+      return null;
+    }
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  /**
+   * Fetch PassKit credentials for a specific program from Supabase
+   * Returns per-program credentials if available, otherwise null
+   */
+  private async getProgramCredentials(programId: string): Promise<ProgramCredentials | null> {
+    try {
+      const client = supabaseService.getClient();
+      if (!client) {
+        console.log("[Credentials] Supabase not configured");
+        return null;
+      }
+
+      const { data: program, error } = await client
+        .from("programs")
+        .select("passkit_api_key, passkit_api_secret")
+        .eq("id", programId)
+        .single();
+
+      if (error) {
+        console.log(`[Credentials] Error fetching program ${programId}:`, error.message);
+        return null;
+      }
+
+      if (program?.passkit_api_key && program?.passkit_api_secret) {
+        console.log(`[Credentials] Using per-program PassKit credentials for program ${programId}`);
+        return {
+          apiKey: program.passkit_api_key,
+          apiSecret: program.passkit_api_secret,
+        };
+      }
+
+      console.log(`[Credentials] No per-program credentials found for ${programId}, will use global credentials`);
+      return null;
+    } catch (error) {
+      console.error("[Credentials] Exception:", error instanceof Error ? error.message : "Unknown error");
+      return null;
+    }
+  }
+
+  async listMembers(options: ListMembersOptions, credentials?: ProgramCredentials): Promise<ListMembersResult> {
+    // Use per-program credentials if provided, otherwise fall back to global
+    const authHeaders = credentials 
+      ? this.getAuthHeadersFromCredentials(credentials)
+      : this.getAuthHeaders();
     
     if (!authHeaders) {
       console.log("⚠️ No PassKit Keys found. Cannot list members.");
@@ -270,6 +331,14 @@ class PassKitSyncService {
       duration_ms: 0,
     };
 
+    // Fetch per-program credentials from Supabase (or use global as fallback)
+    const programCredentials = await this.getProgramCredentials(programId);
+    if (programCredentials) {
+      console.log(`✅ Using per-program PassKit credentials`);
+    } else {
+      console.log(`⚠️ Using global PassKit credentials (fallback)`);
+    }
+
     // Collect all PassKit member IDs during sync for reconciliation
     const activePassKitIds = new Set<string>();
 
@@ -288,7 +357,7 @@ class PassKitSyncService {
           programId: passkitProgramId,
           limit: pageSize,
           cursor,
-        });
+        }, programCredentials || undefined);
 
         if (!listResult.success || !listResult.members) {
           result.errors.push(listResult.error || "Failed to fetch members");
