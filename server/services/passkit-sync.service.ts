@@ -344,8 +344,8 @@ class PassKitSyncService {
       result.success = result.failed === 0 || result.synced > 0;
 
       // RECONCILIATION: Deactivate passes that no longer exist in PassKit
-      // Only run if we successfully fetched members and have at least one pass from PassKit
-      if (fullSync && activePassKitIds.size > 0 && result.synced > 0) {
+      // Run whenever we successfully fetched passes from PassKit (even if no new creates/updates)
+      if (fullSync && activePassKitIds.size > 0) {
         console.log(`\n🔄 RECONCILIATION: Checking for deleted passes...`);
         console.log(`   Active PassKit IDs collected: ${activePassKitIds.size}`);
         
